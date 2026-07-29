@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Import Buku dari Excel{% endblock %}
+{% block content %}
+<h3>Import Buku dari Excel</h3>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Langkah-langkah</h5>
+        <ol class="mb-3">
+            <li>Download template Excel di bawah ini</li>
+            <li>Isi data buku sesuai kolom yang tersedia (kolom <strong>isbn</strong> dan <strong>judul</strong> wajib diisi)</li>
+            <li>Upload file yang sudah diisi</li>
+        </ol>
+        <a href="{{ url_for('buku_import_template') }}" class="btn btn-outline-primary">⬇️ Download Template Excel</a>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Excel (.xlsx)</label>
+        <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-primary">📤 Import Sekarang</button>
+    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+
+{% if berhasil is defined %}
+<div class="card mt-4">
+    <div class="card-header">Hasil Import</div>
+    <div class="card-body">
+        <p class="text-success">✅ {{ berhasil }} buku berhasil ditambahkan.</p>
+        {% if dilewati %}
+        <p class="text-danger">⚠️ {{ dilewati|length }} baris dilewati:</p>
+        <ul class="small text-muted">
+            {% for item in dilewati %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        <a href="{{ url_for('buku_list') }}" class="btn btn-primary btn-sm">Lihat Data Buku</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

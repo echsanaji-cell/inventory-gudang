@@ -13,6 +13,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
+from openpyxl import load_workbook
 import io
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, flash
@@ -1138,5 +1139,130 @@ def cron_cek_stok_kritis():
 
     sukses, pesan = kirim_email_stok_kritis()
     return {'success': sukses, 'message': pesan}
+
+# ------------------ DOWNLOAD TEMPLATE IMPORT ------------------
+@app.route('/buku/import/template')
+@login_required
+@admin_required
+def buku_import_template():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Template Import"
+
+    headers = ['isbn', 'judul', 'penulis', 'penerbit', 'kategori', 'stok', 'stok_minimum']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+
+    # baris contoh
+    ws.append(['9786020633178', 'Contoh Judul Buku', 'Nama Penulis', 'Nama Penerbit', 'Fiksi', 10, 3])
+
+    for col in ws.columns:
+        max_length = max(len(str(cell.value)) for cell in col if cell.value)
+        ws.column_dimensions[col[0].column_letter].width = max_length + 3
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='template-import-buku.xlsx'
+    )
+
+# ------------------ IMPORT BUKU DARI EXCEL ------------------
+@app.route('/buku/import', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def buku_import():
+    if request.method == 'POST':
+        file = request.files.get('file_excel')
+
+        if not file or file.filename == '':
+            flash('Pilih file Excel dulu.', 'danger')
+            return render_template('buku/import.html')
+
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            flash('File harus berformat .xlsx atau .xls', 'danger')
+            return render_template('buku/import.html')
+
+        try:
+            wb = load_workbook(file, data_only=True)
+            ws = wb.active
+        except Exception as e:
+            flash('Gagal membaca file Excel. Pastikan formatnya benar.', 'danger')
+            return render_template('buku/import.html')
+
+        # baca header di baris 1, cocokkan posisi kolom
+        header_row = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
+        kolom_wajib = ['isbn', 'judul']
+        kolom_index = {}
+
+        for kolom in ['isbn', 'judul', 'penulis', 'penerbit', 'kategori', 'stok', 'stok_minimum']:
+            if kolom in header_row:
+                kolom_index[kolom] = header_row.index(kolom)
+
+        for kolom in kolom_wajib:
+            if kolom not in kolom_index:
+                flash(f'Kolom "{kolom}" wajib ada di file Excel (baris pertama). Gunakan template yang disediakan.', 'danger')
+                return render_template('buku/import.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        berhasil = 0
+        dilewati = []
+        baris_ke = 1
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            baris_ke += 1
+
+            def ambil(nama_kolom, default=''):
+                idx = kolom_index.get(nama_kolom)
+                if idx is None or idx >= len(row) or row[idx] is None:
+                    return default
+                return row[idx]
+
+            isbn = str(ambil('isbn')).strip()
+            judul = str(ambil('judul')).strip()
+
+            if not isbn or not judul:
+                dilewati.append(f"Baris {baris_ke}: ISBN/Judul kosong")
+                continue
+
+            cur.execute("SELECT id FROM buku WHERE isbn = %s", (isbn,))
+            if cur.fetchone():
+                dilewati.append(f"Baris {baris_ke}: ISBN {isbn} sudah ada")
+                continue
+
+            try:
+                stok = int(ambil('stok', 0) or 0)
+                stok_minimum = int(ambil('stok_minimum', 0) or 0)
+            except (ValueError, TypeError):
+                stok, stok_minimum = 0, 0
+
+            cur.execute(
+                """INSERT INTO buku (isbn, judul, penulis, penerbit, kategori, stok, stok_minimum)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (isbn, judul, str(ambil('penulis')), str(ambil('penerbit')),
+                 str(ambil('kategori')), stok, stok_minimum)
+            )
+            berhasil += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        pesan = f'{berhasil} buku berhasil diimpor.'
+        if dilewati:
+            pesan += f' {len(dilewati)} baris dilewati.'
+        flash(pesan, 'success' if berhasil > 0 else 'danger')
+
+        return render_template('buku/import.html', dilewati=dilewati, berhasil=berhasil)
+
+    return render_template('buku/import.html')
 if __name__ == '__main__':
     app.run(debug=True)
