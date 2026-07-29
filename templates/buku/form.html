@@ -13,8 +13,11 @@
             <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanIsbn)">
                 📷 Scan Kamera
             </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="generateKodeInternal()">
+                🏷️ Generate Kode
+            </button>
         </div>
-        <small class="text-muted">Scan pakai scanner fisik langsung ketik di sini, atau klik tombol kamera.</small>
+        <small class="text-muted">Punya ISBN, scan pakai scanner fisik/kamera. Belum ada ISBN, klik "Generate Kode".</small>
     </div>
     <div class="mb-3">
         <label class="form-label">Judul *</label>
@@ -63,7 +66,14 @@ function handleScanIsbn(kode) {
     inputIsbn.value = kode;
     lookupIsbn(kode);
 }
-
+function generateKodeInternal() {
+    fetch('/api/kode-internal-baru')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('input-isbn').value = data.kode;
+            document.getElementById('input-judul').focus();
+        });
+}
 function lookupIsbn(isbn) {
     fetch(`/api/isbn/${isbn}`)
         .then(res => res.json())

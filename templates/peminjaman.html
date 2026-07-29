@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Peminjaman Aktif{% endblock %}
+{% block content %}
+<h3>Peminjaman Aktif</h3>
+<p class="text-muted">Daftar buku yang sedang dipinjam dan belum ditandai kembali.</p>
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Buku</th>
+            <th>Jumlah</th>
+            <th>Dipinjam Oleh</th>
+            <th>Tgl Keluar</th>
+            <th>Rencana Kembali</th>
+            <th>Status</th>
+            <th>Aksi</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in daftar_pinjam %}
+        <tr>
+            <td>{{ p.judul }}<br><small class="text-muted mono">{{ p.isbn }}</small></td>
+            <td class="mono">{{ p.jumlah }}</td>
+            <td>{{ p.pihak_terkait or '-' }}</td>
+            <td>{{ p.tanggal }}</td>
+            <td>{{ p.tanggal_kembali_rencana }}</td>
+            <td>
+                {% if p.tanggal_kembali_rencana and p.tanggal_kembali_rencana < today %}
+                    <span class="badge bg-danger">Telat</span>
+                {% else %}
+                    <span class="badge bg-success">Aktif</span>
+                {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('peminjaman_kembali', transaksi_id=p.id) }}"
+                      onsubmit="return confirm('Tandai buku ini sudah kembali?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">✅ Tandai Kembali</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" class="text-center text-muted py-3">Tidak ada peminjaman aktif.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

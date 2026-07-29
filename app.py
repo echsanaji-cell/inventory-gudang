@@ -1,5 +1,7 @@
 import requests
 import os
+import barcode
+from barcode.writer import ImageWriter
 from flask import send_file
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -509,6 +511,47 @@ def buku_edit(buku_id):
 
     return render_template('buku/form.html', buku=buku, buku_id=buku_id)
 
+# ------------------ DETAIL BUKU + RIWAYAT MUTASI ------------------
+@app.route('/buku/<int:buku_id>/detail')
+@login_required
+def buku_detail(buku_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+
+    if not buku:
+        cur.close()
+        conn.close()
+        flash('Buku tidak ditemukan.', 'danger')
+        return redirect(url_for('buku_list'))
+
+    cur.execute(
+        """SELECT t.*, u.nama_lengkap, u.username
+           FROM transaksi t
+           LEFT JOIN users u ON t.user_id = u.id
+           WHERE t.buku_id = %s
+           ORDER BY t.tanggal DESC, t.created_at DESC""",
+        (buku_id,)
+    )
+    riwayat = cur.fetchall()
+
+    # ringkasan total masuk & keluar sepanjang waktu untuk buku ini
+    cur.execute(
+        """SELECT tipe, COALESCE(SUM(jumlah), 0) as total
+           FROM transaksi WHERE buku_id = %s GROUP BY tipe""",
+        (buku_id,)
+    )
+    ringkasan_raw = cur.fetchall()
+    ringkasan = {'masuk': 0, 'keluar': 0}
+    for row in ringkasan_raw:
+        ringkasan[row['tipe']] = row['total']
+
+    cur.close()
+    conn.close()
+
+    return render_template('buku/detail.html', buku=buku, riwayat=riwayat, ringkasan=ringkasan)
 
 # ------------------ HAPUS BUKU ------------------
 @app.route('/buku/hapus/<int:buku_id>', methods=['POST'])
@@ -612,9 +655,19 @@ def transaksi_keluar():
         keterangan = request.form.get('keterangan', '').strip()
         pihak_terkait = request.form.get('pihak_terkait', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
+        jenis_keluar = request.form.get('jenis_keluar', 'permanen').strip()
+        tanggal_kembali_rencana = request.form.get('tanggal_kembali_rencana', '').strip()
 
         if not buku_id or not jumlah or int(jumlah) <= 0:
             flash('Buku dan jumlah (harus lebih dari 0) wajib diisi.', 'danger')
+            cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+            daftar_buku = cur.fetchall()
+            cur.close()
+            conn.close()
+            return render_template('transaksi/keluar.html', daftar_buku=daftar_buku)
+
+        if jenis_keluar == 'pinjam' and not tanggal_kembali_rencana:
+            flash('Rencana tanggal kembali wajib diisi untuk barang yang dipinjam.', 'danger')
             cur.execute("SELECT * FROM buku ORDER BY judul ASC")
             daftar_buku = cur.fetchall()
             cur.close()
@@ -633,7 +686,6 @@ def transaksi_keluar():
                 conn.close()
                 return redirect(url_for('transaksi_keluar'))
 
-            # validasi stok cukup
             if buku['stok'] < jumlah:
                 flash(f'Stok tidak cukup. Stok tersedia: {buku["stok"]}, diminta: {jumlah}.', 'danger')
                 cur.close()
@@ -641,10 +693,13 @@ def transaksi_keluar():
                 return redirect(url_for('transaksi_keluar'))
 
             cur.execute(
-                """INSERT INTO transaksi (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal)
-                   VALUES (%s, 'keluar', %s, %s, %s, %s, %s)""",
+                """INSERT INTO transaksi 
+                   (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal, 
+                    jenis_keluar, tanggal_kembali_rencana)
+                   VALUES (%s, 'keluar', %s, %s, %s, %s, %s, %s, %s)""",
                 (buku_id, jumlah, keterangan, pihak_terkait, session['user_id'],
-                 tanggal or None)
+                 tanggal or None, jenis_keluar,
+                 tanggal_kembali_rencana if jenis_keluar == 'pinjam' else None)
             )
 
             cur.execute(
@@ -653,7 +708,8 @@ def transaksi_keluar():
             )
 
             conn.commit()
-            flash(f'Barang keluar: {buku["judul"]} -{jumlah} berhasil dicatat.', 'success')
+            label = 'dipinjam' if jenis_keluar == 'pinjam' else 'keluar'
+            flash(f'Barang {label}: {buku["judul"]} -{jumlah} berhasil dicatat.', 'success')
         except Exception as e:
             conn.rollback()
             flash('Gagal mencatat transaksi. Coba lagi.', 'danger')
@@ -726,5 +782,153 @@ def api_lookup_isbn(isbn):
             return {'found': False}
     except Exception as e:
         return {'found': False, 'error': str(e)}
+    # ------------------ API: GENERATE KODE INTERNAL BARU ------------------
+@app.route('/api/kode-internal-baru')
+@login_required
+def api_kode_internal_baru():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT isbn FROM buku WHERE isbn LIKE 'GDG-%' ORDER BY isbn DESC LIMIT 1")
+    last = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    last_num = 0
+    if last:
+        try:
+            last_num = int(last['isbn'].split('-')[1])
+        except (IndexError, ValueError):
+            last_num = 0
+
+    return {'kode': f"GDG-{last_num + 1:04d}"}
+
+
+# ------------------ GENERATE GAMBAR BARCODE ------------------
+@app.route('/buku/<int:buku_id>/barcode.png')
+@login_required
+def buku_barcode_image(buku_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT isbn FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not buku:
+        return '', 404
+
+    code128 = barcode.get('code128', buku['isbn'], writer=ImageWriter())
+    output = io.BytesIO()
+    code128.write(output, options={'write_text': False, 'module_height': 8.0, 'quiet_zone': 2})
+    output.seek(0)
+    return send_file(output, mimetype='image/png')
+
+
+# ------------------ HALAMAN PILIH BUKU UNTUK CETAK LABEL ------------------
+@app.route('/buku/cetak-label', methods=['GET', 'POST'])
+@login_required
+def buku_cetak_label():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if request.method == 'POST':
+        ids = request.form.getlist('buku_ids')
+        ids = [int(i) for i in ids if i.isdigit()]
+
+        if not ids:
+            flash('Pilih minimal satu buku untuk dicetak labelnya.', 'danger')
+            cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+            daftar_buku = cur.fetchall()
+            cur.close()
+            conn.close()
+            return render_template('buku/pilih_label.html', daftar_buku=daftar_buku)
+
+        cur.execute("SELECT * FROM buku WHERE id = ANY(%s) ORDER BY judul ASC", (ids,))
+        terpilih = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template('buku/label.html', daftar_buku=terpilih)
+
+    cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+    daftar_buku = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('buku/pilih_label.html', daftar_buku=daftar_buku)
+
+
+# ------------------ CETAK LABEL UNTUK 1 BUKU (dari halaman edit) ------------------
+@app.route('/buku/<int:buku_id>/label')
+@login_required
+def buku_label(buku_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not buku:
+        flash('Buku tidak ditemukan.', 'danger')
+        return redirect(url_for('buku_list'))
+
+    return render_template('buku/label.html', daftar_buku=[buku])
+
+# ------------------ DAFTAR PEMINJAMAN AKTIF ------------------
+@app.route('/peminjaman')
+@login_required
+def peminjaman_list():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.*, b.judul, b.isbn
+           FROM transaksi t
+           JOIN buku b ON t.buku_id = b.id
+           WHERE t.tipe = 'keluar' AND t.jenis_keluar = 'pinjam' 
+                 AND t.tanggal_kembali_aktual IS NULL
+           ORDER BY t.tanggal_kembali_rencana ASC"""
+    )
+    daftar_pinjam = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('peminjaman.html', daftar_pinjam=daftar_pinjam, today=datetime.now().date())
+
+
+# ------------------ TANDAI SUDAH KEMBALI ------------------
+@app.route('/peminjaman/<int:transaksi_id>/kembali', methods=['POST'])
+@login_required
+def peminjaman_kembali(transaksi_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """SELECT * FROM transaksi 
+               WHERE id = %s AND tipe = 'keluar' AND jenis_keluar = 'pinjam' 
+                     AND tanggal_kembali_aktual IS NULL""",
+            (transaksi_id,)
+        )
+        transaksi = cur.fetchone()
+
+        if not transaksi:
+            flash('Data peminjaman tidak ditemukan atau sudah ditandai kembali.', 'danger')
+        else:
+            cur.execute(
+                "UPDATE transaksi SET tanggal_kembali_aktual = CURRENT_DATE WHERE id = %s",
+                (transaksi_id,)
+            )
+            cur.execute(
+                "UPDATE buku SET stok = stok + %s, updated_at = NOW() WHERE id = %s",
+                (transaksi['jumlah'], transaksi['buku_id'])
+            )
+            conn.commit()
+            flash('Berhasil ditandai sudah kembali, stok bertambah kembali.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash('Gagal memproses. Coba lagi.', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for('peminjaman_list'))
 if __name__ == '__main__':
     app.run(debug=True)

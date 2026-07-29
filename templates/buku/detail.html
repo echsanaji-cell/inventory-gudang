@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Detail Buku - {{ buku.judul }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3>{{ buku.judul }}</h3>
+        <p class="text-muted mb-0">
+            <span class="mono">{{ buku.isbn }}</span> · {{ buku.penulis or '-' }} · {{ buku.penerbit or '-' }}
+        </p>
+    </div>
+    <div>
+        <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-outline-primary">Edit</a>
+        <a href="{{ url_for('buku_label', buku_id=buku.id) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
+        <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Kembali</a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Stok Saat Ini</h6>
+                <h2>{{ buku.stok }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h6 class="text-muted">Total Masuk</h6>
+                <h2 class="text-success">{{ ringkasan.masuk }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <h6 class="text-muted">Total Keluar</h6>
+                <h2 class="text-danger">{{ ringkasan.keluar }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Kategori</h6>
+                <h5 class="mt-2">{{ buku.kategori or '-' }}</h5>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Riwayat Mutasi Buku Ini</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Tipe</th>
+                    <th>Jumlah</th>
+                    <th>Pihak Terkait</th>
+                    <th>Keterangan</th>
+                    <th>Dicatat oleh</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in riwayat %}
+                <tr>
+                    <td>{{ t.tanggal }}</td>
+                    <td>
+                        {% if t.tipe == 'masuk' %}
+                            <span class="badge bg-success">Masuk</span>
+                        {% else %}
+                            <span class="badge bg-danger">Keluar</span>
+                        {% endif %}
+                    </td>
+                    <td class="mono">{{ t.jumlah }}</td>
+                    <td>{{ t.pihak_terkait or '-' }}</td>
+                    <td>{{ t.keterangan or '-' }}</td>
+                    <td>{{ t.nama_lengkap or t.username or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-3">Belum ada riwayat mutasi untuk buku ini.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

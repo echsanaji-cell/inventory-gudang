@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Cetak Label Barcode{% endblock %}
+{% block content %}
+<h3>Cetak Label Barcode</h3>
+<p class="text-muted">Pilih buku yang mau dicetak labelnya, lalu klik "Cetak Label Terpilih".</p>
+
+<form method="POST" action="{{ url_for('buku_cetak_label') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(true)">Pilih Semua</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(false)">Batal Semua</button>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th style="width:40px;"></th>
+                <th>ISBN / Kode</th>
+                <th>Judul</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for buku in daftar_buku %}
+            <tr>
+                <td><input type="checkbox" name="buku_ids" value="{{ buku.id }}" class="form-check-input buku-checkbox"></td>
+                <td class="mono">{{ buku.isbn }}</td>
+                <td>{{ buku.judul }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button type="submit" class="btn btn-primary">🏷️ Cetak Label Terpilih</button>
+</form>
+
+<script>
+function toggleAll(state) {
+    document.querySelectorAll('.buku-checkbox').forEach(cb => cb.checked = state);
+}
+</script>
+{% endblock %}
