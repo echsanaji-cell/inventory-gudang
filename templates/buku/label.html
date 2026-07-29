@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Cetak Label{% endblock %}
+{% block content %}
+<div class="mb-3 no-print">
+    <button onclick="window.print()" class="btn btn-primary">🖨️ Cetak Sekarang</button>
+    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Kembali</a>
+</div>
+
+<div class="label-grid">
+    {% for buku in daftar_buku %}
+    <div class="label-item">
+        <div class="label-judul">{{ buku.judul[:40] }}</div>
+        <img src="{{ url_for('buku_barcode_image', buku_id=buku.id) }}" class="label-barcode" alt="barcode">
+        <div class="label-kode mono">{{ buku.isbn }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+.label-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.label-item {
+    border: 1px dashed #ccc;
+    padding: 8px;
+    text-align: center;
+    break-inside: avoid;
+}
+.label-judul {
+    font-size: .72rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    line-height: 1.1;
+    height: 2.2em;
+    overflow: hidden;
+}
+.label-barcode { width: 100%; max-width: 160px; }
+.label-kode { font-size: .7rem; margin-top: 2px; }
+
+@media print {
+    .no-print, .navbar, .barcode-strip { display: none !important; }
+    body { background: white; }
+    .label-item { border: 1px solid #000; }
+}
+</style>
+{% endblock %}
