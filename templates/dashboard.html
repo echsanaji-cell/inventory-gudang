@@ -76,8 +76,15 @@
     <!-- Stok menipis -->
     <div class="col-md-6 mb-3">
         <div class="card">
-            <div class="card-header bg-warning-subtle">⚠️ Stok Menipis</div>
-            <div class="card-body p-0">
+            <div class="card-header bg-warning-subtle d-flex justify-content-between align-items-center">
+                <span>⚠️ Stok Menipis</span>
+                {% if session.role == 'admin' and stok_menipis %}
+                <form method="POST" action="{{ url_for('kirim_notifikasi_stok_manual') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-dark">📧 Kirim Email</button>
+                </form>
+                {% endif %}
+            </div>
                 {% if stok_menipis %}
                 <table class="table table-sm mb-0">
                     <thead>

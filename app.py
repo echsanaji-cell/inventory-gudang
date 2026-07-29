@@ -1,6 +1,9 @@
 import requests
 import os
 import barcode
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from barcode.writer import ImageWriter
 from flask import send_file
 from openpyxl import Workbook
@@ -23,6 +26,73 @@ from flask_wtf import CSRFProtect
 from datetime import timedelta
 
 csrf = CSRFProtect(app)
+
+def kirim_email_stok_kritis():
+    mail_username = os.environ.get('MAIL_USERNAME')
+    mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_to = os.environ.get('MAIL_TO')
+
+    if not all([mail_username, mail_password, mail_to]):
+        return False, "Konfigurasi email belum lengkap di environment variables."
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT * FROM buku 
+           WHERE stok_minimum > 0 AND stok <= stok_minimum 
+           ORDER BY stok ASC"""
+    )
+    stok_menipis = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not stok_menipis:
+        return True, "Tidak ada buku dengan stok menipis, email tidak dikirim."
+
+    baris_tabel = ""
+    for buku in stok_menipis:
+        baris_tabel += f"""
+        <tr>
+            <td style="padding:6px 10px; border-bottom:1px solid #ddd;">{buku['judul']}</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #ddd;">{buku['isbn']}</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #ddd; color:#A63A2C; font-weight:bold;">{buku['stok']}</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #ddd;">{buku['stok_minimum']}</td>
+        </tr>"""
+
+    html_body = f"""
+    <html><body style="font-family: Arial, sans-serif;">
+        <h2>⚠️ Peringatan Stok Menipis — Inventory Gudang</h2>
+        <p>Ada {len(stok_menipis)} buku dengan stok di bawah atau sama dengan batas minimum:</p>
+        <table style="border-collapse: collapse; width:100%;">
+            <tr style="background:#202A33; color:white;">
+                <th style="padding:6px 10px; text-align:left;">Judul</th>
+                <th style="padding:6px 10px; text-align:left;">ISBN</th>
+                <th style="padding:6px 10px; text-align:left;">Stok</th>
+                <th style="padding:6px 10px; text-align:left;">Minimum</th>
+            </tr>
+            {baris_tabel}
+        </table>
+        <p style="margin-top:20px; color:#888; font-size:12px;">
+            Email otomatis dari sistem Inventory Gudang — dikirim {datetime.now().strftime('%d-%m-%Y %H:%M')}
+        </p>
+    </body></html>
+    """
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f'⚠️ {len(stok_menipis)} Buku Stok Menipis - Inventory Gudang'
+    msg['From'] = mail_username
+    msg['To'] = mail_to
+    msg.attach(MIMEText(html_body, 'html'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(mail_username, mail_password)
+        server.sendmail(mail_username, mail_to.split(','), msg.as_string())
+        server.quit()
+        return True, f"Email berhasil dikirim ke {mail_to} ({len(stok_menipis)} buku)."
+    except Exception as e:
+        return False, f"Gagal kirim email: {str(e)}"
 
 # ------------------ DECORATOR: wajib login ------------------
 def login_required(f):
@@ -1049,5 +1119,24 @@ def user_reset_password(user_id):
 
     flash('Password berhasil direset.', 'success')
     return redirect(url_for('user_list'))
+# ------------------ ADMIN: KIRIM NOTIFIKASI MANUAL ------------------
+@app.route('/admin/kirim-notifikasi-stok', methods=['POST'])
+@login_required
+@admin_required
+def kirim_notifikasi_stok_manual():
+    sukses, pesan = kirim_email_stok_kritis()
+    flash(pesan, 'success' if sukses else 'danger')
+    return redirect(url_for('dashboard'))
+
+
+# ------------------ CRON: DIPANGGIL SCHEDULER EKSTERNAL ------------------
+@app.route('/cron/cek-stok-kritis')
+def cron_cek_stok_kritis():
+    secret = request.args.get('secret', '')
+    if secret != os.environ.get('CRON_SECRET'):
+        return {'error': 'unauthorized'}, 401
+
+    sukses, pesan = kirim_email_stok_kritis()
+    return {'success': sukses, 'message': pesan}
 if __name__ == '__main__':
     app.run(debug=True)
