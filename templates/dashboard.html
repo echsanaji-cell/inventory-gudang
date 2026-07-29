@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h3>Selamat datang, {{ session.nama_lengkap or session.username }}</h3>
+
+<!-- Kartu ringkasan angka -->
+<div class="row mt-4">
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Total Judul Buku</h6>
+                <h2>{{ ringkasan.total_judul }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Total Stok</h6>
+                <h2>{{ ringkasan.total_stok }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h6 class="text-muted">Masuk Hari Ini</h6>
+                <h2 class="text-success">{{ transaksi_hari_ini.masuk.total_item }}</h2>
+                <small class="text-muted">{{ transaksi_hari_ini.masuk.jumlah_transaksi }} transaksi</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <h6 class="text-muted">Keluar Hari Ini</h6>
+                <h2 class="text-danger">{{ transaksi_hari_ini.keluar.total_item }}</h2>
+                <small class="text-muted">{{ transaksi_hari_ini.keluar.jumlah_transaksi }} transaksi</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shortcut menu -->
+<div class="row mt-2">
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Data Buku</h5>
+                <p class="card-text">Kelola master data buku di gudang.</p>
+                <a href="{{ url_for('buku_list') }}" class="btn btn-primary">Lihat Data Buku</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Barang Masuk</h5>
+                <p class="card-text">Catat buku yang masuk ke gudang.</p>
+                <a href="{{ url_for('transaksi_masuk') }}" class="btn btn-success">Catat Masuk</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Barang Keluar</h5>
+                <p class="card-text">Catat buku yang keluar dari gudang.</p>
+                <a href="{{ url_for('transaksi_keluar') }}" class="btn btn-danger">Catat Keluar</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-2">
+    <!-- Stok menipis -->
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header bg-warning-subtle">⚠️ Stok Menipis</div>
+            <div class="card-body p-0">
+                {% if stok_menipis %}
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr><th>Judul</th><th>Stok</th><th>Min</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for buku in stok_menipis %}
+                        <tr>
+                            <td><a href="{{ url_for('buku_edit', buku_id=buku.id) }}">{{ buku.judul }}</a></td>
+                            <td><span class="badge bg-danger">{{ buku.stok }}</span></td>
+                            <td>{{ buku.stok_minimum }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted p-3 mb-0">Tidak ada buku dengan stok menipis.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Aktivitas terbaru -->
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">🕒 Aktivitas Terbaru</div>
+            <div class="card-body p-0">
+                {% if aktivitas_terbaru %}
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr><th>Buku</th><th>Tipe</th><th>Jml</th><th>Tanggal</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for t in aktivitas_terbaru %}
+                        <tr>
+                            <td>{{ t.judul }}</td>
+                            <td>
+                                {% if t.tipe == 'masuk' %}
+                                    <span class="badge bg-success">Masuk</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Keluar</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ t.jumlah }}</td>
+                            <td>{{ t.tanggal }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted p-3 mb-0">Belum ada aktivitas.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

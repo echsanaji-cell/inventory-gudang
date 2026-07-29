@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Barang Masuk{% endblock %}
+{% block content %}
+<h3>Catat Barang Masuk</h3>
+
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Scan ISBN</label>
+        <div class="input-group">
+            <input type="text" id="input-scan" class="form-control" placeholder="Scan atau ketik ISBN di sini">
+            <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanBuku)">
+                📷 Scan Kamera
+            </button>
+        </div>
+        <small class="text-muted" id="scan-status"></small>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Buku *</label>
+        <select name="buku_id" id="select-buku" class="form-select" required>
+            <option value="">-- Pilih Buku (atau scan di atas) --</option>
+            {% for buku in daftar_buku %}
+            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}">{{ buku.judul }} ({{ buku.isbn }}) — stok saat ini: {{ buku.stok }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Jumlah Masuk *</label>
+        <input type="number" name="jumlah" class="form-control" min="1" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Dari (supplier/donasi/dll)</label>
+        <input type="text" name="pihak_terkait" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Keterangan</label>
+        <textarea name="keterangan" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" name="tanggal" class="form-control">
+    </div>
+
+    <button type="submit" class="btn btn-success">Catat Barang Masuk</button>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Batal</a>
+</form>
+
+<script>
+const inputScan = document.getElementById('input-scan');
+const selectBuku = document.getElementById('select-buku');
+const scanStatus = document.getElementById('scan-status');
+
+initPhysicalScanner(inputScan, handleScanBuku);
+
+function handleScanBuku(kode) {
+    inputScan.value = kode;
+    const option = selectBuku.querySelector(`option[data-isbn="${kode}"]`);
+    if (option) {
+        selectBuku.value = option.value;
+        scanStatus.textContent = '✅ Ditemukan: ' + option.textContent;
+        scanStatus.className = 'text-success';
+    } else {
+        scanStatus.textContent = '❌ Buku dengan ISBN ini belum terdaftar di master data.';
+        scanStatus.className = 'text-danger';
+    }
+}
+</script>
+{% endblock %}

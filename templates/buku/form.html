@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if buku_id else 'Tambah' }} Buku{% endblock %}
+{% block content %}
+<h3>{{ 'Edit Buku' if buku_id else 'Tambah Buku Baru' }}</h3>
+
+<form method="POST" id="form-buku">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">ISBN *</label>
+        <div class="input-group">
+            <input type="text" name="isbn" id="input-isbn" class="form-control" required
+                   value="{{ buku.isbn if buku else '' }}" autofocus>
+            <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanIsbn)">
+                📷 Scan Kamera
+            </button>
+        </div>
+        <small class="text-muted">Scan pakai scanner fisik langsung ketik di sini, atau klik tombol kamera.</small>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Judul *</label>
+        <input type="text" name="judul" id="input-judul" class="form-control" required
+               value="{{ buku.judul if buku else '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Penulis</label>
+        <input type="text" name="penulis" id="input-penulis" class="form-control"
+               value="{{ buku.penulis if buku else '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Penerbit</label>
+        <input type="text" name="penerbit" id="input-penerbit" class="form-control"
+               value="{{ buku.penerbit if buku else '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Kategori</label>
+        <input type="text" name="kategori" class="form-control"
+               value="{{ buku.kategori if buku else '' }}">
+    </div>
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Stok Awal</label>
+            <input type="number" name="stok" class="form-control" min="0"
+                   value="{{ buku.stok if buku else 0 }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Stok Minimum (alert)</label>
+            <input type="number" name="stok_minimum" class="form-control" min="0"
+                   value="{{ buku.stok_minimum if buku else 0 }}">
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+
+<script>
+const inputIsbn = document.getElementById('input-isbn');
+
+// aktifkan scanner fisik di field ISBN
+initPhysicalScanner(inputIsbn, handleScanIsbn);
+
+function handleScanIsbn(kode) {
+    inputIsbn.value = kode;
+    lookupIsbn(kode);
+}
+
+function lookupIsbn(isbn) {
+    fetch(`/api/isbn/${isbn}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.found) {
+                document.getElementById('input-judul').value = data.judul || '';
+                document.getElementById('input-penulis').value = data.penulis || '';
+                document.getElementById('input-penerbit').value = data.penerbit || '';
+            } else {
+                alert('Data buku tidak ditemukan otomatis untuk ISBN ini — silakan isi manual.');
+                document.getElementById('input-judul').focus();
+            }
+        })
+        .catch(() => {
+            alert('Gagal mengambil data ISBN. Cek koneksi internet, atau isi manual.');
+        });
+}
+</script>
+{% endblock %}

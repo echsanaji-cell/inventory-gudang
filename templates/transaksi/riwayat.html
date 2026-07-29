@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Riwayat Transaksi{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Riwayat Transaksi</h3>
+    <div>
+        <a href="{{ url_for('transaksi_export_excel', tipe=tipe_filter) }}" class="btn btn-outline-success">📊 Excel</a>
+        <a href="{{ url_for('transaksi_export_pdf', tipe=tipe_filter) }}" class="btn btn-outline-danger">📄 PDF</a>
+    </div>
+</div>
+
+<div class="mb-3">
+    <a href="{{ url_for('transaksi_riwayat') }}" class="btn btn-sm {{ 'btn-primary' if not tipe_filter else 'btn-outline-primary' }}">Semua</a>
+    <a href="{{ url_for('transaksi_riwayat', tipe='masuk') }}" class="btn btn-sm {{ 'btn-success' if tipe_filter == 'masuk' else 'btn-outline-success' }}">Masuk</a>
+    <a href="{{ url_for('transaksi_riwayat', tipe='keluar') }}" class="btn btn-sm {{ 'btn-danger' if tipe_filter == 'keluar' else 'btn-outline-danger' }}">Keluar</a>
+</div>
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Tanggal</th>
+            <th>Tipe</th>
+            <th>Buku</th>
+            <th>Jumlah</th>
+            <th>Pihak Terkait</th>
+            <th>Keterangan</th>
+            <th>Dicatat oleh</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in daftar_transaksi %}
+        <tr>
+            <td>{{ t.tanggal }}</td>
+            <td>
+                {% if t.tipe == 'masuk' %}
+                    <span class="badge bg-success">Masuk</span>
+                {% else %}
+                    <span class="badge bg-danger">Keluar</span>
+                {% endif %}
+            </td>
+            <td>{{ t.judul }} <br><small class="text-muted">{{ t.isbn }}</small></td>
+            <td>{{ t.jumlah }}</td>
+            <td>{{ t.pihak_terkait or '-' }}</td>
+            <td>{{ t.keterangan or '-' }}</td>
+            <td>{{ t.nama_lengkap or t.username or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" class="text-center text-muted">Belum ada transaksi.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
