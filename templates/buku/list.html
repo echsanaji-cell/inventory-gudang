@@ -34,7 +34,7 @@
     <tbody>
         {% for buku in daftar_buku %}
         <tr>
-            <td>{{ buku.isbn }}</td>
+            <td class="mono">{{ buku.isbn }}</td>
             <td>{{ buku.judul }}</td>
             <td>{{ buku.penulis or '-' }}</td>
             <td>{{ buku.kategori or '-' }}</td>

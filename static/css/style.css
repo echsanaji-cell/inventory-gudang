@@ -1,0 +1,152 @@
+/* ============================================
+   Inventory Gudang — tema "Ledger & Barcode"
+   ============================================ */
+
+:root {
+  --paper: #F3EFE3;
+  --paper-raised: #FFFFFF;
+  --ink: #202A33;
+  --ink-soft: #4A5560;
+  --stamp-red: #A63A2C;
+  --ledger-green: #4C6B4F;
+  --brass: #B8863C;
+  --line: #D8D0BD;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* ---------- Tipografi ---------- */
+h1, h2, h3, .navbar-brand {
+  font-family: 'Special Elite', 'Courier New', monospace;
+  letter-spacing: 0.02em;
+}
+
+.mono, td.mono, code {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ---------- Navbar: gaya "label laci katalog" ---------- */
+.navbar {
+  background-color: var(--ink) !important;
+  border-bottom: 4px solid var(--brass);
+  padding-top: .9rem;
+  padding-bottom: .9rem;
+}
+.navbar-brand {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+}
+.navbar .nav-link {
+  color: #D8D0BD !important;
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .4rem .75rem !important;
+}
+.navbar .nav-link:hover {
+  color: #fff !important;
+}
+
+/* Strip barcode — elemen ciri khas di bawah navbar */
+.barcode-strip {
+  height: 10px;
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0px, var(--ink) 2px,
+    transparent 2px, transparent 4px,
+    var(--ink) 4px, var(--ink) 5px,
+    transparent 5px, transparent 9px,
+    var(--ink) 9px, var(--ink) 12px,
+    transparent 12px, transparent 14px
+  );
+  opacity: .18;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background-color: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  box-shadow: 0 1px 0 var(--line);
+}
+.card-header {
+  background-color: transparent;
+  border-bottom: 1px solid var(--line);
+  font-family: 'Special Elite', monospace;
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+/* ---------- Tombol: gaya "stempel tinta" ---------- */
+.btn {
+  border-radius: 2px;
+  text-transform: uppercase;
+  font-size: .82rem;
+  letter-spacing: .04em;
+  font-weight: 600;
+}
+.btn-primary { background-color: var(--ink); border-color: var(--ink); }
+.btn-primary:hover { background-color: #10161c; border-color: #10161c; }
+.btn-success { background-color: var(--ledger-green); border-color: var(--ledger-green); }
+.btn-danger { background-color: var(--stamp-red); border-color: var(--stamp-red); }
+.btn-outline-primary { color: var(--ink); border-color: var(--ink); }
+.btn-outline-primary:hover { background-color: var(--ink); border-color: var(--ink); }
+.btn-outline-success { color: var(--ledger-green); border-color: var(--ledger-green); }
+.btn-outline-success:hover { background-color: var(--ledger-green); border-color: var(--ledger-green); }
+.btn-outline-danger { color: var(--stamp-red); border-color: var(--stamp-red); }
+.btn-outline-danger:hover { background-color: var(--stamp-red); border-color: var(--stamp-red); }
+
+/* ---------- Tabel: garis ledger ---------- */
+.table thead th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--ink) !important;
+  border-top: none;
+}
+.table td, .table th {
+  border-top: none;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.table-hover tbody tr:hover {
+  background-color: rgba(184, 134, 60, 0.08);
+}
+
+/* ---------- Badge: stempel status ---------- */
+.badge {
+  border-radius: 3px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  padding: .35em .55em;
+}
+.badge.bg-success { background-color: var(--ledger-green) !important; }
+.badge.bg-danger { background-color: var(--stamp-red) !important; }
+
+/* ---------- Angka besar di dashboard ---------- */
+.card.text-center h2 {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink);
+}
+
+/* ---------- Halaman login ---------- */
+.login-wrap { max-width: 380px; margin: 4rem auto 0; }
+.login-wrap .card { padding: 2rem 1.75rem; }
+.login-wrap h3 { text-align: center; margin-bottom: .25rem; }
+.login-wrap .subtitle {
+  text-align: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .78rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 1.5rem;
+}

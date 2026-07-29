@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Login - Inventory Gudang{% endblock %}
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-4">
-        <h3 class="mb-4 text-center">Login Inventory Gudang</h3>
+<div class="login-wrap">
+    <div class="card">
+        <h3>Inventory Gudang</h3>
+        <p class="subtitle">Sistem Pendataan Buku</p>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
