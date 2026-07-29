@@ -7,7 +7,9 @@
         <a href="{{ url_for('buku_cetak_label', search=search) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
         <a href="{{ url_for('buku_export_excel', search=search) }}" class="btn btn-outline-success">📊 Excel</a>
         <a href="{{ url_for('buku_export_pdf', search=search) }}" class="btn btn-outline-danger">📄 PDF</a>
+        {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_tambah') }}" class="btn btn-primary">+ Tambah Buku</a>
+        {% endif %}
     </div>
 </div>
 
@@ -47,13 +49,17 @@
                 {% endif %}
             </td>
             <td>
-                <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                <form method="POST" action="{{ url_for('buku_hapus', buku_id=buku.id) }}" class="d-inline"
-      onsubmit="return confirm('Yakin hapus buku ini?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
-</form>
-            </td>
+    {% if session.role == 'admin' %}
+    <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+    <form method="POST" action="{{ url_for('buku_hapus', buku_id=buku.id) }}" class="d-inline"
+          onsubmit="return confirm('Yakin hapus buku ini?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+    </form>
+    {% else %}
+    <span class="text-muted small">-</span>
+    {% endif %}
+</td>
         </tr>
         {% else %}
         <tr>

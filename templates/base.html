@@ -43,6 +43,9 @@
     <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Barang Keluar</a>
     <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
     <a class="nav-link" href="{{ url_for('peminjaman_list') }}">Peminjaman</a>
+{% if session.role == 'admin' %}
+<a class="nav-link" href="{{ url_for('user_list') }}">Kelola User</a>
+{% endif %}
 </div>
             <div class="navbar-nav">
                 <span class="nav-link text-light">{{ session.nama_lengkap or session.username }}</span>

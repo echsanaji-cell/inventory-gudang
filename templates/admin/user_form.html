@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Tambah User{% endblock %}
+{% block content %}
+<h3>Tambah User Baru</h3>
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Username *</label>
+        <input type="text" name="username" class="form-control" required autofocus>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Nama Lengkap</label>
+        <input type="text" name="nama_lengkap" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Password *</label>
+        <input type="password" name="password" class="form-control" minlength="8" required>
+        <small class="text-muted">Minimal 8 karakter.</small>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Role *</label>
+        <select name="role" class="form-select" required>
+            <option value="staff">Staff</option>
+            <option value="admin">Admin</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('user_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}

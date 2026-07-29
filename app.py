@@ -13,7 +13,7 @@ from reportlab.lib.units import cm
 import io
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from db import get_db_connection
 
@@ -33,6 +33,16 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        if session.get('role') != 'admin':
+            flash('Halaman ini khusus untuk admin.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 # ------------------ LOGIN ------------------
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
@@ -423,6 +433,7 @@ def transaksi_export_pdf():
 # ------------------ TAMBAH BUKU ------------------
 @app.route('/buku/tambah', methods=['GET', 'POST'])
 @login_required
+@admin_required 
 def buku_tambah():
     if request.method == 'POST':
         isbn = request.form.get('isbn', '').strip()
@@ -467,6 +478,7 @@ def buku_tambah():
 # ------------------ EDIT BUKU ------------------
 @app.route('/buku/edit/<int:buku_id>', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def buku_edit(buku_id):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -556,6 +568,7 @@ def buku_detail(buku_id):
 # ------------------ HAPUS BUKU ------------------
 @app.route('/buku/hapus/<int:buku_id>', methods=['POST'])
 @login_required
+@admin_required
 def buku_hapus(buku_id):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -930,5 +943,111 @@ def peminjaman_kembali(transaksi_id):
         conn.close()
 
     return redirect(url_for('peminjaman_list'))
+# ------------------ ADMIN: DAFTAR USER ------------------
+@app.route('/admin/users')
+@login_required
+@admin_required
+def user_list():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users ORDER BY username ASC")
+    daftar_user = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('admin/users.html', daftar_user=daftar_user)
+
+
+# ------------------ ADMIN: TAMBAH USER ------------------
+@app.route('/admin/users/tambah', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def user_tambah():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        nama_lengkap = request.form.get('nama_lengkap', '').strip()
+        role = request.form.get('role', 'staff').strip()
+
+        if not username or not password:
+            flash('Username dan password wajib diisi.', 'danger')
+            return render_template('admin/user_form.html')
+
+        if len(password) < 8:
+            flash('Password minimal 8 karakter.', 'danger')
+            return render_template('admin/user_form.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+        if cur.fetchone():
+            flash('Username sudah dipakai.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('admin/user_form.html')
+
+        password_hash = generate_password_hash(password)
+        cur.execute(
+            """INSERT INTO users (username, password_hash, nama_lengkap, role)
+               VALUES (%s, %s, %s, %s)""",
+            (username, password_hash, nama_lengkap, role)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'User "{username}" berhasil ditambahkan.', 'success')
+        return redirect(url_for('user_list'))
+
+    return render_template('admin/user_form.html')
+
+
+# ------------------ ADMIN: AKTIFKAN/NONAKTIFKAN USER ------------------
+@app.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def user_toggle(user_id):
+    if user_id == session['user_id']:
+        flash('Tidak bisa menonaktifkan akun sendiri.', 'danger')
+        return redirect(url_for('user_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT is_active FROM users WHERE id = %s", (user_id,))
+    user = cur.fetchone()
+
+    if user:
+        cur.execute("UPDATE users SET is_active = %s WHERE id = %s", (not user['is_active'], user_id))
+        conn.commit()
+        flash('Status user berhasil diubah.', 'success')
+
+    cur.close()
+    conn.close()
+    return redirect(url_for('user_list'))
+
+
+# ------------------ ADMIN: RESET PASSWORD USER ------------------
+@app.route('/admin/users/<int:user_id>/reset-password', methods=['POST'])
+@login_required
+@admin_required
+def user_reset_password(user_id):
+    password_baru = request.form.get('password_baru', '').strip()
+
+    if len(password_baru) < 8:
+        flash('Password minimal 8 karakter.', 'danger')
+        return redirect(url_for('user_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET password_hash = %s, failed_attempts = 0, locked_until = NULL WHERE id = %s",
+        (generate_password_hash(password_baru), user_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    flash('Password berhasil direset.', 'success')
+    return redirect(url_for('user_list'))
 if __name__ == '__main__':
     app.run(debug=True)

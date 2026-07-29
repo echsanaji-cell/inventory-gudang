@@ -9,7 +9,9 @@
         </p>
     </div>
     <div>
+        {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-outline-primary">Edit</a>
+        {% endif %}
         <a href="{{ url_for('buku_label', buku_id=buku.id) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
         <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Kembali</a>
     </div>
