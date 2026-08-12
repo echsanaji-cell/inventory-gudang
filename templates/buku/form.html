@@ -34,18 +34,21 @@
         <input type="text" name="penerbit" id="input-penerbit" class="form-control"
                value="{{ buku.penerbit if buku else '' }}">
     </div>
-    <div class="mb-3">
-        <label class="form-label">Kategori</label>
-        <input type="text" name="kategori" class="form-control"
-               value="{{ buku.kategori if buku else '' }}">
-    </div>
+    
     <div class="row">
-        <div class="col-md-6 mb-3">
-            <label class="form-label">Stok Awal</label>
+        <div class="col-md-4 mb-3">
+            <label class="form-label">Jumlah Rencana (target)</label>
+            <input type="number" name="jumlah_rencana" class="form-control" min="0"
+                   value="{{ buku.jumlah_rencana if buku else 0 }}">
+            <small class="text-muted">Target eksemplar yang seharusnya diterima.</small>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label class="form-label">Stok Diterima Saat Ini</label>
             <input type="number" name="stok" class="form-control" min="0"
                    value="{{ buku.stok if buku else 0 }}">
+            <small class="text-muted">Biasanya diisi 0, bertambah lewat "Barang Masuk".</small>
         </div>
-        <div class="col-md-6 mb-3">
+        <div class="col-md-4 mb-3">
             <label class="form-label">Stok Minimum (alert)</label>
             <input type="number" name="stok_minimum" class="form-control" min="0"
                    value="{{ buku.stok_minimum if buku else 0 }}">

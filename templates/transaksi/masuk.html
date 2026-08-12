@@ -21,7 +21,7 @@
         <select name="buku_id" id="select-buku" class="form-select" required>
             <option value="">-- Pilih Buku (atau scan di atas) --</option>
             {% for buku in daftar_buku %}
-            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}">{{ buku.judul }} ({{ buku.isbn }}) — stok saat ini: {{ buku.stok }}</option>
+            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}">{{ buku.judul }} ({{ buku.isbn }}) — diterima {{ buku.stok }}/{{ buku.jumlah_rencana }}</option>
             {% endfor %}
         </select>
     </div>

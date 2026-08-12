@@ -20,6 +20,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from db import get_db_connection
+from reportlab.lib.styles import ParagraphStyle
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -297,23 +298,30 @@ def buku_export_excel():
     ws = wb.active
     ws.title = "Data Buku"
 
-    headers = ['ISBN', 'Judul', 'Penulis', 'Penerbit', 'Kategori', 'Stok', 'Stok Minimum']
+    headers = ['ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum']
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
 
+    from openpyxl.styles import Alignment
+    wrap_style = Alignment(wrap_text=True, vertical='top')
+
     for buku in daftar_buku:
         ws.append([
             buku['isbn'], buku['judul'], buku['penulis'] or '-',
-            buku['penerbit'] or '-', buku['kategori'] or '-',
-            buku['stok'], buku['stok_minimum']
+            buku['penerbit'] or '-',
+            buku['stok'], buku['jumlah_rencana'], buku['stok_minimum']
         ])
+        row_num = ws.max_row
+        ws.cell(row=row_num, column=2).alignment = wrap_style  # Judul
+        ws.cell(row=row_num, column=3).alignment = wrap_style  # Penulis
+        ws.cell(row=row_num, column=4).alignment = wrap_style  # Penerbit
 
-    # lebar kolom otomatis biar rapi
-    for col in ws.columns:
-        max_length = max(len(str(cell.value)) for cell in col if cell.value)
-        ws.column_dimensions[col[0].column_letter].width = max_length + 3
+    # lebar kolom tetap (bukan auto-fit lagi)
+    lebar_kolom = {'A': 16, 'B': 45, 'C': 30, 'D': 25, 'E': 10, 'F': 10, 'G': 13}
+    for kolom, lebar in lebar_kolom.items():
+        ws.column_dimensions[kolom].width = lebar
 
     output = io.BytesIO()
     wb.save(output)
@@ -348,7 +356,10 @@ def buku_export_pdf():
     conn.close()
 
     output = io.BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+    doc = SimpleDocTemplate(
+        output, pagesize=landscape(A4),
+        topMargin=1*cm, bottomMargin=1*cm, leftMargin=1*cm, rightMargin=1*cm
+    )
     styles = getSampleStyleSheet()
     elements = []
 
@@ -356,22 +367,40 @@ def buku_export_pdf():
     elements.append(Paragraph(f"Dicetak: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
     elements.append(Spacer(1, 0.5*cm))
 
-    data = [['ISBN', 'Judul', 'Penulis', 'Penerbit', 'Kategori', 'Stok', 'Min']]
+    # style teks kecil yang bisa "membungkus" ke baris baru
+    style_sel = ParagraphStyle('sel', fontSize=7.5, leading=9, fontName='Helvetica')
+    style_header = ParagraphStyle('header', fontSize=8, leading=10, fontName='Helvetica-Bold', textColor=colors.white)
+
+    data = [[
+        Paragraph('ISBN', style_header), Paragraph('Judul', style_header),
+        Paragraph('Penulis', style_header), Paragraph('Penerbit', style_header),
+        Paragraph('Diterima', style_header), Paragraph('Rencana', style_header),
+        Paragraph('Min', style_header)
+    ]]
     for buku in daftar_buku:
         data.append([
-            buku['isbn'], buku['judul'], buku['penulis'] or '-',
-            buku['penerbit'] or '-', buku['kategori'] or '-',
-            str(buku['stok']), str(buku['stok_minimum'])
+            Paragraph(buku['isbn'], style_sel),
+            Paragraph(buku['judul'], style_sel),
+            Paragraph(buku['penulis'] or '-', style_sel),
+            Paragraph(buku['penerbit'] or '-', style_sel),
+            Paragraph(str(buku['stok']), style_sel),
+            Paragraph(str(buku['jumlah_rencana']), style_sel),
+            Paragraph(str(buku['stok_minimum']), style_sel),
         ])
 
-    table = Table(data, repeatRows=1)
+    # lebar kolom tetap, totalnya pas dengan lebar halaman landscape A4 dikurangi margin
+    col_widths = [2.6*cm, 8.0*cm, 6.0*cm, 5.0*cm, 2.0*cm, 2.0*cm, 1.5*cm]
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0D6EFD')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]))
     elements.append(table)
 
@@ -511,9 +540,10 @@ def buku_tambah():
         judul = request.form.get('judul', '').strip()
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
-        kategori = request.form.get('kategori', '').strip()
+        
         stok = request.form.get('stok', '0').strip()
         stok_minimum = request.form.get('stok_minimum', '0').strip()
+        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -532,9 +562,9 @@ def buku_tambah():
             return render_template('buku/form.html', buku=request.form)
 
         cur.execute(
-            """INSERT INTO buku (isbn, judul, penulis, penerbit, kategori, stok, stok_minimum)
+            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana)
                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (isbn, judul, penulis, penerbit, kategori, stok, stok_minimum)
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana)
         )
         conn.commit()
         cur.close()
@@ -571,10 +601,10 @@ def buku_edit(buku_id):
 
         cur.execute(
             """UPDATE buku 
-               SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, kategori=%s, 
-                   stok=%s, stok_minimum=%s, updated_at=NOW()
+               SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, 
+                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, updated_at=NOW()
                WHERE id=%s""",
-            (isbn, judul, penulis, penerbit, kategori, stok, stok_minimum, buku_id)
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, buku_id)
         )
         conn.commit()
         cur.close()
@@ -1149,7 +1179,7 @@ def buku_import_template():
     ws = wb.active
     ws.title = "Template Import"
 
-    headers = ['isbn', 'judul', 'penulis', 'penerbit', 'kategori', 'stok', 'stok_minimum']
+    headers = ['isbn', 'judul', 'penulis', 'penerbit', 'jumlah_rencana', 'stok', 'stok_minimum']
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF')
@@ -1196,32 +1226,48 @@ def buku_import():
             flash('Gagal membaca file Excel. Pastikan formatnya benar.', 'danger')
             return render_template('buku/import.html')
 
-        # baca header di baris 1, cocokkan posisi kolom
-        header_row = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
-        kolom_wajib = ['isbn', 'judul']
+        # alias nama kolom yang dikenali (huruf kecil, sudah di-strip)
+        alias_kolom = {
+            'isbn': ['isbn'],
+            'judul': ['judul', 'judul buku'],
+            'penulis': ['penulis'],
+            'penerbit': ['penerbit'],
+            'jumlah_rencana': ['eksemplar', 'jumlah rencana', 'jumlah_rencana', 'rencana'],
+            'stok': ['stok', 'stok awal'],
+            'stok_minimum': ['stok_minimum', 'stok minimum'],
+        }
+
+        # cari baris header: scan 15 baris pertama, cari baris yang punya sel "isbn"
+        header_row_num = None
         kolom_index = {}
 
-        for kolom in ['isbn', 'judul', 'penulis', 'penerbit', 'kategori', 'stok', 'stok_minimum']:
-            if kolom in header_row:
-                kolom_index[kolom] = header_row.index(kolom)
+        for row_num in range(1, min(16, ws.max_row + 1)):
+            row_values = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[row_num]]
+            if 'isbn' in row_values:
+                header_row_num = row_num
+                for field, kemungkinan_nama in alias_kolom.items():
+                    for nama in kemungkinan_nama:
+                        if nama in row_values:
+                            kolom_index[field] = row_values.index(nama)
+                            break
+                break
 
-        for kolom in kolom_wajib:
-            if kolom not in kolom_index:
-                flash(f'Kolom "{kolom}" wajib ada di file Excel (baris pertama). Gunakan template yang disediakan.', 'danger')
-                return render_template('buku/import.html')
+        if header_row_num is None or 'isbn' not in kolom_index or 'judul' not in kolom_index:
+            flash('Kolom ISBN dan Judul tidak ditemukan di file. Pastikan ada baris header dengan kolom "ISBN" dan "Judul"/"Judul Buku".', 'danger')
+            return render_template('buku/import.html')
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         berhasil = 0
         dilewati = []
-        baris_ke = 1
+        baris_ke = header_row_num
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in ws.iter_rows(min_row=header_row_num + 1, values_only=True):
             baris_ke += 1
 
-            def ambil(nama_kolom, default=''):
-                idx = kolom_index.get(nama_kolom)
+            def ambil(nama_field, default=''):
+                idx = kolom_index.get(nama_field)
                 if idx is None or idx >= len(row) or row[idx] is None:
                     return default
                 return row[idx]
@@ -1229,9 +1275,8 @@ def buku_import():
             isbn = str(ambil('isbn')).strip()
             judul = str(ambil('judul')).strip()
 
-            if not isbn or not judul:
-                dilewati.append(f"Baris {baris_ke}: ISBN/Judul kosong")
-                continue
+            if not isbn or not judul or isbn.lower() == 'none':
+                continue  # baris kosong, dilewati diam-diam (bukan error)
 
             cur.execute("SELECT id FROM buku WHERE isbn = %s", (isbn,))
             if cur.fetchone():
@@ -1239,16 +1284,23 @@ def buku_import():
                 continue
 
             try:
-                stok = int(ambil('stok', 0) or 0)
-                stok_minimum = int(ambil('stok_minimum', 0) or 0)
+                jumlah_rencana = int(float(ambil('jumlah_rencana', 0) or 0))
             except (ValueError, TypeError):
-                stok, stok_minimum = 0, 0
+                jumlah_rencana = 0
+            try:
+                stok = int(float(ambil('stok', 0) or 0))
+            except (ValueError, TypeError):
+                stok = 0
+            try:
+                stok_minimum = int(float(ambil('stok_minimum', 0) or 0))
+            except (ValueError, TypeError):
+                stok_minimum = 0
 
             cur.execute(
-                """INSERT INTO buku (isbn, judul, penulis, penerbit, kategori, stok, stok_minimum)
+                """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (isbn, judul, str(ambil('penulis')), str(ambil('penerbit')),
-                 str(ambil('kategori')), stok, stok_minimum)
+                 stok, stok_minimum, jumlah_rencana)
             )
             berhasil += 1
 
@@ -1258,7 +1310,7 @@ def buku_import():
 
         pesan = f'{berhasil} buku berhasil diimpor.'
         if dilewati:
-            pesan += f' {len(dilewati)} baris dilewati.'
+            pesan += f' {len(dilewati)} baris dilewati (ISBN dobel).'
         flash(pesan, 'success' if berhasil > 0 else 'danger')
 
         return render_template('buku/import.html', dilewati=dilewati, berhasil=berhasil)
