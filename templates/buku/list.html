@@ -32,8 +32,8 @@
             <th>ISBN</th>
             <th>Judul</th>
             <th>Penulis</th>
-            <th>Kategori</th>
-            <th>Stok</th>
+            <th>Penerbit</th>
+            <th>Diterima / Rencana</th>
             <th>Aksi</th>
         </tr>
     </thead>
@@ -43,12 +43,19 @@
             <td class="mono">{{ buku.isbn }}</td>
             <td><a href="{{ url_for('buku_detail', buku_id=buku.id) }}">{{ buku.judul }}</a></td>
             <td>{{ buku.penulis or '-' }}</td>
-            <td>{{ buku.kategori or '-' }}</td>
+            <td>{{ buku.penerbit or '-' }}</td>
             <td>
-                {% if buku.stok <= buku.stok_minimum %}
-                    <span class="badge bg-danger">{{ buku.stok }}</span>
+                {% if buku.jumlah_rencana > 0 %}
+                    <span class="mono">{{ buku.stok }} / {{ buku.jumlah_rencana }}</span>
+                    {% if buku.stok >= buku.jumlah_rencana %}
+                        <span class="badge bg-success">Lengkap</span>
+                    {% elif buku.stok > 0 %}
+                        <span class="badge bg-warning text-dark">Sebagian</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Belum Ada</span>
+                    {% endif %}
                 {% else %}
-                    <span class="badge bg-success">{{ buku.stok }}</span>
+                    <span class="mono">{{ buku.stok }}</span>
                 {% endif %}
             </td>
             <td>
