@@ -202,9 +202,24 @@ def dashboard():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # total buku & total stok
-    cur.execute("SELECT COUNT(*) as total_judul, COALESCE(SUM(stok), 0) as total_stok FROM buku")
+    # total buku, total stok, total rencana
+    cur.execute(
+        """SELECT COUNT(*) as total_judul, 
+                  COALESCE(SUM(stok), 0) as total_stok,
+                  COALESCE(SUM(jumlah_rencana), 0) as total_rencana
+           FROM buku"""
+    )
     ringkasan = cur.fetchone()
+
+    # hitung jumlah buku per status penerimaan
+    cur.execute(
+        """SELECT 
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok = 0) as belum_ada,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana) as sebagian,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok >= jumlah_rencana) as lengkap
+           FROM buku"""
+    )
+    status_penerimaan = cur.fetchone()
 
     # buku dengan stok menipis (stok <= stok_minimum, dan stok_minimum > 0 biar buku tanpa batas minimum nggak ikut muncul)
     cur.execute(
@@ -245,7 +260,8 @@ def dashboard():
         ringkasan=ringkasan,
         stok_menipis=stok_menipis,
         transaksi_hari_ini=transaksi_hari_ini,
-        aktivitas_terbaru=aktivitas_terbaru
+        aktivitas_terbaru=aktivitas_terbaru,
+        status_penerimaan=status_penerimaan
     )
 
 # ------------------ LIST BUKU ------------------
@@ -253,43 +269,83 @@ def dashboard():
 @login_required
 def buku_list():
     search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    penerbit_filter = request.args.get('penerbit', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    if search:
-        cur.execute(
-            """SELECT * FROM buku 
-               WHERE judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s
-               ORDER BY judul ASC""",
-            (f'%{search}%', f'%{search}%', f'%{search}%')
-        )
-    else:
-        cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+    query = "SELECT * FROM buku WHERE 1=1"
+    params = []
 
+    if search:
+        query += " AND (judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s)"
+        params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+
+    if status_filter == 'belum':
+        query += " AND jumlah_rencana > 0 AND stok = 0"
+    elif status_filter == 'sebagian':
+        query += " AND jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana"
+    elif status_filter == 'lengkap':
+        query += " AND jumlah_rencana > 0 AND stok >= jumlah_rencana"
+
+    if penerbit_filter:
+        query += " AND penerbit = %s"
+        params.append(penerbit_filter)
+
+    query += " ORDER BY judul ASC"
+
+    cur.execute(query, tuple(params))
     daftar_buku = cur.fetchall()
+
+    # daftar penerbit unik untuk dropdown filter
+    cur.execute("SELECT DISTINCT penerbit FROM buku WHERE penerbit IS NOT NULL AND penerbit != '' ORDER BY penerbit ASC")
+    daftar_penerbit = [row['penerbit'] for row in cur.fetchall()]
+
     cur.close()
     conn.close()
 
-    return render_template('buku/list.html', daftar_buku=daftar_buku, search=search)
+    return render_template(
+        'buku/list.html',
+        daftar_buku=daftar_buku,
+        search=search,
+        status_filter=status_filter,
+        penerbit_filter=penerbit_filter,
+        daftar_penerbit=daftar_penerbit
+    )
 
 # ------------------ EXPORT BUKU - EXCEL ------------------
 @app.route('/buku/export/excel')
 @login_required
 def buku_export_excel():
     search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    penerbit_filter = request.args.get('penerbit', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
+
+    query = "SELECT * FROM buku WHERE 1=1"
+    params = []
+
     if search:
-        cur.execute(
-            """SELECT * FROM buku 
-               WHERE judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s
-               ORDER BY judul ASC""",
-            (f'%{search}%', f'%{search}%', f'%{search}%')
-        )
-    else:
-        cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+        query += " AND (judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s)"
+        params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+
+    if status_filter == 'belum':
+        query += " AND jumlah_rencana > 0 AND stok = 0"
+    elif status_filter == 'sebagian':
+        query += " AND jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana"
+    elif status_filter == 'lengkap':
+        query += " AND jumlah_rencana > 0 AND stok >= jumlah_rencana"
+
+    if penerbit_filter:
+        query += " AND penerbit = %s"
+        params.append(penerbit_filter)
+
+    query += " ORDER BY judul ASC"
+
+    cur.execute(query, tuple(params))
     daftar_buku = cur.fetchall()
     cur.close()
     conn.close()
@@ -327,7 +383,8 @@ def buku_export_excel():
     wb.save(output)
     output.seek(0)
 
-    filename = f"data-buku-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    label_status = {'belum': 'belum-diterima', 'sebagian': 'sebagian-diterima', 'lengkap': 'lengkap-diterima'}.get(status_filter, 'semua')
+    filename = f"data-buku-{label_status}-{datetime.now().strftime('%Y%m%d')}.xlsx"
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -339,18 +396,33 @@ def buku_export_excel():
 @login_required
 def buku_export_pdf():
     search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    penerbit_filter = request.args.get('penerbit', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
+
+    query = "SELECT * FROM buku WHERE 1=1"
+    params = []
+
     if search:
-        cur.execute(
-            """SELECT * FROM buku 
-               WHERE judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s
-               ORDER BY judul ASC""",
-            (f'%{search}%', f'%{search}%', f'%{search}%')
-        )
-    else:
-        cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+        query += " AND (judul ILIKE %s OR isbn ILIKE %s OR penulis ILIKE %s)"
+        params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+
+    if status_filter == 'belum':
+        query += " AND jumlah_rencana > 0 AND stok = 0"
+    elif status_filter == 'sebagian':
+        query += " AND jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana"
+    elif status_filter == 'lengkap':
+        query += " AND jumlah_rencana > 0 AND stok >= jumlah_rencana"
+
+    if penerbit_filter:
+        query += " AND penerbit = %s"
+        params.append(penerbit_filter)
+
+    query += " ORDER BY judul ASC"
+
+    cur.execute(query, tuple(params))
     daftar_buku = cur.fetchall()
     cur.close()
     conn.close()
@@ -363,7 +435,9 @@ def buku_export_pdf():
     styles = getSampleStyleSheet()
     elements = []
 
-    elements.append(Paragraph("Laporan Data Buku", styles['Title']))
+    judul_map = {'belum': ' - Belum Diterima', 'sebagian': ' - Diterima Sebagian', 'lengkap': ' - Sudah Lengkap'}
+    judul_laporan = "Laporan Data Buku" + judul_map.get(status_filter, '')
+    elements.append(Paragraph(judul_laporan, styles['Title']))
     elements.append(Paragraph(f"Dicetak: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
     elements.append(Spacer(1, 0.5*cm))
 
@@ -407,7 +481,8 @@ def buku_export_pdf():
     doc.build(elements)
     output.seek(0)
 
-    filename = f"data-buku-{datetime.now().strftime('%Y%m%d')}.pdf"
+    label_status = {'belum': 'belum-diterima', 'sebagian': 'sebagian-diterima', 'lengkap': 'lengkap-diterima'}.get(status_filter, 'semua')
+    filename = f"data-buku-{label_status}-{datetime.now().strftime('%Y%m%d')}.pdf"
     return send_file(output, mimetype='application/pdf', as_attachment=True, download_name=filename)
 # ------------------ EXPORT TRANSAKSI - EXCEL ------------------
 @app.route('/transaksi/export/excel')
@@ -732,10 +807,14 @@ def transaksi_masuk():
                  tanggal or None)
             )
 
-            # update stok buku
+            # update stok buku + tanggal masuk terakhir
+            tgl_transaksi = tanggal or datetime.now().date()
             cur.execute(
-                "UPDATE buku SET stok = stok + %s, updated_at = NOW() WHERE id = %s",
-                (jumlah, buku_id)
+                """UPDATE buku 
+                   SET stok = stok + %s, updated_at = NOW(),
+                       tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s)
+                   WHERE id = %s""",
+                (jumlah, tgl_transaksi, tgl_transaksi, buku_id)
             )
 
             conn.commit()
@@ -1185,8 +1264,7 @@ def buku_import_template():
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
 
-    # baris contoh
-    ws.append(['9786020633178', 'Contoh Judul Buku', 'Nama Penulis', 'Nama Penerbit', 'Fiksi', 10, 3])
+    ws.append(['9786020633178', 'Contoh Judul Buku', 'Nama Penulis', 'Nama Penerbit', 40, 0, 3])
 
     for col in ws.columns:
         max_length = max(len(str(cell.value)) for cell in col if cell.value)
@@ -1316,5 +1394,179 @@ def buku_import():
         return render_template('buku/import.html', dilewati=dilewati, berhasil=berhasil)
 
     return render_template('buku/import.html')
+
+# ------------------ DOWNLOAD TEMPLATE IMPORT MASSAL BARANG MASUK ------------------
+@app.route('/transaksi/masuk/import/template')
+@login_required
+def import_masuk_template():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Template Barang Masuk"
+
+    headers = ['isbn', 'jumlah_masuk', 'tanggal', 'keterangan']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+
+    ws.append(['9786347345264', 40, '2026-08-12', 'Kiriman tahap 1'])
+
+    for col in ws.columns:
+        max_length = max(len(str(cell.value)) for cell in col if cell.value)
+        ws.column_dimensions[col[0].column_letter].width = max_length + 3
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='template-barang-masuk-massal.xlsx'
+    )
+# ------------------ IMPORT MASSAL BARANG MASUK ------------------
+@app.route('/transaksi/masuk/import', methods=['GET', 'POST'])
+@login_required
+def import_masuk_massal():
+    if request.method == 'POST':
+        file = request.files.get('file_excel')
+
+        if not file or file.filename == '':
+            flash('Pilih file Excel dulu.', 'danger')
+            return render_template('transaksi/import_masuk.html')
+
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            flash('File harus berformat .xlsx atau .xls', 'danger')
+            return render_template('transaksi/import_masuk.html')
+
+        try:
+            wb = load_workbook(file, data_only=True)
+            ws = wb.active
+        except Exception:
+            flash('Gagal membaca file Excel. Pastikan formatnya benar.', 'danger')
+            return render_template('transaksi/import_masuk.html')
+
+        header_row = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
+
+        if 'isbn' not in header_row or 'jumlah_masuk' not in header_row:
+            flash('Kolom "isbn" dan "jumlah_masuk" wajib ada di baris pertama. Gunakan template yang disediakan.', 'danger')
+            return render_template('transaksi/import_masuk.html')
+
+        idx_isbn = header_row.index('isbn')
+        idx_jumlah = header_row.index('jumlah_masuk')
+        idx_keterangan = header_row.index('keterangan') if 'keterangan' in header_row else None
+        idx_tanggal = header_row.index('tanggal') if 'tanggal' in header_row else None
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        berhasil = []
+        gagal = []
+        baris_ke = 1
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            baris_ke += 1
+
+            isbn = str(row[idx_isbn]).strip() if idx_isbn < len(row) and row[idx_isbn] else ''
+            if not isbn:
+                continue
+
+            try:
+                jumlah = int(float(row[idx_jumlah])) if idx_jumlah < len(row) and row[idx_jumlah] else 0
+            except (ValueError, TypeError):
+                jumlah = 0
+
+            keterangan = ''
+            if idx_keterangan is not None and idx_keterangan < len(row) and row[idx_keterangan]:
+                keterangan = str(row[idx_keterangan])
+
+            tgl_masuk = datetime.now().date()
+            if idx_tanggal is not None and idx_tanggal < len(row) and row[idx_tanggal]:
+                nilai_tanggal = row[idx_tanggal]
+                if hasattr(nilai_tanggal, 'date'):
+                    tgl_masuk = nilai_tanggal.date()
+                elif isinstance(nilai_tanggal, str):
+                    try:
+                        tgl_masuk = datetime.strptime(nilai_tanggal.strip(), '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+
+            if jumlah <= 0:
+                gagal.append(f"Baris {baris_ke}: jumlah tidak valid untuk ISBN {isbn}")
+                continue
+
+            cur.execute("SELECT * FROM buku WHERE isbn = %s", (isbn,))
+            buku = cur.fetchone()
+
+            if not buku:
+                gagal.append(f"Baris {baris_ke}: ISBN {isbn} tidak ditemukan di master data")
+                continue
+
+            try:
+                cur.execute(
+                    """INSERT INTO transaksi (buku_id, tipe, jumlah, keterangan, user_id, tanggal)
+                       VALUES (%s, 'masuk', %s, %s, %s, %s)""",
+                    (buku['id'], jumlah, keterangan or 'Import massal barang masuk', session['user_id'], tgl_masuk)
+                )
+                cur.execute(
+                    """UPDATE buku 
+                       SET stok = stok + %s, updated_at = NOW(),
+                           tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s)
+                       WHERE id = %s""",
+                    (jumlah, tgl_masuk, tgl_masuk, buku['id'])
+                )
+                berhasil.append(f"{buku['judul']} (+{jumlah})")
+            except Exception:
+                gagal.append(f"Baris {baris_ke}: gagal memproses ISBN {isbn}")
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        pesan = f'{len(berhasil)} buku berhasil diupdate stoknya.'
+        if gagal:
+            pesan += f' {len(gagal)} baris gagal/dilewati.'
+        flash(pesan, 'success' if berhasil else 'danger')
+
+        return render_template('transaksi/import_masuk.html', berhasil=berhasil, gagal=gagal)
+
+    return render_template('transaksi/import_masuk.html')
+
+# ------------------ PROGRESS PENERIMAAN PER PENERBIT ------------------
+@app.route('/buku/progress-penerbit')
+@login_required
+def progress_penerbit():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT 
+             COALESCE(NULLIF(penerbit, ''), '(Tanpa Penerbit)') as penerbit,
+             COUNT(*) as total_judul,
+             COALESCE(SUM(stok), 0) as total_diterima,
+             COALESCE(SUM(jumlah_rencana), 0) as total_rencana
+           FROM buku
+           GROUP BY COALESCE(NULLIF(penerbit, ''), '(Tanpa Penerbit)')
+           ORDER BY penerbit ASC"""
+    )
+    data_penerbit = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # hitung persentase & urutkan dari yang paling tertinggal
+    hasil = []
+    for p in data_penerbit:
+        persen = (p['total_diterima'] / p['total_rencana'] * 100) if p['total_rencana'] > 0 else 0
+        hasil.append({
+            'penerbit': p['penerbit'],
+            'total_judul': p['total_judul'],
+            'total_diterima': p['total_diterima'],
+            'total_rencana': p['total_rencana'],
+            'persen': round(persen, 1)
+        })
+
+    hasil.sort(key=lambda x: x['persen'])
+
+    return render_template('buku/progress_penerbit.html', daftar=hasil)
 if __name__ == '__main__':
     app.run(debug=True)

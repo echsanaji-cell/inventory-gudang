@@ -18,7 +18,7 @@
 </div>
 
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-center">
             <div class="card-body">
                 <h6 class="text-muted">Diterima / Rencana</h6>
@@ -26,7 +26,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-center border-success">
             <div class="card-body">
                 <h6 class="text-muted">Total Masuk</h6>
@@ -34,7 +34,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-center border-danger">
             <div class="card-body">
                 <h6 class="text-muted">Total Keluar</h6>
@@ -42,7 +42,14 @@
             </div>
         </div>
     </div>
-    
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Tanggal Masuk Terakhir</h6>
+                <h5 class="mt-2">{{ buku.tanggal_masuk or '-' }}</h5>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card">

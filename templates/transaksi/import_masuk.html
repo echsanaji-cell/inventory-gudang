@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Import Massal Barang Masuk{% endblock %}
+{% block content %}
+<h3>Import Massal Barang Masuk</h3>
+<p class="text-muted">Untuk update stok banyak buku sekaligus (misal kiriman BOQ yang sudah diterima).</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Langkah-langkah</h5>
+        <ol class="mb-3">
+            <li>Download template di bawah</li>
+            <li>Isi kolom <strong>isbn</strong> dan <strong>jumlah_masuk</strong> (kolom keterangan opsional)</li>
+            <li>Upload file yang sudah diisi</li>
+        </ol>
+        <a href="{{ url_for('import_masuk_template') }}" class="btn btn-outline-primary">⬇️ Download Template Excel</a>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Excel (.xlsx)</label>
+        <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-success">📤 Proses Barang Masuk</button>
+    <a href="{{ url_for('transaksi_masuk') }}" class="btn btn-secondary">Batal</a>
+</form>
+
+{% if berhasil is defined %}
+<div class="card mt-4">
+    <div class="card-header">Hasil Import</div>
+    <div class="card-body">
+        {% if berhasil %}
+        <p class="text-success">✅ {{ berhasil|length }} buku berhasil diupdate:</p>
+        <ul class="small">
+            {% for item in berhasil %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if gagal %}
+        <p class="text-danger mt-3">⚠️ {{ gagal|length }} baris gagal/dilewati:</p>
+        <ul class="small text-muted">
+            {% for item in gagal %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        <a href="{{ url_for('buku_list') }}" class="btn btn-primary btn-sm mt-2">Lihat Data Buku</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
