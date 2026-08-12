@@ -7,46 +7,74 @@
         {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_import') }}" class="btn btn-outline-secondary">📤 Import Excel</a>
         {% endif %}
-        <a href="{{ url_for('buku_cetak_label', search=search) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
-        <a href="{{ url_for('buku_export_excel', search=search) }}" class="btn btn-outline-success">📊 Excel</a>
-        <a href="{{ url_for('buku_export_pdf', search=search) }}" class="btn btn-outline-danger">📄 PDF</a>
+        <a href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
+        <a href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-success">📊 Excel</a>
+        <a href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-danger">📄 PDF</a>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_tambah') }}" class="btn btn-primary">+ Tambah Buku</a>
         {% endif %}
     </div>
 </div>
 
-<form method="GET" class="mb-3">
-    <div class="input-group">
-        <input type="text" name="search" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
-        <button class="btn btn-outline-secondary" type="submit">Cari</button>
-        {% if search %}
-        <a href="{{ url_for('buku_list') }}" class="btn btn-outline-danger">Reset</a>
-        {% endif %}
+<form method="GET" class="mb-2">
+    <div class="row g-2">
+        <div class="col-md-5">
+            <input type="text" name="search" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
+        </div>
+        <div class="col-md-4">
+            <select name="penerbit" class="form-select" onchange="this.form.submit()">
+                <option value="">-- Semua Penerbit --</option>
+                {% for p in daftar_penerbit %}
+                <option value="{{ p }}" {{ 'selected' if p == penerbit_filter else '' }}>{{ p }}</option>
+                {% endfor %}
+            </select>
+            <a href="{{ url_for('progress_penerbit') }}" class="btn btn-sm btn-outline-dark">📊 Progress per Penerbit</a>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
     </div>
+    <input type="hidden" name="status" value="{{ status_filter }}">
 </form>
 
-<table class="table table-hover align-middle">
+<div class="mb-3">
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter) }}"
+       class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum') }}"
+       class="btn btn-sm {{ 'btn-secondary' if status_filter == 'belum' else 'btn-outline-secondary' }}">Belum Ada</a>
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian') }}"
+       class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap') }}"
+       class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
+    {% if search or status_filter or penerbit_filter %}
+    <a href="{{ url_for('buku_list') }}" class="btn btn-sm btn-outline-danger">✕ Reset Semua Filter</a>
+    {% endif %}
+</div>
+
+<table class="table table-hover align-middle table-buku">
     <thead>
         <tr>
-            <th>ISBN</th>
-            <th>Judul</th>
-            <th>Penulis</th>
-            <th>Penerbit</th>
-            <th>Diterima / Rencana</th>
-            <th>Aksi</th>
+            <th style="width: 38%;">Judul</th>
+            <th style="width: 22%;">Penulis / Penerbit</th>
+            <th style="width: 16%;">Diterima / Rencana</th>
+            <th style="width: 12%;">Tgl Masuk</th>
+            <th style="width: 12%;">Aksi</th>
         </tr>
     </thead>
     <tbody>
         {% for buku in daftar_buku %}
         <tr>
-            <td class="mono">{{ buku.isbn }}</td>
-            <td><a href="{{ url_for('buku_detail', buku_id=buku.id) }}">{{ buku.judul }}</a></td>
-            <td>{{ buku.penulis or '-' }}</td>
-            <td>{{ buku.penerbit or '-' }}</td>
+            <td>
+                <a href="{{ url_for('buku_detail', buku_id=buku.id) }}" class="judul-buku" title="{{ buku.judul }}">{{ buku.judul }}</a>
+                <br><small class="text-muted mono">{{ buku.isbn }}</small>
+            </td>
+            <td class="small">
+                {{ buku.penulis or '-' }}
+                <br><span class="text-muted">{{ buku.penerbit or '-' }}</span>
+            </td>
             <td>
                 {% if buku.jumlah_rencana > 0 %}
-                    <span class="mono">{{ buku.stok }} / {{ buku.jumlah_rencana }}</span>
+                    <div class="mono small">{{ buku.stok }} / {{ buku.jumlah_rencana }}</div>
                     {% if buku.stok >= buku.jumlah_rencana %}
                         <span class="badge bg-success">Lengkap</span>
                     {% elif buku.stok > 0 %}
@@ -55,25 +83,26 @@
                         <span class="badge bg-secondary">Belum Ada</span>
                     {% endif %}
                 {% else %}
-                    <span class="mono">{{ buku.stok }}</span>
+                    <span class="mono small">{{ buku.stok }}</span>
                 {% endif %}
             </td>
+            <td class="small mono">{{ buku.tanggal_masuk or '-' }}</td>
             <td>
-    {% if session.role == 'admin' %}
-    <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-    <form method="POST" action="{{ url_for('buku_hapus', buku_id=buku.id) }}" class="d-inline"
-          onsubmit="return confirm('Yakin hapus buku ini?');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
-    </form>
-    {% else %}
-    <span class="text-muted small">-</span>
-    {% endif %}
-</td>
+                {% if session.role == 'admin' %}
+                <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                <form method="POST" action="{{ url_for('buku_hapus', buku_id=buku.id) }}" class="d-inline"
+                      onsubmit="return confirm('Yakin hapus buku ini?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                </form>
+                {% else %}
+                <span class="text-muted small">-</span>
+                {% endif %}
+            </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" class="text-center text-muted">Belum ada data buku.</td>
+            <td colspan="5" class="text-center text-muted">Belum ada data buku.</td>
         </tr>
         {% endfor %}
     </tbody>
