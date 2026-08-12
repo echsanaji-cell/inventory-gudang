@@ -6,7 +6,8 @@
     <a href="{{ url_for('user_tambah') }}" class="btn btn-primary">+ Tambah User</a>
 </div>
 
-<table class="table table-hover align-middle">
+<div class="table table-hover align-middle">
+    <table class="table table-hover align-middle table-buku">
     <thead>
         <tr>
             <th>Username</th><th>Nama</th><th>Role</th><th>Status</th><th>Aksi</th>
@@ -69,4 +70,5 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}

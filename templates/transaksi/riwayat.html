@@ -14,7 +14,7 @@
     <a href="{{ url_for('transaksi_riwayat', tipe='masuk') }}" class="btn btn-sm {{ 'btn-success' if tipe_filter == 'masuk' else 'btn-outline-success' }}">Masuk</a>
     <a href="{{ url_for('transaksi_riwayat', tipe='keluar') }}" class="btn btn-sm {{ 'btn-danger' if tipe_filter == 'keluar' else 'btn-outline-danger' }}">Keluar</a>
 </div>
-
+<div class="table-responsive">
 <table class="table table-hover align-middle">
     <thead>
         <tr>
@@ -51,4 +51,5 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}
