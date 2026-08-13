@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Kelola Penerbit{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Kelola Penerbit</h3>
+    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">← Kembali ke Data Buku</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">🔀 Gabung / Ganti Nama Penerbit</div>
+    <div class="card-body">
+        <p class="text-muted small">Pilih penerbit yang typo/duplikat, lalu isi nama yang benar. Semua buku dari penerbit lama akan otomatis pindah ke nama baru.</p>
+        <form method="POST" action="{{ url_for('gabung_penerbit') }}" onsubmit="return confirm('Yakin gabungkan penerbit ini? Aksi ini akan mengubah data buku secara massal.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2">
+                <div class="col-md-5">
+                    <label class="form-label small">Penerbit Lama (yang typo)</label>
+                    <select name="penerbit_lama" class="form-select" required>
+                        <option value="">-- Pilih Penerbit --</option>
+                        {% for p in daftar_penerbit %}
+                        <option value="{{ p.penerbit }}">{{ p.penerbit }} ({{ p.jumlah_buku }} buku)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small">Nama Baru (yang benar)</label>
+                    <input type="text" name="penerbit_baru" class="form-control" placeholder="Ketik nama penerbit yang benar" required list="daftar-nama-penerbit">
+                    <datalist id="daftar-nama-penerbit">
+                        {% for p in daftar_penerbit %}
+                        <option value="{{ p.penerbit }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">Gabungkan</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Daftar Penerbit ({{ daftar_penerbit|length }} unik)</div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Nama Penerbit</th>
+                    <th>Jumlah Buku</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in daftar_penerbit %}
+                <tr>
+                    <td>{{ p.penerbit }}</td>
+                    <td class="mono">{{ p.jumlah_buku }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
