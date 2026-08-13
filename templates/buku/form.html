@@ -54,6 +54,14 @@
                    value="{{ buku.stok_minimum if buku else 0 }}">
         </div>
     </div>
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <label class="form-label">Tanggal Masuk</label>
+            <input type="date" name="tanggal_masuk" class="form-control"
+                   value="{{ buku.tanggal_masuk if buku else '' }}">
+            <small class="text-muted">Bisa diisi/diubah manual kalau perlu koreksi.</small>
+        </div>
+    </div>
 
     <button type="submit" class="btn btn-primary">Simpan</button>
     <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Batal</a>
