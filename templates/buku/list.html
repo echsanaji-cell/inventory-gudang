@@ -7,9 +7,9 @@
         {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_import') }}" class="btn btn-outline-secondary">📤 Import Excel</a>
         {% endif %}
-        <a href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
-        <a href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-success">📊 Excel</a>
-        <a href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter) }}" class="btn btn-outline-danger">📄 PDF</a>
+        <a href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
+        <a href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-success">📊 Excel</a>
+        <a href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-danger">📄 PDF</a>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('buku_tambah') }}" class="btn btn-primary">+ Tambah Buku</a>
         {% endif %}
@@ -28,25 +28,38 @@
                 <option value="{{ p }}" {{ 'selected' if p == penerbit_filter else '' }}>{{ p }}</option>
                 {% endfor %}
             </select>
-            <a href="{{ url_for('progress_penerbit') }}" class="btn btn-sm btn-outline-dark">📊 Progress per Penerbit</a>
         </div>
         <div class="col-md-3">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-3">
+            <label class="form-label small text-muted mb-0">Tgl Masuk Dari</label>
+            <input type="date" name="tgl_dari" class="form-control form-control-sm" value="{{ tgl_dari }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small text-muted mb-0">Tgl Masuk Sampai</label>
+            <input type="date" name="tgl_sampai" class="form-control form-control-sm" value="{{ tgl_sampai }}">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-sm btn-outline-secondary w-100" type="submit">Terapkan Tanggal</button>
         </div>
     </div>
     <input type="hidden" name="status" value="{{ status_filter }}">
 </form>
 
 <div class="mb-3">
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter) }}"
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
        class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum') }}"
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
        class="btn btn-sm {{ 'btn-secondary' if status_filter == 'belum' else 'btn-outline-secondary' }}">Belum Ada</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian') }}"
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
        class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap') }}"
+    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
        class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
-    {% if search or status_filter or penerbit_filter %}
+    <a href="{{ url_for('progress_penerbit') }}" class="btn btn-sm btn-outline-dark">📊 Progress per Penerbit</a>
+    {% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai %}
     <a href="{{ url_for('buku_list') }}" class="btn btn-sm btn-outline-danger">✕ Reset Semua Filter</a>
     {% endif %}
 </div>
@@ -55,7 +68,8 @@
 <table class="table table-hover align-middle table-buku">
     <thead>
         <tr>
-            <th style="width: 38%;">Judul</th>
+            <th style="width: 4%;">No</th>
+            <th style="width: 35%;">Judul</th>
             <th style="width: 22%;">Penulis / Penerbit</th>
             <th style="width: 16%;">Diterima / Rencana</th>
             <th style="width: 12%;">Tgl Masuk</th>
@@ -65,6 +79,7 @@
     <tbody>
         {% for buku in daftar_buku %}
         <tr>
+            <td class="mono text-muted">{{ loop.index }}</td>
             <td>
                 <a href="{{ url_for('buku_detail', buku_id=buku.id) }}" class="judul-buku" title="{{ buku.judul }}">{{ buku.judul }}</a>
                 <br><small class="text-muted mono">{{ buku.isbn }}</small>
@@ -103,7 +118,7 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" class="text-center text-muted">Belum ada data buku.</td>
+            <td colspan="6" class="text-center text-muted">Belum ada data buku.</td>
         </tr>
         {% endfor %}
     </tbody>
