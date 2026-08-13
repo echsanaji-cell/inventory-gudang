@@ -221,7 +221,7 @@ def dashboard():
     )
     status_penerimaan = cur.fetchone()
 
-    # buku dengan stok menipis (stok <= stok_minimum, dan stok_minimum > 0 biar buku tanpa batas minimum nggak ikut muncul)
+    # buku dengan stok menipis
     cur.execute(
         """SELECT * FROM buku 
            WHERE stok_minimum > 0 AND stok <= stok_minimum 
@@ -229,7 +229,7 @@ def dashboard():
     )
     stok_menipis = cur.fetchall()
 
-    # transaksi hari ini
+    # transaksi hari ini (total eksemplar masuk & keluar)
     cur.execute(
         """SELECT tipe, COUNT(*) as jumlah_transaksi, COALESCE(SUM(jumlah), 0) as total_item
            FROM transaksi
@@ -242,7 +242,15 @@ def dashboard():
     for row in transaksi_hari_ini_raw:
         transaksi_hari_ini[row['tipe']] = row
 
-    # 5 transaksi terakhir (aktivitas terbaru)
+    # jumlah judul buku unik yang masuk hari ini
+    cur.execute(
+        """SELECT COUNT(DISTINCT buku_id) as total_judul_masuk
+           FROM transaksi
+           WHERE tipe = 'masuk' AND tanggal = CURRENT_DATE"""
+    )
+    judul_masuk_hari_ini = cur.fetchone()['total_judul_masuk']
+
+    # 5 transaksi terakhir
     cur.execute(
         """SELECT t.*, b.judul
            FROM transaksi t
@@ -261,7 +269,8 @@ def dashboard():
         stok_menipis=stok_menipis,
         transaksi_hari_ini=transaksi_hari_ini,
         aktivitas_terbaru=aktivitas_terbaru,
-        status_penerimaan=status_penerimaan
+        status_penerimaan=status_penerimaan,
+        judul_masuk_hari_ini=judul_masuk_hari_ini
     )
 
 # ------------------ LIST BUKU ------------------
