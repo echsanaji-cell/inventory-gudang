@@ -24,10 +24,13 @@
         <label class="form-label">Buku *</label>
         <input type="text" id="buku-search" class="form-control" placeholder="Ketik judul, ISBN, atau penulis untuk mencari..." autocomplete="off">
         <div id="buku-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
+        <div id="buku-penerbit-info" class="mt-1 small text-muted" style="display: none;">
+            Penerbit: <strong id="buku-penerbit-nama"></strong>
+        </div>
         <select name="buku_id" id="select-buku" class="d-none">
             <option value="">-- Pilih Buku --</option>
             {% for buku in daftar_buku %}
-            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}">{{ buku.judul }} ({{ buku.isbn }}) — diterima {{ buku.stok }}/{{ buku.jumlah_rencana }}</option>
+            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}" data-penerbit="{{ buku.penerbit or '-' }}">{{ buku.judul }} ({{ buku.isbn }}) — diterima {{ buku.stok }}/{{ buku.jumlah_rencana }}</option>
             {% endfor %}
         </select>
     </div>
@@ -63,6 +66,18 @@ const allOptions = Array.from(selectBuku.options).filter(o => o.value !== '');
 
 initPhysicalScanner(inputScan, handleScanBuku);
 
+const penerbitInfo = document.getElementById('buku-penerbit-info');
+const penerbitNama = document.getElementById('buku-penerbit-nama');
+
+function tampilkanPenerbit(option) {
+    if (option && option.dataset.penerbit) {
+        penerbitNama.textContent = option.dataset.penerbit;
+        penerbitInfo.style.display = 'block';
+    } else {
+        penerbitInfo.style.display = 'none';
+    }
+}
+
 function handleScanBuku(kode) {
     inputScan.value = kode;
     const option = selectBuku.querySelector(`option[data-isbn="${kode}"]`);
@@ -71,9 +86,11 @@ function handleScanBuku(kode) {
         bukuSearch.value = option.textContent;
         scanStatus.textContent = '✅ Ditemukan: ' + option.textContent;
         scanStatus.className = 'text-success';
+        tampilkanPenerbit(option);
     } else {
         scanStatus.textContent = '❌ Buku dengan ISBN ini belum terdaftar di master data.';
         scanStatus.className = 'text-danger';
+        tampilkanPenerbit(null);
     }
 }
 
@@ -81,6 +98,7 @@ function handleScanBuku(kode) {
 bukuSearch.addEventListener('input', function () {
     const kata = this.value.trim().toLowerCase();
     selectBuku.value = ''; // reset pilihan kalau user ngetik ulang
+    tampilkanPenerbit(null);
 
     if (kata.length < 2) {
         bukuSuggestions.style.display = 'none';
@@ -107,6 +125,9 @@ bukuSuggestions.addEventListener('click', function (e) {
     bukuSearch.value = btn.textContent;
     bukuSuggestions.style.display = 'none';
     bukuSuggestions.innerHTML = '';
+
+    const option = selectBuku.querySelector(`option[value="${btn.dataset.value}"]`);
+    tampilkanPenerbit(option);
 });
 
 // tutup daftar saran kalau klik di luar
