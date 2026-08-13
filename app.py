@@ -660,6 +660,7 @@ def buku_tambah():
         stok = request.form.get('stok', '0').strip()
         stok_minimum = request.form.get('stok_minimum', '0').strip()
         jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
+        tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -678,9 +679,9 @@ def buku_tambah():
             return render_template('buku/form.html', buku=request.form)
 
         cur.execute(
-            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana)
+            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk)
         )
         conn.commit()
         cur.close()
@@ -708,6 +709,7 @@ def buku_edit(buku_id):
         stok = request.form.get('stok', '0').strip()
         stok_minimum = request.form.get('stok_minimum', '0').strip()
         jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
+        tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -718,9 +720,9 @@ def buku_edit(buku_id):
         cur.execute(
             """UPDATE buku 
                SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, 
-                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, updated_at=NOW()
+                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, tanggal_masuk=%s, updated_at=NOW()
                WHERE id=%s""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, buku_id)
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, buku_id)
         )
         conn.commit()
         cur.close()
