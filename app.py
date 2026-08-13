@@ -1613,5 +1613,60 @@ def progress_penerbit():
     hasil.sort(key=lambda x: x['persen_eks'])
 
     return render_template('buku/progress_penerbit.html', daftar=hasil)
+
+# ------------------ ADMIN: KELOLA PENERBIT ------------------
+@app.route('/admin/penerbit')
+@login_required
+@admin_required
+def kelola_penerbit():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT COALESCE(NULLIF(penerbit, ''), '(Tanpa Penerbit)') as penerbit, COUNT(*) as jumlah_buku
+           FROM buku
+           GROUP BY COALESCE(NULLIF(penerbit, ''), '(Tanpa Penerbit)')
+           ORDER BY penerbit ASC"""
+    )
+    daftar_penerbit = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('admin/penerbit.html', daftar_penerbit=daftar_penerbit)
+
+
+# ------------------ ADMIN: GABUNG/GANTI NAMA PENERBIT ------------------
+@app.route('/admin/penerbit/gabung', methods=['POST'])
+@login_required
+@admin_required
+def gabung_penerbit():
+    penerbit_lama = request.form.get('penerbit_lama', '').strip()
+    penerbit_baru = request.form.get('penerbit_baru', '').strip()
+
+    if not penerbit_lama or not penerbit_baru:
+        flash('Pilih penerbit lama dan isi nama penerbit baru.', 'danger')
+        return redirect(url_for('kelola_penerbit'))
+
+    if penerbit_lama == penerbit_baru:
+        flash('Nama baru sama dengan nama lama, tidak ada yang diubah.', 'danger')
+        return redirect(url_for('kelola_penerbit'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            "UPDATE buku SET penerbit = %s WHERE penerbit = %s",
+            (penerbit_baru, penerbit_lama)
+        )
+        jumlah_terupdate = cur.rowcount
+        conn.commit()
+        flash(f'{jumlah_terupdate} buku dari "{penerbit_lama}" berhasil diubah jadi "{penerbit_baru}".', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash('Gagal memproses. Coba lagi.', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for('kelola_penerbit'))
 if __name__ == '__main__':
     app.run(debug=True)

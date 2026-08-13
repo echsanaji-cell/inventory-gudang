@@ -3,7 +3,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3>Progress Penerimaan per Penerbit</h3>
-    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">← Kembali ke Data Buku</a>
+    <div>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('kelola_penerbit') }}" class="btn btn-outline-dark">🔀 Kelola Penerbit</a>
+        {% endif %}
+        <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">← Kembali ke Data Buku</a>
+    </div>
 </div>
 <p class="text-muted">Diurutkan dari penerbit yang paling tertinggal (berdasarkan eksemplar).</p>
 
