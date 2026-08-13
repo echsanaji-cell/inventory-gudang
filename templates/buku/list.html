@@ -2,67 +2,81 @@
 {% block title %}Data Buku{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3>Data Buku</h3>
-    <div>
-        {% if session.role == 'admin' %}
-        <a href="{{ url_for('buku_import') }}" class="btn btn-outline-secondary">📤 Import Excel</a>
-        {% endif %}
-        <a href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
-        <a href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-success">📊 Excel</a>
-        <a href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}" class="btn btn-outline-danger">📄 PDF</a>
-        {% if session.role == 'admin' %}
-        <a href="{{ url_for('buku_tambah') }}" class="btn btn-primary">+ Tambah Buku</a>
-        {% endif %}
+    <h3 class="mb-0">Data Buku</h3>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel">
+            🔍 Filter
+        </button>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                Aksi
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                {% if session.role == 'admin' %}
+                <li><a class="dropdown-item" href="{{ url_for('buku_tambah') }}">+ Tambah Buku</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_import') }}">📤 Import Excel</a></li>
+                <li><hr class="dropdown-divider"></li>
+                {% endif %}
+                <li><a class="dropdown-item" href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">🏷️ Cetak Label</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📊 Export Excel</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📄 Export PDF</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('progress_penerbit') }}">📈 Progress per Penerbit</a></li>
+            </ul>
+        </div>
     </div>
 </div>
 
-<form method="GET" class="mb-2">
-    <div class="row g-2">
-        <div class="col-md-5">
-            <input type="text" name="search" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
-        </div>
-        <div class="col-md-4">
-            <select name="penerbit" class="form-select" onchange="this.form.submit()">
-                <option value="">-- Semua Penerbit --</option>
-                {% for p in daftar_penerbit %}
-                <option value="{{ p }}" {{ 'selected' if p == penerbit_filter else '' }}>{{ p }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
-        </div>
-    </div>
-    <div class="row g-2 mt-1">
-        <div class="col-md-3">
-            <label class="form-label small text-muted mb-0">Tgl Masuk Dari</label>
-            <input type="date" name="tgl_dari" class="form-control form-control-sm" value="{{ tgl_dari }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small text-muted mb-0">Tgl Masuk Sampai</label>
-            <input type="date" name="tgl_sampai" class="form-control form-control-sm" value="{{ tgl_sampai }}">
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-            <button class="btn btn-sm btn-outline-secondary w-100" type="submit">Terapkan Tanggal</button>
-        </div>
-    </div>
-    <input type="hidden" name="status" value="{{ status_filter }}">
-</form>
+<div class="collapse {{ 'show' if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai else '' }}" id="filterPanel">
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET">
+                <div class="mb-2">
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
+                </div>
+                <div class="mb-2">
+                    <select name="penerbit" class="form-select form-select-sm">
+                        <option value="">-- Semua Penerbit --</option>
+                        {% for p in daftar_penerbit %}
+                        <option value="{{ p }}" {{ 'selected' if p == penerbit_filter else '' }}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">Tgl Masuk Dari</label>
+                        <input type="date" name="tgl_dari" class="form-control form-control-sm" value="{{ tgl_dari }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">Tgl Masuk Sampai</label>
+                        <input type="date" name="tgl_sampai" class="form-control form-control-sm" value="{{ tgl_sampai }}">
+                    </div>
+                </div>
+                <input type="hidden" name="status" value="{{ status_filter }}" id="hiddenStatus">
+                <button class="btn btn-sm btn-primary w-100 mb-2" type="submit">Terapkan Filter</button>
+            </form>
 
-<div class="mb-3">
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
-       class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
-       class="btn btn-sm {{ 'btn-secondary' if status_filter == 'belum' else 'btn-outline-secondary' }}">Belum Ada</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
-       class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
-    <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
-       class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
-    <a href="{{ url_for('progress_penerbit') }}" class="btn btn-sm btn-outline-dark">📊 Progress per Penerbit</a>
-    {% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai %}
-    <a href="{{ url_for('buku_list') }}" class="btn btn-sm btn-outline-danger">✕ Reset Semua Filter</a>
-    {% endif %}
+            <label class="form-label small text-muted mb-1 d-block">Status Penerimaan</label>
+            <div class="filter-status-group">
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                   class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                   class="btn btn-sm {{ 'btn-secondary' if status_filter == 'belum' else 'btn-outline-secondary' }}">Belum Ada</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                   class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                   class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
+            </div>
+
+            {% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai %}
+            <a href="{{ url_for('buku_list') }}" class="btn btn-sm btn-outline-danger w-100 mt-2">✕ Reset Semua Filter</a>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
+{% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai %}
+<p class="small text-muted mb-2">Menampilkan {{ daftar_buku|length }} hasil dengan filter aktif.</p>
+{% endif %}
 
 <div class="table-responsive">
 <table class="table table-hover align-middle table-buku">
