@@ -271,6 +271,8 @@ def buku_list():
     search = request.args.get('search', '').strip()
     status_filter = request.args.get('status', '').strip()
     penerbit_filter = request.args.get('penerbit', '').strip()
+    tgl_dari = request.args.get('tgl_dari', '').strip()
+    tgl_sampai = request.args.get('tgl_sampai', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -292,6 +294,14 @@ def buku_list():
     if penerbit_filter:
         query += " AND penerbit = %s"
         params.append(penerbit_filter)
+
+    if tgl_dari:
+        query += " AND tanggal_masuk >= %s"
+        params.append(tgl_dari)
+
+    if tgl_sampai:
+        query += " AND tanggal_masuk <= %s"
+        params.append(tgl_sampai)
 
     query += " ORDER BY judul ASC"
 
@@ -311,7 +321,9 @@ def buku_list():
         search=search,
         status_filter=status_filter,
         penerbit_filter=penerbit_filter,
-        daftar_penerbit=daftar_penerbit
+        daftar_penerbit=daftar_penerbit,
+        tgl_dari=tgl_dari,
+        tgl_sampai=tgl_sampai
     )
 
 # ------------------ EXPORT BUKU - EXCEL ------------------
@@ -321,6 +333,8 @@ def buku_export_excel():
     search = request.args.get('search', '').strip()
     status_filter = request.args.get('status', '').strip()
     penerbit_filter = request.args.get('penerbit', '').strip()
+    tgl_dari = request.args.get('tgl_dari', '').strip()
+    tgl_sampai = request.args.get('tgl_sampai', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -343,6 +357,14 @@ def buku_export_excel():
         query += " AND penerbit = %s"
         params.append(penerbit_filter)
 
+    if tgl_dari:
+        query += " AND tanggal_masuk >= %s"
+        params.append(tgl_dari)
+
+    if tgl_sampai:
+        query += " AND tanggal_masuk <= %s"
+        params.append(tgl_sampai)
+
     query += " ORDER BY judul ASC"
 
     cur.execute(query, tuple(params))
@@ -354,7 +376,7 @@ def buku_export_excel():
     ws = wb.active
     ws.title = "Data Buku"
 
-    headers = ['ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum']
+    headers = ['No', 'ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum', 'Tgl Masuk']
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF')
@@ -363,19 +385,19 @@ def buku_export_excel():
     from openpyxl.styles import Alignment
     wrap_style = Alignment(wrap_text=True, vertical='top')
 
-    for buku in daftar_buku:
+    for i, buku in enumerate(daftar_buku, start=1):
         ws.append([
-            buku['isbn'], buku['judul'], buku['penulis'] or '-',
+            i, buku['isbn'], buku['judul'], buku['penulis'] or '-',
             buku['penerbit'] or '-',
-            buku['stok'], buku['jumlah_rencana'], buku['stok_minimum']
+            buku['stok'], buku['jumlah_rencana'], buku['stok_minimum'],
+            str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-'
         ])
         row_num = ws.max_row
-        ws.cell(row=row_num, column=2).alignment = wrap_style  # Judul
-        ws.cell(row=row_num, column=3).alignment = wrap_style  # Penulis
-        ws.cell(row=row_num, column=4).alignment = wrap_style  # Penerbit
+        ws.cell(row=row_num, column=3).alignment = wrap_style  # Judul
+        ws.cell(row=row_num, column=4).alignment = wrap_style  # Penulis
+        ws.cell(row=row_num, column=5).alignment = wrap_style  # Penerbit
 
-    # lebar kolom tetap (bukan auto-fit lagi)
-    lebar_kolom = {'A': 16, 'B': 45, 'C': 30, 'D': 25, 'E': 10, 'F': 10, 'G': 13}
+    lebar_kolom = {'A': 6, 'B': 16, 'C': 45, 'D': 30, 'E': 25, 'F': 10, 'G': 10, 'H': 13, 'I': 13}
     for kolom, lebar in lebar_kolom.items():
         ws.column_dimensions[kolom].width = lebar
 
@@ -398,6 +420,8 @@ def buku_export_pdf():
     search = request.args.get('search', '').strip()
     status_filter = request.args.get('status', '').strip()
     penerbit_filter = request.args.get('penerbit', '').strip()
+    tgl_dari = request.args.get('tgl_dari', '').strip()
+    tgl_sampai = request.args.get('tgl_sampai', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -420,6 +444,14 @@ def buku_export_pdf():
         query += " AND penerbit = %s"
         params.append(penerbit_filter)
 
+    if tgl_dari:
+        query += " AND tanggal_masuk >= %s"
+        params.append(tgl_dari)
+
+    if tgl_sampai:
+        query += " AND tanggal_masuk <= %s"
+        params.append(tgl_sampai)
+
     query += " ORDER BY judul ASC"
 
     cur.execute(query, tuple(params))
@@ -441,18 +473,18 @@ def buku_export_pdf():
     elements.append(Paragraph(f"Dicetak: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
     elements.append(Spacer(1, 0.5*cm))
 
-    # style teks kecil yang bisa "membungkus" ke baris baru
     style_sel = ParagraphStyle('sel', fontSize=7.5, leading=9, fontName='Helvetica')
     style_header = ParagraphStyle('header', fontSize=8, leading=10, fontName='Helvetica-Bold', textColor=colors.white)
 
     data = [[
-        Paragraph('ISBN', style_header), Paragraph('Judul', style_header),
+        Paragraph('No', style_header), Paragraph('ISBN', style_header), Paragraph('Judul', style_header),
         Paragraph('Penulis', style_header), Paragraph('Penerbit', style_header),
         Paragraph('Diterima', style_header), Paragraph('Rencana', style_header),
-        Paragraph('Min', style_header)
+        Paragraph('Min', style_header), Paragraph('Tgl Masuk', style_header)
     ]]
-    for buku in daftar_buku:
+    for i, buku in enumerate(daftar_buku, start=1):
         data.append([
+            Paragraph(str(i), style_sel),
             Paragraph(buku['isbn'], style_sel),
             Paragraph(buku['judul'], style_sel),
             Paragraph(buku['penulis'] or '-', style_sel),
@@ -460,10 +492,10 @@ def buku_export_pdf():
             Paragraph(str(buku['stok']), style_sel),
             Paragraph(str(buku['jumlah_rencana']), style_sel),
             Paragraph(str(buku['stok_minimum']), style_sel),
+            Paragraph(str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-', style_sel),
         ])
 
-    # lebar kolom tetap, totalnya pas dengan lebar halaman landscape A4 dikurangi margin
-    col_widths = [2.6*cm, 8.0*cm, 6.0*cm, 5.0*cm, 2.0*cm, 2.0*cm, 1.5*cm]
+    col_widths = [1.0*cm, 2.4*cm, 6.5*cm, 5.0*cm, 4.0*cm, 1.8*cm, 1.8*cm, 1.3*cm, 2.2*cm]
 
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
