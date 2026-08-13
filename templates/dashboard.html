@@ -8,15 +8,23 @@
     <div class="col-md-3 mb-3">
         <div class="card text-center">
             <div class="card-body">
-                <h6 class="text-muted">Total Judul Buku</h6>
-                <h2>{{ ringkasan.total_judul }}</h2>
+                <div class="row">
+                    <div class="col-6 border-end">
+                        <h6 class="text-muted small mb-1">Judul Buku</h6>
+                        <h4 class="mb-0">{{ ringkasan.total_judul }}</h4>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-muted small mb-1">Rencana Eks.</h6>
+                        <h4 class="mb-0">{{ ringkasan.total_rencana }}</h4>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card text-center">
             <div class="card-body">
-                <h6 class="text-muted">Total Stok</h6>
+                <h6 class="text-muted">Total Eksemplar Masuk</h6>
                 <h2>{{ ringkasan.total_stok }}</h2>
             </div>
         </div>
@@ -24,7 +32,7 @@
     <div class="col-md-3 mb-3">
         <div class="card text-center border-success">
             <div class="card-body">
-                <h6 class="text-muted">Masuk Hari Ini</h6>
+                <h6 class="text-muted">Eksemplar Masuk Hari Ini</h6>
                 <h2 class="text-success">{{ transaksi_hari_ini.masuk.total_item }}</h2>
                 <small class="text-muted">{{ transaksi_hari_ini.masuk.jumlah_transaksi }} transaksi</small>
             </div>
