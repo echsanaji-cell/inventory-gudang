@@ -889,19 +889,8 @@ def transaksi_keluar():
         keterangan = request.form.get('keterangan', '').strip()
         pihak_terkait = request.form.get('pihak_terkait', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
-        jenis_keluar = request.form.get('jenis_keluar', 'permanen').strip()
-        tanggal_kembali_rencana = request.form.get('tanggal_kembali_rencana', '').strip()
-
         if not buku_id or not jumlah or int(jumlah) <= 0:
             flash('Buku dan jumlah (harus lebih dari 0) wajib diisi.', 'danger')
-            cur.execute("SELECT * FROM buku ORDER BY judul ASC")
-            daftar_buku = cur.fetchall()
-            cur.close()
-            conn.close()
-            return render_template('transaksi/keluar.html', daftar_buku=daftar_buku)
-
-        if jenis_keluar == 'pinjam' and not tanggal_kembali_rencana:
-            flash('Rencana tanggal kembali wajib diisi untuk barang yang dipinjam.', 'danger')
             cur.execute("SELECT * FROM buku ORDER BY judul ASC")
             daftar_buku = cur.fetchall()
             cur.close()
@@ -927,13 +916,9 @@ def transaksi_keluar():
                 return redirect(url_for('transaksi_keluar'))
 
             cur.execute(
-                """INSERT INTO transaksi 
-                   (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal, 
-                    jenis_keluar, tanggal_kembali_rencana)
-                   VALUES (%s, 'keluar', %s, %s, %s, %s, %s, %s, %s)""",
-                (buku_id, jumlah, keterangan, pihak_terkait, session['user_id'],
-                 tanggal or None, jenis_keluar,
-                 tanggal_kembali_rencana if jenis_keluar == 'pinjam' else None)
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal)
+                   VALUES (%s, 'keluar', %s, %s, %s, %s, %s)""",
+                (buku_id, jumlah, keterangan, pihak_terkait, session['user_id'], tanggal or None)
             )
 
             cur.execute(
@@ -942,8 +927,7 @@ def transaksi_keluar():
             )
 
             conn.commit()
-            label = 'dipinjam' if jenis_keluar == 'pinjam' else 'keluar'
-            flash(f'Barang {label}: {buku["judul"]} -{jumlah} berhasil dicatat.', 'success')
+            flash(f'Barang keluar: {buku["judul"]} -{jumlah} berhasil dicatat.', 'success')
         except Exception as e:
             conn.rollback()
             flash('Gagal mencatat transaksi. Coba lagi.', 'danger')
