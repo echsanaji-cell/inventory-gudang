@@ -664,9 +664,9 @@ def buku_edit(buku_id):
         judul = request.form.get('judul', '').strip()
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
-        kategori = request.form.get('kategori', '').strip()
         stok = request.form.get('stok', '0').strip()
         stok_minimum = request.form.get('stok_minimum', '0').strip()
+        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
