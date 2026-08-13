@@ -195,7 +195,28 @@ h1, h2, h3, .navbar-brand {
     }
 }
 @media (max-width: 767px) {
-    .mb-3 > a.btn-sm {
-        margin-bottom: .3rem;
+    /* Tombol header (Import/Cetak Label/Excel/PDF/Tambah) jadi grid 2 kolom rapi */
+    .d-flex.justify-content-between.align-items-center.mb-3 > div {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .4rem;
     }
+    .d-flex.justify-content-between.align-items-center.mb-3 .btn {
+        width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Tombol filter status jadi grid 2 kolom rapi, bukan menyebar */
+    .filter-status-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .4rem;
+}
+.filter-status-group .btn {
+    width: 100%;
+    margin: 0 !important;
+    font-size: .78rem;
+}
 }
