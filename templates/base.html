@@ -27,7 +27,6 @@
                     <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Barang Masuk</a>
                     <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Barang Keluar</a>
                     <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
-                    <a class="nav-link" href="{{ url_for('peminjaman_list') }}">Peminjaman</a>
                     {% if session.role == 'admin' %}
                     <a class="nav-link" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a>
                     <a class="nav-link" href="{{ url_for('user_list') }}">Kelola User</a>

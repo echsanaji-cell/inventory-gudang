@@ -29,23 +29,7 @@
         <label class="form-label">Jumlah Keluar *</label>
         <input type="number" name="jumlah" class="form-control" min="1" required>
     </div>
-    <div class="mb-3">
-        <label class="form-label">Jenis Keluar *</label>
-        <div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="jenis_keluar" id="jenis-permanen" value="permanen" checked onchange="toggleTanggalKembali()">
-                <label class="form-check-label" for="jenis-permanen">Permanen (tidak balik)</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="jenis_keluar" id="jenis-pinjam" value="pinjam" onchange="toggleTanggalKembali()">
-                <label class="form-check-label" for="jenis-pinjam">Dipinjam (harus balik)</label>
-            </div>
-        </div>
-    </div>
-    <div class="mb-3" id="wrap-tanggal-kembali" style="display: none;">
-        <label class="form-label">Rencana Tanggal Kembali *</label>
-        <input type="date" name="tanggal_kembali_rencana" id="input-tanggal-kembali" class="form-control">
-    </div>
+    
     <div class="mb-3">
         <label class="form-label">Untuk (peminjam/tujuan kirim)</label>
         <input type="text" name="pihak_terkait" class="form-control">
@@ -83,12 +67,6 @@ function handleScanBuku(kode) {
     }
 }
 
-function toggleTanggalKembali() {
-    const isPinjam = document.getElementById('jenis-pinjam').checked;
-    const wrap = document.getElementById('wrap-tanggal-kembali');
-    const input = document.getElementById('input-tanggal-kembali');
-    wrap.style.display = isPinjam ? 'block' : 'none';
-    input.required = isPinjam;
-}
+
 </script>
 {% endblock %}
