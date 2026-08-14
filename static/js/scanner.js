@@ -37,9 +37,6 @@ function startCameraScanner(modalId, readerId, onScanCallback) {
                 {
                     fps: 10,
                     qrbox: { width: 300, height: 150 },
-                    experimentalFeatures: {
-                        useBarCodeDetectorIfSupported: true
-                    },  // dilebarkan, barcode 1D butuh area lebih lebar dari tinggi
                     aspectRatio: 1.7777778,
                     formatsToSupport: [
                         Html5QrcodeSupportedFormats.EAN_13,
@@ -51,8 +48,7 @@ function startCameraScanner(modalId, readerId, onScanCallback) {
                         facingMode: "environment",
                         focusMode: "continuous",
                         width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        advanced: [{ zoom: 2 }]
+                        height: { ideal: 1080 }
                     }
                 },
                 (decodedText) => {
