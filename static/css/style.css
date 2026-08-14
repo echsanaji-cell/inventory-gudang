@@ -220,3 +220,34 @@ h1, h2, h3, .navbar-brand {
     font-size: .78rem;
 }
 }
+/* ---------- Subtitle nama perusahaan di navbar ---------- */
+.navbar-brand .brand-subtitle {
+    font-family: 'Inter', sans-serif;
+    font-size: .72rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-top: 2px;
+    display: block;
+    width: 100%;
+    text-align: justify;
+    text-align-last: justify;
+    letter-spacing: normal;
+}
+/* ---------- Logo di navbar ---------- */
+.brand-logo {
+    height: 42px;
+    width: 42px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+    .brand-logo {
+        height: 34px;
+        width: 34px;
+    }
+    .navbar-brand .brand-subtitle {
+        font-size: .62rem;
+    }
+}
