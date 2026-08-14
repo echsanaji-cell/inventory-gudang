@@ -331,6 +331,8 @@ def buku_list():
     penerbit_filter = request.args.get('penerbit', '').strip()
     tgl_dari = request.args.get('tgl_dari', '').strip()
     tgl_sampai = request.args.get('tgl_sampai', '').strip()
+    catatan_filter = request.args.get('catatan', '').strip()
+    catatan_filter = request.args.get('catatan', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -360,6 +362,11 @@ def buku_list():
     if tgl_sampai:
         query += " AND tanggal_masuk <= %s"
         params.append(tgl_sampai)
+
+    if catatan_filter == 'kosong':
+        query += " AND (catatan IS NULL OR catatan = '')"
+    elif catatan_filter == 'isi':
+        query += " AND catatan IS NOT NULL AND catatan != ''"
 
     query += " ORDER BY judul ASC"
 
@@ -381,7 +388,8 @@ def buku_list():
         penerbit_filter=penerbit_filter,
         daftar_penerbit=daftar_penerbit,
         tgl_dari=tgl_dari,
-        tgl_sampai=tgl_sampai
+        tgl_sampai=tgl_sampai,
+        catatan_filter=catatan_filter
     )
 
 # ------------------ EXPORT BUKU - EXCEL ------------------
@@ -393,6 +401,7 @@ def buku_export_excel():
     penerbit_filter = request.args.get('penerbit', '').strip()
     tgl_dari = request.args.get('tgl_dari', '').strip()
     tgl_sampai = request.args.get('tgl_sampai', '').strip()
+    catatan_filter = request.args.get('catatan', '').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -422,6 +431,11 @@ def buku_export_excel():
     if tgl_sampai:
         query += " AND tanggal_masuk <= %s"
         params.append(tgl_sampai)
+
+    if catatan_filter == 'kosong':
+        query += " AND (catatan IS NULL OR catatan = '')"
+    elif catatan_filter == 'isi':
+        query += " AND catatan IS NOT NULL AND catatan != ''"
 
     query += " ORDER BY judul ASC"
 
@@ -509,6 +523,11 @@ def buku_export_pdf():
     if tgl_sampai:
         query += " AND tanggal_masuk <= %s"
         params.append(tgl_sampai)
+
+    if catatan_filter == 'kosong':
+        query += " AND (catatan IS NULL OR catatan = '')"
+    elif catatan_filter == 'isi':
+        query += " AND catatan IS NOT NULL AND catatan != ''"
 
     query += " ORDER BY judul ASC"
 
