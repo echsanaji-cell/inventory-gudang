@@ -21,6 +21,13 @@
                 <li><a class="dropdown-item" href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📊 Export Excel</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📄 Export PDF</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('progress_penerbit') }}">📈 Progress per Penerbit</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form method="POST" action="{{ url_for('buku_sync_sheets') }}" onsubmit="return confirm('Sync semua data buku ke Google Sheets sekarang?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="dropdown-item">🔄 Sync ke Google Sheets</button>
+                    </form>
+                </li>
             </ul>
         </div>
     </div>
@@ -83,11 +90,12 @@
     <thead>
         <tr>
             <th style="width: 4%;">No</th>
-            <th style="width: 35%;">Judul</th>
-            <th style="width: 22%;">Penulis / Penerbit</th>
-            <th style="width: 16%;">Diterima / Rencana</th>
-            <th style="width: 12%;">Tgl Masuk</th>
-            <th style="width: 12%;">Aksi</th>
+            <th style="width: 30%;">Judul</th>
+            <th style="width: 18%;">Penulis / Penerbit</th>
+            <th style="width: 14%;">Diterima / Rencana</th>
+            <th style="width: 10%;">Tgl Masuk</th>
+            <th style="width: 16%;">Catatan</th>
+            <th style="width: 8%;">Aksi</th>
         </tr>
     </thead>
     <tbody>
@@ -117,6 +125,13 @@
                 {% endif %}
             </td>
             <td class="small mono">{{ buku.tanggal_masuk or '-' }}</td>
+            <td class="small">
+                {% if buku.catatan %}
+                    <span title="{{ buku.catatan }}">{{ buku.catatan[:40] }}{{ '...' if buku.catatan|length > 40 else '' }}</span>
+                {% else %}
+                    <span class="text-muted">-</span>
+                {% endif %}
+            </td>
             <td>
                 {% if session.role == 'admin' %}
                 <a href="{{ url_for('buku_edit', buku_id=buku.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
@@ -132,7 +147,7 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" class="text-center text-muted">Belum ada data buku.</td>
+            <td colspan="7" class="text-center text-muted">Belum ada data buku.</td>
         </tr>
         {% endfor %}
     </tbody>
