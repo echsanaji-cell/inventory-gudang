@@ -24,8 +24,8 @@
                 <div class="navbar-nav me-auto">
                     <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                     <a class="nav-link" href="{{ url_for('buku_list') }}">Data Buku</a>
-                    <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Barang Masuk</a>
-                    <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Barang Keluar</a>
+                    <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Buku Masuk</a>
+                    <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Buku Keluar</a>
                     <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
                     {% if session.role == 'admin' %}
                     <a class="nav-link" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a>

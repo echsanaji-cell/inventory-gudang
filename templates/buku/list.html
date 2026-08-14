@@ -17,9 +17,9 @@
                 <li><a class="dropdown-item" href="{{ url_for('buku_import') }}">📤 Import Excel</a></li>
                 <li><hr class="dropdown-divider"></li>
                 {% endif %}
-                <li><a class="dropdown-item" href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">🏷️ Cetak Label</a></li>
-                <li><a class="dropdown-item" href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📊 Export Excel</a></li>
-                <li><a class="dropdown-item" href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}">📄 Export PDF</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">🏷️ Cetak Label</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">📊 Export Excel</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">📄 Export PDF</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('progress_penerbit') }}">📈 Progress per Penerbit</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
@@ -64,17 +64,27 @@
 
             <label class="form-label small text-muted mb-1 d-block">Status Penerimaan</label>
             <div class="filter-status-group">
-                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
                    class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
-                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='belum', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
                    class="btn btn-sm {{ 'btn-secondary' if status_filter == 'belum' else 'btn-outline-secondary' }}">Belum Ada</a>
-                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='sebagian', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
                    class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
-                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
                    class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
             </div>
 
-            {% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai %}
+            <label class="form-label small text-muted mb-1 d-block mt-3">Catatan</label>
+            <div class="filter-status-group">
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status=status_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai) }}"
+                   class="btn btn-sm {{ 'btn-dark' if not catatan_filter else 'btn-outline-dark' }}">Semua</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status=status_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan='kosong') }}"
+                   class="btn btn-sm {{ 'btn-secondary' if catatan_filter == 'kosong' else 'btn-outline-secondary' }}">Kosong</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status=status_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan='isi') }}"
+                   class="btn btn-sm {{ 'btn-primary' if catatan_filter == 'isi' else 'btn-outline-primary' }}">Isi</a>
+            </div>
+
+            {% if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai or catatan_filter %}
             <a href="{{ url_for('buku_list') }}" class="btn btn-sm btn-outline-danger w-100 mt-2">✕ Reset Semua Filter</a>
             {% endif %}
         </div>
