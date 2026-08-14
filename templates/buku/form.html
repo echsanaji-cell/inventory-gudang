@@ -62,7 +62,10 @@
             <small class="text-muted">Bisa diisi/diubah manual kalau perlu koreksi.</small>
         </div>
     </div>
-
+    <div class="mb-3">
+        <label class="form-label">Catatan</label>
+        <textarea name="catatan" class="form-control" rows="3" placeholder="Catatan bebas, misal kondisi fisik, info khusus, dll.">{{ buku.catatan if buku else '' }}</textarea>
+    </div>
     <button type="submit" class="btn btn-primary">Simpan</button>
     <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Batal</a>
 </form>

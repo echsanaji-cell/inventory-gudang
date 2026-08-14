@@ -21,6 +21,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from db import get_db_connection
 from reportlab.lib.styles import ParagraphStyle
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import json as json_lib
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -95,7 +98,53 @@ def kirim_email_stok_kritis():
         return True, f"Email berhasil dikirim ke {mail_to} ({len(stok_menipis)} buku)."
     except Exception as e:
         return False, f"Gagal kirim email: {str(e)}"
+def sync_ke_google_sheets():
+    creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
+    sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
 
+    if not creds_json or not sheet_id:
+        return False, "Konfigurasi Google Sheets belum lengkap di environment variables."
+
+    try:
+        creds_dict = json_lib.loads(creds_json)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        service = build('sheets', 'v4', credentials=creds)
+    except Exception as e:
+        return False, f"Gagal autentikasi Google Sheets: {str(e)}"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM buku ORDER BY judul ASC")
+    daftar_buku = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    header = ['No', 'ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum', 'Tanggal Masuk', 'Catatan']
+    rows = [header]
+    for i, buku in enumerate(daftar_buku, start=1):
+        rows.append([
+            i, buku['isbn'], buku['judul'], buku['penulis'] or '-',
+            buku['penerbit'] or '-', buku['stok'], buku['jumlah_rencana'],
+            buku['stok_minimum'], str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-',
+            buku['catatan'] or '-'
+        ])
+
+    try:
+        sheet = service.spreadsheets()
+        # kosongkan dulu sheet lama biar nggak numpuk data lama
+        sheet.values().clear(spreadsheetId=sheet_id, range='Sheet1').execute()
+        # tulis data baru
+        sheet.values().update(
+            spreadsheetId=sheet_id,
+            range='Sheet1!A1',
+            valueInputOption='RAW',
+            body={'values': rows}
+        ).execute()
+        return True, f"Berhasil sync {len(daftar_buku)} buku ke Google Sheets."
+    except Exception as e:
+        return False, f"Gagal menulis ke Google Sheets: {str(e)}"
 # ------------------ DECORATOR: wajib login ------------------
 def login_required(f):
     @wraps(f)
@@ -661,6 +710,7 @@ def buku_tambah():
         stok_minimum = request.form.get('stok_minimum', '0').strip()
         jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
+        catatan = request.form.get('catatan', '').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -679,9 +729,9 @@ def buku_tambah():
             return render_template('buku/form.html', buku=request.form)
 
         cur.execute(
-            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk)
+            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan)
         )
         conn.commit()
         cur.close()
@@ -710,6 +760,7 @@ def buku_edit(buku_id):
         stok_minimum = request.form.get('stok_minimum', '0').strip()
         jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
+        catatan = request.form.get('catatan', '').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -720,9 +771,9 @@ def buku_edit(buku_id):
         cur.execute(
             """UPDATE buku 
                SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, 
-                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, tanggal_masuk=%s, updated_at=NOW()
+                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, tanggal_masuk=%s, catatan=%s, updated_at=NOW()
                WHERE id=%s""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, buku_id)
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan, buku_id)
         )
         conn.commit()
         cur.close()
@@ -1670,5 +1721,13 @@ def gabung_penerbit():
         conn.close()
 
     return redirect(url_for('kelola_penerbit'))
+
+@app.route('/buku/sync-sheets', methods=['POST'])
+@login_required
+@admin_required
+def buku_sync_sheets():
+    sukses, pesan = sync_ke_google_sheets()
+    flash(pesan, 'success' if sukses else 'danger')
+    return redirect(url_for('buku_list'))   
 if __name__ == '__main__':
     app.run(debug=True)
