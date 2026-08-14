@@ -10,16 +10,16 @@
         <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">← Kembali ke Data Buku</a>
     </div>
 </div>
-<p class="text-muted">Diurutkan dari penerbit yang paling tertinggal (berdasarkan eksemplar).</p>
 
+{% macro render_grup(daftar, label_kosong) %}
 <div class="card">
     <div class="card-body">
         {% for p in daftar %}
         <div class="mb-3 pb-3 {{ 'border-bottom' if not loop.last else '' }}">
-            <div class="mb-2">
+            <div class="mb-2 d-flex align-items-center gap-2">
+                <span class="text-muted mono">{{ loop.index }}.</span>
                 <strong>{{ p.penerbit }}</strong>
             </div>
-
             <div class="row">
                 <div class="col-md-6 mb-2">
                     <div class="d-flex justify-content-between small text-muted mb-1">
@@ -36,7 +36,6 @@
                         {% endif %}
                     </div>
                 </div>
-
                 <div class="col-md-6 mb-2">
                     <div class="d-flex justify-content-between small text-muted mb-1">
                         <span>Judul Lengkap</span>
@@ -53,12 +52,30 @@
                     </div>
                 </div>
             </div>
-
             <a href="{{ url_for('buku_list', penerbit=p.penerbit) }}" class="small">Lihat semua buku dari penerbit ini →</a>
         </div>
         {% else %}
-        <p class="text-muted text-center mb-0">Belum ada data.</p>
+        <p class="text-muted text-center mb-0">{{ label_kosong }}</p>
         {% endfor %}
     </div>
 </div>
+{% endmacro %}
+
+<h5 class="mt-2">
+    <span class="badge bg-success">Lengkap</span>
+    <span class="text-muted small">({{ grup_lengkap|length }} penerbit)</span>
+</h5>
+{{ render_grup(grup_lengkap, 'Belum ada penerbit yang lengkap semua judulnya.') }}
+
+<h5 class="mt-4">
+    <span class="badge bg-warning text-dark">Sebagian</span>
+    <span class="text-muted small">({{ grup_sebagian|length }} penerbit)</span>
+</h5>
+{{ render_grup(grup_sebagian, 'Tidak ada penerbit dengan status sebagian.') }}
+
+<h5 class="mt-4">
+    <span class="badge bg-secondary">Kosong</span>
+    <span class="text-muted small">({{ grup_kosong|length }} penerbit)</span>
+</h5>
+{{ render_grup(grup_kosong, 'Tidak ada penerbit yang masih kosong.') }}
 {% endblock %}
