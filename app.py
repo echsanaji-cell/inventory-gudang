@@ -1596,9 +1596,25 @@ def progress_penerbit():
             'persen_judul': round(persen_judul, 1)
         })
 
-    hasil.sort(key=lambda x: x['persen_eks'])
+    # klasifikasi berdasarkan judul: lengkap, sebagian, kosong
+    for item in hasil:
+        if item['total_judul'] > 0 and item['judul_lengkap'] >= item['total_judul']:
+            item['status_label'] = 'Lengkap'
+        elif item['judul_lengkap'] > 0:
+            item['status_label'] = 'Sebagian'
+        else:
+            item['status_label'] = 'Kosong'
 
-    return render_template('buku/progress_penerbit.html', daftar=hasil)
+    grup_lengkap = sorted([x for x in hasil if x['status_label'] == 'Lengkap'], key=lambda x: -x['persen_judul'])
+    grup_sebagian = sorted([x for x in hasil if x['status_label'] == 'Sebagian'], key=lambda x: -x['persen_judul'])
+    grup_kosong = sorted([x for x in hasil if x['status_label'] == 'Kosong'], key=lambda x: x['penerbit'])
+
+    return render_template(
+        'buku/progress_penerbit.html',
+        grup_lengkap=grup_lengkap,
+        grup_sebagian=grup_sebagian,
+        grup_kosong=grup_kosong
+    )
 
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
