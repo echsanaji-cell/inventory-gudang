@@ -30,7 +30,7 @@
         <select name="buku_id" id="select-buku" class="d-none">
             <option value="">-- Pilih Buku --</option>
             {% for buku in daftar_buku %}
-            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}" data-penerbit="{{ buku.penerbit or '-' }}">{{ buku.judul }} ({{ buku.isbn }}) — diterima {{ buku.stok }}/{{ buku.jumlah_rencana }}</option>
+            <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}" data-penerbit="{{ buku.penerbit or '-' }}" data-catatan="{{ buku.catatan or '' }}">{{ buku.judul }} ({{ buku.isbn }}) — diterima {{ buku.stok }}/{{ buku.jumlah_rencana }}</option>
             {% endfor %}
         </select>
     </div>
@@ -42,6 +42,11 @@
     <div class="mb-3">
         <label class="form-label">Dari (supplier/donasi/dll)</label>
         <input type="text" name="pihak_terkait" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Catatan Buku</label>
+        <textarea name="catatan_buku" id="input-catatan-buku" class="form-control" rows="3" placeholder="Pilih buku dulu untuk mengisi/mengedit catatannya"></textarea>
+        <small class="text-muted">Ini akan memperbarui catatan buku (sama seperti field Catatan di halaman Edit Buku).</small>
     </div>
     <div class="mb-3">
         <label class="form-label">Keterangan</label>
@@ -69,6 +74,8 @@ initPhysicalScanner(inputScan, handleScanBuku);
 const penerbitInfo = document.getElementById('buku-penerbit-info');
 const penerbitNama = document.getElementById('buku-penerbit-nama');
 
+const inputCatatanBuku = document.getElementById('input-catatan-buku');
+
 function tampilkanPenerbit(option) {
     if (option && option.dataset.penerbit) {
         penerbitNama.textContent = option.dataset.penerbit;
@@ -76,6 +83,7 @@ function tampilkanPenerbit(option) {
     } else {
         penerbitInfo.style.display = 'none';
     }
+    inputCatatanBuku.value = option ? (option.dataset.catatan || '') : '';
 }
 
 function handleScanBuku(kode) {

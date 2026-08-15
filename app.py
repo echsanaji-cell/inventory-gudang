@@ -890,7 +890,7 @@ def transaksi_masuk():
     if request.method == 'POST':
         buku_id = request.form.get('buku_id', '').strip()
         jumlah = request.form.get('jumlah', '').strip()
-        keterangan = request.form.get('keterangan', '').strip()
+        catatan_buku = request.form.get('catatan_buku', '').strip()
         pihak_terkait = request.form.get('pihak_terkait', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
 
@@ -914,20 +914,20 @@ def transaksi_masuk():
 
             # insert transaksi
             cur.execute(
-                """INSERT INTO transaksi (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal)
-                   VALUES (%s, 'masuk', %s, %s, %s, %s, %s)""",
-                (buku_id, jumlah, keterangan, pihak_terkait, session['user_id'],
-                 tanggal or None)
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, pihak_terkait, user_id, tanggal)
+                   VALUES (%s, 'masuk', %s, %s, %s, %s)""",
+                (buku_id, jumlah, pihak_terkait, session['user_id'], tanggal or None)
             )
 
-            # update stok buku + tanggal masuk terakhir
+            # update stok buku + tanggal masuk terakhir + catatan
             tgl_transaksi = tanggal or datetime.now().date()
             cur.execute(
                 """UPDATE buku 
                    SET stok = stok + %s, updated_at = NOW(),
-                       tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s)
+                       tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s),
+                       catatan = %s
                    WHERE id = %s""",
-                (jumlah, tgl_transaksi, tgl_transaksi, buku_id)
+                (jumlah, tgl_transaksi, tgl_transaksi, catatan_buku, buku_id)
             )
 
             conn.commit()
