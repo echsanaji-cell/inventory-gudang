@@ -164,6 +164,15 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
+def viewer_blocked(f):
+    """Blokir role viewer dari akses fitur selain Dashboard & Data Buku"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') == 'viewer':
+            flash('Akun ini hanya memiliki akses lihat Data Buku.', 'danger')
+            return redirect(url_for('buku_list'))
+        return f(*args, **kwargs)
+    return decorated_function
 # ------------------ LOGIN ------------------
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
@@ -883,6 +892,7 @@ def buku_hapus(buku_id):
 # ------------------ BARANG MASUK ------------------
 @app.route('/transaksi/masuk', methods=['GET', 'POST'])
 @login_required
+@viewer_blocked
 def transaksi_masuk():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -951,6 +961,7 @@ def transaksi_masuk():
 # ------------------ BARANG KELUAR ------------------
 @app.route('/transaksi/keluar', methods=['GET', 'POST'])
 @login_required
+@viewer_blocked
 def transaksi_keluar():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1019,6 +1030,7 @@ def transaksi_keluar():
 # ------------------ RIWAYAT TRANSAKSI ------------------
 @app.route('/transaksi/riwayat')
 @login_required
+@viewer_blocked
 def transaksi_riwayat():
     tipe_filter = request.args.get('tipe', '').strip()
 
@@ -1166,6 +1178,7 @@ def buku_label(buku_id):
 # ------------------ DAFTAR PEMINJAMAN AKTIF ------------------
 @app.route('/peminjaman')
 @login_required
+@viewer_blocked
 def peminjaman_list():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1186,6 +1199,7 @@ def peminjaman_list():
 # ------------------ TANDAI SUDAH KEMBALI ------------------
 @app.route('/peminjaman/<int:transaksi_id>/kembali', methods=['POST'])
 @login_required
+@viewer_blocked
 def peminjaman_kembali(transaksi_id):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1495,6 +1509,7 @@ def buku_import():
 # ------------------ DOWNLOAD TEMPLATE IMPORT MASSAL BARANG MASUK ------------------
 @app.route('/transaksi/masuk/import/template')
 @login_required
+@viewer_blocked
 def import_masuk_template():
     wb = Workbook()
     ws = wb.active
@@ -1525,6 +1540,7 @@ def import_masuk_template():
 # ------------------ IMPORT MASSAL BARANG MASUK ------------------
 @app.route('/transaksi/masuk/import', methods=['GET', 'POST'])
 @login_required
+@viewer_blocked
 def import_masuk_massal():
     if request.method == 'POST':
         file = request.files.get('file_excel')
@@ -1633,6 +1649,7 @@ def import_masuk_massal():
 # ------------------ PROGRESS PENERIMAAN PER PENERBIT ------------------
 @app.route('/buku/progress-penerbit')
 @login_required
+@viewer_blocked
 def progress_penerbit():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1743,6 +1760,7 @@ def gabung_penerbit():
 
 @app.route('/buku/sync-sheets', methods=['POST'])
 @login_required
+@viewer_blocked
 @admin_required
 def buku_sync_sheets():
     sukses, pesan = sync_ke_google_sheets()

@@ -17,12 +17,12 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('dashboard') }}">
-    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo CV. Laras Sejati" class="brand-logo">
-    <span class="d-flex flex-column lh-1">
-        <span>Inventory Gudang</span>
-        <span class="brand-subtitle">CV. Laras Sejati</span>
-    </span>
-</a>
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo CV. Laras Sejati" class="brand-logo">
+                <span class="d-flex flex-column lh-1">
+                    <span>Inventory Gudang</span>
+                    <span class="brand-subtitle">CV. Laras Sejati</span>
+                </span>
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -30,13 +30,15 @@
                 <div class="navbar-nav me-auto">
                     <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                     <a class="nav-link" href="{{ url_for('buku_list') }}">Data Buku</a>
+                    {% if session.role != 'viewer' %}
                     <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Buku Masuk</a>
                     <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Buku Keluar</a>
                     <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
+                    {% endif %}
                     {% if session.role == 'admin' %}
                     <a class="nav-link" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a>
                     <a class="nav-link" href="{{ url_for('user_list') }}">Kelola User</a>
-{% endif %} 
+                    {% endif %}
                 </div>
                 <div class="navbar-nav">
                     <span class="nav-link text-light">{{ session.nama_lengkap or session.username }}</span>

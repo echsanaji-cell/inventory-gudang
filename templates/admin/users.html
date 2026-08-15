@@ -21,6 +21,8 @@
             <td>
                 {% if u.role == 'admin' %}
                     <span class="badge bg-dark">Admin</span>
+                {% elif u.role == 'viewer' %}
+                    <span class="badge bg-info text-dark">Viewer</span>
                 {% else %}
                     <span class="badge bg-secondary">Staff</span>
                 {% endif %}
