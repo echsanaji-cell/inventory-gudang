@@ -725,9 +725,9 @@ def buku_tambah():
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
         
-        stok = request.form.get('stok', '0').strip()
-        stok_minimum = request.form.get('stok_minimum', '0').strip()
-        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
+        stok = request.form.get('stok', '0').strip() or '0'
+        stok_minimum = request.form.get('stok_minimum', '0').strip() or '0'
+        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip() or '0'
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
 
@@ -775,9 +775,9 @@ def buku_edit(buku_id):
         judul = request.form.get('judul', '').strip()
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
-        stok = request.form.get('stok', '0').strip()
-        stok_minimum = request.form.get('stok_minimum', '0').strip()
-        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip()
+        stok = request.form.get('stok', '0').strip() or '0'
+        stok_minimum = request.form.get('stok_minimum', '0').strip() or '0'
+        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip() or '0'
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
 
