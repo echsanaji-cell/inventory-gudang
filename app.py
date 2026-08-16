@@ -27,6 +27,7 @@ import json as json_lib
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -101,6 +102,17 @@ def kirim_email_stok_kritis():
         return True, f"Email berhasil dikirim ke {mail_to} ({len(stok_menipis)} buku)."
     except Exception as e:
         return False, f"Gagal kirim email: {str(e)}"
+
+def ambil_int(form, nama_field, default=0):
+    """Ambil nilai integer dari form dengan aman, fallback ke default kalau kosong/tidak valid"""
+    nilai = form.get(nama_field, '').strip()
+    if not nilai:
+        return default
+    try:
+        return int(float(nilai))
+    except (ValueError, TypeError):
+        return default
+    
 def sync_ke_google_sheets():
     creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
     sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
@@ -737,9 +749,9 @@ def buku_tambah():
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
         
-        stok = request.form.get('stok', '0').strip() or '0'
-        stok_minimum = request.form.get('stok_minimum', '0').strip() or '0'
-        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip() or '0'
+        stok = ambil_int(request.form, 'stok', 0)
+        stok_minimum = ambil_int(request.form, 'stok_minimum', 0)
+        jumlah_rencana = ambil_int(request.form, 'jumlah_rencana', 0)
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
 
@@ -787,9 +799,9 @@ def buku_edit(buku_id):
         judul = request.form.get('judul', '').strip()
         penulis = request.form.get('penulis', '').strip()
         penerbit = request.form.get('penerbit', '').strip()
-        stok = request.form.get('stok', '0').strip() or '0'
-        stok_minimum = request.form.get('stok_minimum', '0').strip() or '0'
-        jumlah_rencana = request.form.get('jumlah_rencana', '0').strip() or '0'
+        stok = ambil_int(request.form, 'stok', 0)
+        stok_minimum = ambil_int(request.form, 'stok_minimum', 0)
+        jumlah_rencana = ambil_int(request.form, 'jumlah_rencana', 0)
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
 
@@ -902,12 +914,12 @@ def transaksi_masuk():
 
     if request.method == 'POST':
         buku_id = request.form.get('buku_id', '').strip()
-        jumlah = request.form.get('jumlah', '').strip()
+        jumlah = ambil_int(request.form, 'jumlah', 0)
         catatan_buku = request.form.get('catatan_buku', '').strip()
         pihak_terkait = request.form.get('pihak_terkait', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
 
-        if not buku_id or not jumlah or int(jumlah) <= 0:
+        if not buku_id or jumlah <= 0:
             flash('Buku dan jumlah (harus lebih dari 0) wajib diisi.', 'danger')
             cur.execute("SELECT * FROM buku ORDER BY judul ASC")
             daftar_buku = cur.fetchall()
@@ -971,19 +983,17 @@ def transaksi_keluar():
 
     if request.method == 'POST':
         buku_id = request.form.get('buku_id', '').strip()
-        jumlah = request.form.get('jumlah', '').strip()
+        jumlah = ambil_int(request.form, 'jumlah', 0)
         keterangan = request.form.get('keterangan', '').strip()
         pihak_terkait = request.form.get('pihak_terkait', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
-        if not buku_id or not jumlah or int(jumlah) <= 0:
+        if not buku_id or jumlah <= 0:
             flash('Buku dan jumlah (harus lebih dari 0) wajib diisi.', 'danger')
             cur.execute("SELECT * FROM buku ORDER BY judul ASC")
             daftar_buku = cur.fetchall()
             cur.close()
             conn.close()
             return render_template('transaksi/keluar.html', daftar_buku=daftar_buku)
-
-        jumlah = int(jumlah)
 
         try:
             cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
@@ -1544,6 +1554,7 @@ def import_masuk_template():
 @app.route('/transaksi/masuk/import', methods=['GET', 'POST'])
 @login_required
 @viewer_blocked
+@admin_required
 def import_masuk_massal():
     if request.method == 'POST':
         file = request.files.get('file_excel')
@@ -1751,6 +1762,7 @@ def gabung_penerbit():
         )
         jumlah_terupdate = cur.rowcount
         conn.commit()
+        print(f"[GABUNG PENERBIT] oleh {session.get('username')} pada {datetime.now()}: '{penerbit_lama}' -> '{penerbit_baru}' ({jumlah_terupdate} buku)")
         flash(f'{jumlah_terupdate} buku dari "{penerbit_lama}" berhasil diubah jadi "{penerbit_baru}".', 'success')
     except Exception as e:
         conn.rollback()
@@ -1769,5 +1781,10 @@ def buku_sync_sheets():
     sukses, pesan = sync_ke_google_sheets()
     flash(pesan, 'success' if sukses else 'danger')
     return redirect(url_for('buku_list'))   
+
+@app.errorhandler(413)
+def file_terlalu_besar(e):
+    flash('File terlalu besar. Maksimal ukuran file adalah 5MB.', 'danger')
+    return redirect(request.referrer or url_for('dashboard'))
 if __name__ == '__main__':
     app.run(debug=True)
