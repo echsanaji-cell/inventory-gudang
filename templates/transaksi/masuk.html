@@ -3,7 +3,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Catat Buku Masuk</h3>
+    {% if session.role == 'admin' %}
     <a href="{{ url_for('import_masuk_massal') }}" class="btn btn-outline-secondary btn-sm">📤 Import Massal (Excel)</a>
+    {% endif %}
 </div>
 
 <form method="POST" id="form-masuk">
