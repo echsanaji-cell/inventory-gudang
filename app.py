@@ -1356,23 +1356,13 @@ def kirim_notifikasi_stok_manual():
 # ------------------ CRON: DIPANGGIL SCHEDULER EKSTERNAL ------------------
 @app.route('/cron/cek-stok-kritis')
 def cron_cek_stok_kritis():
-    secret = request.headers.get('X-Cron-Secret', '')
+    secret = request.args.get('secret', '')
     if secret != os.environ.get('CRON_SECRET'):
         return {'error': 'unauthorized'}, 401
 
     sukses, pesan = kirim_email_stok_kritis()
     return {'success': sukses, 'message': pesan}
-@app.route('/cron/debug-header')
-def cron_debug_header():
-    header_diterima = request.headers.get('X-Cron-Secret', '(tidak ada header ini)')
-    secret_di_env = os.environ.get('CRON_SECRET', '(tidak ada di env)')
-    return {
-        'header_diterima_panjang': len(header_diterima),
-        'header_diterima_preview': header_diterima[:5] + '...' if len(header_diterima) > 5 else header_diterima,
-        'env_panjang': len(secret_di_env),
-        'env_preview': secret_di_env[:5] + '...' if len(secret_di_env) > 5 else secret_di_env,
-        'cocok': header_diterima == secret_di_env
-    }
+
 # ------------------ DOWNLOAD TEMPLATE IMPORT ------------------
 @app.route('/buku/import/template')
 @login_required
