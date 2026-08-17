@@ -72,6 +72,8 @@
                    class="btn btn-sm {{ 'btn-warning' if status_filter == 'sebagian' else 'btn-outline-warning' }}">Sebagian</a>
                 <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lengkap', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
                    class="btn btn-sm {{ 'btn-success' if status_filter == 'lengkap' else 'btn-outline-success' }}">Lengkap</a>
+                <a href="{{ url_for('buku_list', search=search, penerbit=penerbit_filter, status='lebih', tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}"
+                   class="btn btn-sm {{ 'btn-info' if status_filter == 'lebih' else 'btn-outline-info' }}">Lebih</a>
             </div>
 
             <label class="form-label small text-muted mb-1 d-block mt-3">Catatan</label>
@@ -123,7 +125,9 @@
             <td>
                 {% if buku.jumlah_rencana > 0 %}
                     <div class="mono small">{{ buku.stok }} / {{ buku.jumlah_rencana }}</div>
-                    {% if buku.stok >= buku.jumlah_rencana %}
+                    {% if buku.stok > buku.jumlah_rencana %}
+                        <span class="badge bg-info text-dark">Lebih</span>
+                    {% elif buku.stok == buku.jumlah_rencana %}
                         <span class="badge bg-success">Lengkap</span>
                     {% elif buku.stok > 0 %}
                         <span class="badge bg-warning text-dark">Sebagian</span>
