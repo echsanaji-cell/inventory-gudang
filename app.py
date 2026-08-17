@@ -955,7 +955,7 @@ def transaksi_masuk():
             daftar_buku = cur.fetchall()
             cur.close()
             conn.close()
-            return render_template('transaksi/masuk.html', daftar_buku=daftar_buku)
+            return render_template('transaksi/masuk.html', daftar_buku=daftar_buku, today=datetime.now().date().isoformat())
 
         try:
             # cek buku ada
@@ -1000,7 +1000,7 @@ def transaksi_masuk():
     daftar_buku = cur.fetchall()
     cur.close()
     conn.close()
-    return render_template('transaksi/masuk.html', daftar_buku=daftar_buku)
+    return render_template('transaksi/masuk.html', daftar_buku=daftar_buku, today=datetime.now().date().isoformat())
 
 
 # ------------------ BARANG KELUAR ------------------
