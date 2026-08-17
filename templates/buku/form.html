@@ -38,19 +38,19 @@
     <div class="row">
         <div class="col-md-4 mb-3">
             <label class="form-label">Jumlah Rencana (target)</label>
-            <input type="number" name="jumlah_rencana" class="form-control" min="0"
+            <input type="number" name="jumlah_rencana" class="form-control" min="0" inputmode="numeric" pattern="[0-9]*"
                    value="{{ buku.jumlah_rencana if buku else 0 }}">
             <small class="text-muted">Target eksemplar yang seharusnya diterima.</small>
         </div>
         <div class="col-md-4 mb-3">
             <label class="form-label">Stok Diterima Saat Ini</label>
-            <input type="number" name="stok" class="form-control" min="0"
+            <input type="number" name="stok" class="form-control" min="0" inputmode="numeric" pattern="[0-9]*"
                    value="{{ buku.stok if buku else 0 }}">
             <small class="text-muted">Biasanya diisi 0, bertambah lewat "Barang Masuk".</small>
         </div>
         <div class="col-md-4 mb-3">
             <label class="form-label">Stok Minimum (alert)</label>
-            <input type="number" name="stok_minimum" class="form-control" min="0"
+            <input type="number" name="stok_minimum" class="form-control" min="0" inputmode="numeric" pattern="[0-9]*"
                    value="{{ buku.stok_minimum if buku else 0 }}">
         </div>
     </div>
