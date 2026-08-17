@@ -319,7 +319,8 @@ def dashboard():
         """SELECT 
              COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok = 0) as belum_ada,
              COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana) as sebagian,
-             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok >= jumlah_rencana) as lengkap
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok = jumlah_rencana) as lengkap,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok > jumlah_rencana) as lebih
            FROM buku"""
     )
     status_penerimaan = cur.fetchone()
@@ -403,7 +404,9 @@ def buku_list():
     elif status_filter == 'sebagian':
         query += " AND jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana"
     elif status_filter == 'lengkap':
-        query += " AND jumlah_rencana > 0 AND stok >= jumlah_rencana"
+        query += " AND jumlah_rencana > 0 AND stok = jumlah_rencana"
+    elif status_filter == 'lebih':
+        query += " AND jumlah_rencana > 0 AND stok > jumlah_rencana"
 
     if penerbit_filter:
         query += " AND penerbit = %s"
@@ -472,7 +475,9 @@ def buku_export_excel():
     elif status_filter == 'sebagian':
         query += " AND jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana"
     elif status_filter == 'lengkap':
-        query += " AND jumlah_rencana > 0 AND stok >= jumlah_rencana"
+        query += " AND jumlah_rencana > 0 AND stok = jumlah_rencana"
+    elif status_filter == 'lebih':
+        query += " AND jumlah_rencana > 0 AND stok > jumlah_rencana"
 
     if penerbit_filter:
         query += " AND penerbit = %s"
@@ -531,7 +536,7 @@ def buku_export_excel():
     wb.save(output)
     output.seek(0)
 
-    label_status = {'belum': 'belum-diterima', 'sebagian': 'sebagian-diterima', 'lengkap': 'lengkap-diterima'}.get(status_filter, 'semua')
+    label_status = {'belum': 'belum-diterima', 'sebagian': 'sebagian-diterima', 'lengkap': 'lengkap-diterima', 'lebih': 'lebih-diterima'}.get(status_filter, 'semua')
     filename = f"data-buku-{label_status}-{datetime.now().strftime('%Y%m%d')}.xlsx"
     return send_file(
         output,
