@@ -149,11 +149,11 @@ def sync_ke_google_sheets():
             ])
         return rows
 
-    # filter buku dengan status "Sebagian"
-    daftar_sebagian = [
-        b for b in daftar_buku
-        if b['jumlah_rencana'] > 0 and 0 < b['stok'] < b['jumlah_rencana']
-    ]
+    # filter buku dengan status "Sebagian", urutkan per-penerbit lalu alfabet judul
+    daftar_sebagian = sorted(
+        [b for b in daftar_buku if b['jumlah_rencana'] > 0 and 0 < b['stok'] < b['jumlah_rencana']],
+        key=lambda b: ((b['penerbit'] or '').lower(), b['judul'].lower())
+    )
 
     try:
         sheet = service.spreadsheets()
