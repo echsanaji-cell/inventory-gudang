@@ -154,7 +154,11 @@ def sync_ke_google_sheets():
         [b for b in daftar_buku if b['jumlah_rencana'] > 0 and 0 < b['stok'] < b['jumlah_rencana']],
         key=lambda b: ((b['penerbit'] or '').lower(), b['judul'].lower())
     )
-
+    # filter buku dengan status "Lebih", urutkan per-penerbit lalu alfabet judul
+    daftar_lebih = sorted(
+        [b for b in daftar_buku if b['jumlah_rencana'] > 0 and b['stok'] > b['jumlah_rencana']],
+        key=lambda b: ((b['penerbit'] or '').lower(), b['judul'].lower())
+    )
     try:
         sheet = service.spreadsheets()
 
@@ -162,32 +166,39 @@ def sync_ke_google_sheets():
         meta = sheet.get(spreadsheetId=sheet_id).execute()
         tab_ada = [s['properties']['title'] for s in meta['sheets']]
 
-        # buat tab "Sebagian" kalau belum ada
+        # buat tab "Sebagian" dan "Lebih" kalau belum ada
+        tab_baru_dibutuhkan = []
         if 'Sebagian' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Sebagian'}}})
+        if 'Lebih' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Lebih'}}})
+
+        if tab_baru_dibutuhkan:
             sheet.batchUpdate(
                 spreadsheetId=sheet_id,
-                body={'requests': [{'addSheet': {'properties': {'title': 'Sebagian'}}}]}
+                body={'requests': tab_baru_dibutuhkan}
             ).execute()
 
-        # kosongkan kedua tab sekaligus
+        # kosongkan semua tab sekaligus
         sheet.values().batchClear(
             spreadsheetId=sheet_id,
-            body={'ranges': ['Sheet1', "'Sebagian'"]}
+            body={'ranges': ['Sheet1', "'Sebagian'", "'Lebih'"]}
         ).execute()
 
-        # tulis data ke kedua tab sekaligus
+        # tulis data ke semua tab sekaligus
         sheet.values().batchUpdate(
             spreadsheetId=sheet_id,
             body={
                 'valueInputOption': 'RAW',
                 'data': [
                     {'range': 'Sheet1!A1', 'values': buat_rows(daftar_buku)},
-                    {'range': "'Sebagian'!A1", 'values': buat_rows(daftar_sebagian)}
+                    {'range': "'Sebagian'!A1", 'values': buat_rows(daftar_sebagian)},
+                    {'range': "'Lebih'!A1", 'values': buat_rows(daftar_lebih)}
                 ]
             }
         ).execute()
 
-        return True, f"Berhasil sync {len(daftar_buku)} buku ke Sheet1, dan {len(daftar_sebagian)} buku status Sebagian ke tab terpisah."
+        return True, f"Berhasil sync {len(daftar_buku)} buku ke Sheet1, {len(daftar_sebagian)} buku ke tab Sebagian, {len(daftar_lebih)} buku ke tab Lebih."
     except Exception as e:
         return False, f"Gagal menulis ke Google Sheets: {str(e)}"
 # ------------------ DECORATOR: wajib login ------------------
