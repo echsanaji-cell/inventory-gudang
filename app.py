@@ -137,27 +137,57 @@ def sync_ke_google_sheets():
     conn.close()
 
     header = ['No', 'ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum', 'Tanggal Masuk', 'Catatan']
-    rows = [header]
-    for i, buku in enumerate(daftar_buku, start=1):
-        rows.append([
-            i, buku['isbn'], buku['judul'], buku['penulis'] or '-',
-            buku['penerbit'] or '-', buku['stok'], buku['jumlah_rencana'],
-            buku['stok_minimum'], str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-',
-            buku['catatan'] or '-'
-        ])
+
+    def buat_rows(buku_list):
+        rows = [header]
+        for i, buku in enumerate(buku_list, start=1):
+            rows.append([
+                i, buku['isbn'], buku['judul'], buku['penulis'] or '-',
+                buku['penerbit'] or '-', buku['stok'], buku['jumlah_rencana'],
+                buku['stok_minimum'], str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-',
+                buku['catatan'] or '-'
+            ])
+        return rows
+
+    # filter buku dengan status "Sebagian"
+    daftar_sebagian = [
+        b for b in daftar_buku
+        if b['jumlah_rencana'] > 0 and 0 < b['stok'] < b['jumlah_rencana']
+    ]
 
     try:
         sheet = service.spreadsheets()
-        # kosongkan dulu sheet lama biar nggak numpuk data lama
-        sheet.values().clear(spreadsheetId=sheet_id, range='Sheet1').execute()
-        # tulis data baru
-        sheet.values().update(
+
+        # cek tab yang sudah ada
+        meta = sheet.get(spreadsheetId=sheet_id).execute()
+        tab_ada = [s['properties']['title'] for s in meta['sheets']]
+
+        # buat tab "Sebagian" kalau belum ada
+        if 'Sebagian' not in tab_ada:
+            sheet.batchUpdate(
+                spreadsheetId=sheet_id,
+                body={'requests': [{'addSheet': {'properties': {'title': 'Sebagian'}}}]}
+            ).execute()
+
+        # kosongkan kedua tab sekaligus
+        sheet.values().batchClear(
             spreadsheetId=sheet_id,
-            range='Sheet1!A1',
-            valueInputOption='RAW',
-            body={'values': rows}
+            body={'ranges': ['Sheet1', "'Sebagian'"]}
         ).execute()
-        return True, f"Berhasil sync {len(daftar_buku)} buku ke Google Sheets."
+
+        # tulis data ke kedua tab sekaligus
+        sheet.values().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={
+                'valueInputOption': 'RAW',
+                'data': [
+                    {'range': 'Sheet1!A1', 'values': buat_rows(daftar_buku)},
+                    {'range': "'Sebagian'!A1", 'values': buat_rows(daftar_sebagian)}
+                ]
+            }
+        ).execute()
+
+        return True, f"Berhasil sync {len(daftar_buku)} buku ke Sheet1, dan {len(daftar_sebagian)} buku status Sebagian ke tab terpisah."
     except Exception as e:
         return False, f"Gagal menulis ke Google Sheets: {str(e)}"
 # ------------------ DECORATOR: wajib login ------------------
