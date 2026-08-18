@@ -38,7 +38,11 @@
                     <span class="badge bg-danger">Keluar</span>
                 {% endif %}
             </td>
-            <td>{{ t.judul }} <br><small class="text-muted mono">{{ t.isbn }}</small></td>
+            <td>
+                {{ t.judul }}
+                <br><small class="text-muted">{{ t.penerbit or '-' }}</small>
+                <br><small class="text-muted mono">{{ t.isbn }}</small>
+            </td>
             <td>{{ t.jumlah }}</td>
             <td>{{ t.pihak_terkait or '-' }}</td>
             <td>{{ t.keterangan or '-' }}</td>
