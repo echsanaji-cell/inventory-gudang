@@ -1711,13 +1711,18 @@ def import_masuk_massal():
 @login_required
 @viewer_blocked
 def progress_penerbit():
+    sort = request.args.get('sort', 'eks_asc')
+
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         """SELECT 
              COALESCE(NULLIF(penerbit, ''), '(Tanpa Penerbit)') as penerbit,
              COUNT(*) as total_judul,
-             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok >= jumlah_rencana) as judul_lengkap,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok = jumlah_rencana) as judul_lengkap,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok > jumlah_rencana) as judul_lebih,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok > 0 AND stok < jumlah_rencana) as judul_sebagian,
+             COUNT(*) FILTER (WHERE jumlah_rencana > 0 AND stok = 0) as judul_kosong,
              COALESCE(SUM(stok), 0) as total_diterima,
              COALESCE(SUM(jumlah_rencana), 0) as total_rencana
            FROM buku
@@ -1728,40 +1733,34 @@ def progress_penerbit():
     cur.close()
     conn.close()
 
-    # hitung persentase & urutkan dari yang paling tertinggal
     hasil = []
     for p in data_penerbit:
         persen_eks = (p['total_diterima'] / p['total_rencana'] * 100) if p['total_rencana'] > 0 else 0
-        persen_judul = (p['judul_lengkap'] / p['total_judul'] * 100) if p['total_judul'] > 0 else 0
         hasil.append({
             'penerbit': p['penerbit'],
             'total_judul': p['total_judul'],
             'judul_lengkap': p['judul_lengkap'],
+            'judul_lebih': p['judul_lebih'],
+            'judul_sebagian': p['judul_sebagian'],
+            'judul_kosong': p['judul_kosong'],
             'total_diterima': p['total_diterima'],
             'total_rencana': p['total_rencana'],
-            'persen_eks': round(persen_eks, 1),
-            'persen_judul': round(persen_judul, 1)
+            'persen_eks': round(persen_eks, 1)
         })
 
-    # klasifikasi berdasarkan judul: lengkap, sebagian, kosong
-    for item in hasil:
-        if item['total_judul'] > 0 and item['judul_lengkap'] >= item['total_judul']:
-            item['status_label'] = 'Lengkap'
-        elif item['judul_lengkap'] > 0:
-            item['status_label'] = 'Sebagian'
-        else:
-            item['status_label'] = 'Kosong'
+    sort_map = {
+        'penerbit': lambda x: x['penerbit'].lower(),
+        'eks_asc': lambda x: x['persen_eks'],
+        'eks_desc': lambda x: -x['persen_eks'],
+        'lengkap': lambda x: -x['judul_lengkap'],
+        'lebih': lambda x: -x['judul_lebih'],
+        'sebagian': lambda x: -x['judul_sebagian'],
+        'kosong': lambda x: -x['judul_kosong'],
+        'total': lambda x: -x['total_judul'],
+    }
+    hasil.sort(key=sort_map.get(sort, sort_map['eks_asc']))
 
-    grup_lengkap = sorted([x for x in hasil if x['status_label'] == 'Lengkap'], key=lambda x: -x['persen_judul'])
-    grup_sebagian = sorted([x for x in hasil if x['status_label'] == 'Sebagian'], key=lambda x: -x['persen_judul'])
-    grup_kosong = sorted([x for x in hasil if x['status_label'] == 'Kosong'], key=lambda x: x['penerbit'])
-
-    return render_template(
-        'buku/progress_penerbit.html',
-        grup_lengkap=grup_lengkap,
-        grup_sebagian=grup_sebagian,
-        grup_kosong=grup_kosong
-    )
+    return render_template('buku/progress_penerbit.html', daftar=hasil, sort=sort)
 
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
