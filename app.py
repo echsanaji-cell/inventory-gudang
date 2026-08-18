@@ -672,7 +672,7 @@ def transaksi_export_excel():
     conn = get_db_connection()
     cur = conn.cursor()
     query = """
-        SELECT t.*, b.judul, b.isbn, u.nama_lengkap, u.username
+        SELECT t.*, b.judul, b.isbn, b.penerbit, u.nama_lengkap, u.username
         FROM transaksi t
         JOIN buku b ON t.buku_id = b.id
         LEFT JOIN users u ON t.user_id = u.id
@@ -691,7 +691,7 @@ def transaksi_export_excel():
     ws = wb.active
     ws.title = "Riwayat Transaksi"
 
-    headers = ['Tanggal', 'Tipe', 'ISBN', 'Judul', 'Jumlah', 'Pihak Terkait', 'Keterangan', 'Dicatat Oleh']
+    headers = ['Tanggal', 'Tipe', 'ISBN', 'Judul', 'Penerbit', 'Jumlah', 'Pihak Terkait', 'Keterangan', 'Dicatat Oleh']
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF')
@@ -699,7 +699,7 @@ def transaksi_export_excel():
 
     for t in daftar_transaksi:
         ws.append([
-            str(t['tanggal']), t['tipe'].capitalize(), t['isbn'], t['judul'],
+            str(t['tanggal']), t['tipe'].capitalize(), t['isbn'], t['judul'], t['penerbit'] or '-',
             t['jumlah'], t['pihak_terkait'] or '-', t['keterangan'] or '-',
             t['nama_lengkap'] or t['username'] or '-'
         ])
@@ -730,7 +730,7 @@ def transaksi_export_pdf():
     conn = get_db_connection()
     cur = conn.cursor()
     query = """
-        SELECT t.*, b.judul, b.isbn, u.nama_lengkap, u.username
+        SELECT t.*, b.judul, b.isbn, b.penerbit, u.nama_lengkap, u.username
         FROM transaksi t
         JOIN buku b ON t.buku_id = b.id
         LEFT JOIN users u ON t.user_id = u.id
@@ -760,10 +760,10 @@ def transaksi_export_pdf():
     elements.append(Paragraph(f"Dicetak: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
     elements.append(Spacer(1, 0.5*cm))
 
-    data = [['Tanggal', 'Tipe', 'ISBN', 'Judul', 'Jml', 'Pihak Terkait', 'Keterangan', 'Oleh']]
+    data = [['Tanggal', 'Tipe', 'ISBN', 'Judul', 'Penerbit', 'Jml', 'Pihak Terkait', 'Keterangan', 'Oleh']]
     for t in daftar_transaksi:
         data.append([
-            str(t['tanggal']), t['tipe'].capitalize(), t['isbn'], t['judul'],
+            str(t['tanggal']), t['tipe'].capitalize(), t['isbn'], t['judul'], t['penerbit'] or '-',
             str(t['jumlah']), t['pihak_terkait'] or '-', t['keterangan'] or '-',
             t['nama_lengkap'] or t['username'] or '-'
         ])
@@ -1097,7 +1097,7 @@ def transaksi_riwayat():
     cur = conn.cursor()
 
     query = """
-        SELECT t.*, b.judul, b.isbn, u.nama_lengkap, u.username
+        SELECT t.*, b.judul, b.isbn, b.penerbit, u.nama_lengkap, u.username
         FROM transaksi t
         JOIN buku b ON t.buku_id = b.id
         LEFT JOIN users u ON t.user_id = u.id
