@@ -10,72 +10,45 @@
         <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">← Kembali ke Data Buku</a>
     </div>
 </div>
+<p class="text-muted small">Klik nama kolom untuk mengurutkan.</p>
 
-{% macro render_grup(daftar, label_kosong) %}
-<div class="card">
-    <div class="card-body">
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>No</th>
+            <th><a href="{{ url_for('progress_penerbit', sort='penerbit') }}" class="text-dark text-decoration-none">Penerbit</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='eks_desc' if sort == 'eks_asc' else 'eks_asc') }}" class="text-dark text-decoration-none">Eksemplar {{ '↑' if sort == 'eks_asc' else '↓' if sort == 'eks_desc' else '' }}</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='lengkap') }}" class="text-success text-decoration-none">Lengkap</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='lebih') }}" class="text-info text-decoration-none">Lebih</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='sebagian') }}" class="text-warning text-decoration-none">Sebagian</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='kosong') }}" class="text-secondary text-decoration-none">Kosong</a></th>
+            <th class="text-end"><a href="{{ url_for('progress_penerbit', sort='total') }}" class="text-dark text-decoration-none">Total Judul</a></th>
+        </tr>
+    </thead>
+    <tbody>
         {% for p in daftar %}
-        <div class="mb-3 pb-3 {{ 'border-bottom' if not loop.last else '' }}">
-            <div class="mb-2 d-flex align-items-center gap-2">
-                <span class="text-muted mono">{{ loop.index }}.</span>
-                <strong>{{ p.penerbit }}</strong>
-            </div>
-            <div class="row">
-                <div class="col-md-6 mb-2">
-                    <div class="d-flex justify-content-between small text-muted mb-1">
-                        <span>Eksemplar</span>
-                        <span class="mono">{{ p.total_diterima }} / {{ p.total_rencana }} ({{ p.persen_eks }}%)</span>
-                    </div>
-                    <div class="progress" style="height: 8px;">
-                        {% if p.persen_eks >= 100 %}
-                            <div class="progress-bar bg-success" style="width: 100%;"></div>
-                        {% elif p.persen_eks > 0 %}
-                            <div class="progress-bar bg-warning" style="width: {{ p.persen_eks }}%;"></div>
-                        {% else %}
-                            <div class="progress-bar bg-secondary" style="width: 100%; opacity: .25;"></div>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="col-md-6 mb-2">
-                    <div class="d-flex justify-content-between small text-muted mb-1">
-                        <span>Judul Lengkap</span>
-                        <span class="mono">{{ p.judul_lengkap }} / {{ p.total_judul }} ({{ p.persen_judul }}%)</span>
-                    </div>
-                    <div class="progress" style="height: 8px;">
-                        {% if p.persen_judul >= 100 %}
-                            <div class="progress-bar bg-success" style="width: 100%;"></div>
-                        {% elif p.persen_judul > 0 %}
-                            <div class="progress-bar bg-primary" style="width: {{ p.persen_judul }}%;"></div>
-                        {% else %}
-                            <div class="progress-bar bg-secondary" style="width: 100%; opacity: .25;"></div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <a href="{{ url_for('buku_list', penerbit=p.penerbit) }}" class="small">Lihat semua buku dari penerbit ini →</a>
-        </div>
+        <tr>
+            <td class="text-muted mono">{{ loop.index }}</td>
+            <td>
+                <a href="{{ url_for('buku_list', penerbit=p.penerbit) }}">{{ p.penerbit }}</a>
+            </td>
+            <td class="text-end mono">
+                {{ p.total_diterima }}/{{ p.total_rencana }}
+                <span class="badge {{ 'bg-success' if p.persen_eks >= 100 else 'bg-warning text-dark' if p.persen_eks > 0 else 'bg-secondary' }}">{{ p.persen_eks }}%</span>
+            </td>
+            <td class="text-end mono">{{ p.judul_lengkap }}</td>
+            <td class="text-end mono">{{ p.judul_lebih if p.judul_lebih > 0 else '-' }}</td>
+            <td class="text-end mono">{{ p.judul_sebagian if p.judul_sebagian > 0 else '-' }}</td>
+            <td class="text-end mono {{ 'text-danger fw-bold' if p.judul_kosong == p.total_judul else '' }}">{{ p.judul_kosong if p.judul_kosong > 0 else '-' }}</td>
+            <td class="text-end mono">{{ p.total_judul }}</td>
+        </tr>
         {% else %}
-        <p class="text-muted text-center mb-0">{{ label_kosong }}</p>
+        <tr>
+            <td colspan="8" class="text-center text-muted">Belum ada data.</td>
+        </tr>
         {% endfor %}
-    </div>
+    </tbody>
+</table>
 </div>
-{% endmacro %}
-
-<h5 class="mt-2">
-    <span class="badge bg-success">Lengkap</span>
-    <span class="text-muted small">({{ grup_lengkap|length }} penerbit)</span>
-</h5>
-{{ render_grup(grup_lengkap, 'Belum ada penerbit yang lengkap semua judulnya.') }}
-
-<h5 class="mt-4">
-    <span class="badge bg-warning text-dark">Sebagian</span>
-    <span class="text-muted small">({{ grup_sebagian|length }} penerbit)</span>
-</h5>
-{{ render_grup(grup_sebagian, 'Tidak ada penerbit dengan status sebagian.') }}
-
-<h5 class="mt-4">
-    <span class="badge bg-secondary">Kosong</span>
-    <span class="text-muted small">({{ grup_kosong|length }} penerbit)</span>
-</h5>
-{{ render_grup(grup_kosong, 'Tidak ada penerbit yang masih kosong.') }}
 {% endblock %}
