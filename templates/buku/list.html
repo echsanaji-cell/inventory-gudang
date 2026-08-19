@@ -7,6 +7,7 @@
         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel">
             🔍 Filter
         </button>
+        
         <div class="dropdown">
             <button class="btn btn-sm btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">
                 Aksi
@@ -20,15 +21,8 @@
                 <li><a class="dropdown-item" href="{{ url_for('buku_cetak_label', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">🏷️ Cetak Label</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('buku_export_excel', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">📊 Export Excel</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('buku_export_pdf', search=search, status=status_filter, penerbit=penerbit_filter, tgl_dari=tgl_dari, tgl_sampai=tgl_sampai, catatan=catatan_filter) }}">📄 Export PDF</a></li>
-                <li><a class="dropdown-item" href="{{ url_for('progress_penerbit') }}">📈 Progress per Penerbit</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <form method="POST" action="{{ url_for('buku_sync_sheets') }}" onsubmit="return confirm('Sync semua data buku ke Google Sheets sekarang?');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="dropdown-item">🔄 Sync ke Google Sheets</button>
-                    </form>
-                </li>
-                                {% if session.role == 'admin' %}
+                                <li><a class="dropdown-item" href="{{ url_for('progress_penerbit') }}">📈 Progress per Penerbit</a></li>
+                {% if session.role == 'admin' %}
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="{{ url_for('backup_excel') }}">💾 Backup Excel</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('backup_json') }}">💾 Backup JSON (Restore)</a></li>
@@ -36,6 +30,12 @@
                 {% endif %}
             </ul>
         </div>
+        {% if session.role == 'admin' %}
+        <form method="POST" action="{{ url_for('buku_sync_sheets') }}" class="d-inline" onsubmit="return confirm('Sync semua data buku ke Google Sheets sekarang?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-outline-success">🔄 Sync Sheets</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
