@@ -2123,10 +2123,22 @@ def cron_backup_otomatis():
 def restore_backup():
     if request.method == 'POST':
         konfirmasi = request.form.get('konfirmasi', '').strip()
+        password_konfirmasi = request.form.get('password_konfirmasi', '')
         file = request.files.get('file_backup')
 
         if konfirmasi != 'RESTORE':
             flash('Ketik "RESTORE" persis (huruf besar semua) untuk konfirmasi.', 'danger')
+            return render_template('admin/restore.html')
+
+        conn_cek = get_db_connection()
+        cur_cek = conn_cek.cursor()
+        cur_cek.execute("SELECT password_hash FROM users WHERE id = %s", (session['user_id'],))
+        user_sekarang = cur_cek.fetchone()
+        cur_cek.close()
+        conn_cek.close()
+
+        if not user_sekarang or not check_password_hash(user_sekarang['password_hash'], password_konfirmasi):
+            flash('Password konfirmasi salah.', 'danger')
             return render_template('admin/restore.html')
 
         if not file or file.filename == '':
