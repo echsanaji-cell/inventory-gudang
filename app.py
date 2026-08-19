@@ -2369,21 +2369,67 @@ def tujuan_import():
 @login_required
 @viewer_blocked
 def tujuan_list():
+    search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    sort = request.args.get('sort', 'nama')
+
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT t.*, 
+
+    query = """
+        SELECT t.*,
              COALESCE(SUM(dr.jumlah_rencana), 0) as total_rencana,
-             COUNT(DISTINCT dr.buku_id) as total_judul_rencana
-           FROM tujuan t
-           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
-           GROUP BY t.id
-           ORDER BY t.nama ASC"""
-    )
-    daftar_tujuan = cur.fetchall()
+             COUNT(DISTINCT dr.buku_id) as total_judul_rencana,
+             COALESCE((
+                 SELECT SUM(tr.jumlah) FROM transaksi tr
+                 WHERE tr.tujuan_id = t.id AND tr.tipe = 'keluar'
+             ), 0) as total_terkirim
+        FROM tujuan t
+        LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+        WHERE 1=1
+    """
+    params = []
+
+    if search:
+        query += " AND (t.nama ILIKE %s OR t.kecamatan ILIKE %s OR t.kabupaten_kota ILIKE %s)"
+        params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+
+    query += " GROUP BY t.id"
+
+    cur.execute(query, tuple(params))
+    daftar_tujuan_raw = cur.fetchall()
     cur.close()
     conn.close()
-    return render_template('tujuan/list.html', daftar_tujuan=daftar_tujuan)
+
+    daftar_tujuan = []
+    for t in daftar_tujuan_raw:
+        persen = (t['total_terkirim'] / t['total_rencana'] * 100) if t['total_rencana'] > 0 else 0
+        if t['total_rencana'] == 0:
+            status = 'Belum Ada Rencana'
+        elif t['total_terkirim'] == 0:
+            status = 'Belum Dikirim'
+        elif t['total_terkirim'] < t['total_rencana']:
+            status = 'Sebagian'
+        else:
+            status = 'Lengkap'
+
+        item = dict(t)
+        item['persen'] = round(persen, 1)
+        item['status'] = status
+        daftar_tujuan.append(item)
+
+    if status_filter:
+        daftar_tujuan = [t for t in daftar_tujuan if t['status'] == status_filter]
+
+    sort_map = {
+        'nama': lambda x: x['nama'].lower(),
+        'persen_asc': lambda x: x['persen'],
+        'persen_desc': lambda x: -x['persen'],
+        'rencana': lambda x: -x['total_rencana'],
+    }
+    daftar_tujuan.sort(key=sort_map.get(sort, sort_map['nama']))
+
+    return render_template('tujuan/list.html', daftar_tujuan=daftar_tujuan, search=search, status_filter=status_filter, sort=sort)
 
 
 # ------------------ ADMIN: TAMBAH TUJUAN ------------------
