@@ -11,16 +11,41 @@
     </div>
 </div>
 
+<form method="GET" class="mb-2">
+    <div class="row g-2">
+        <div class="col-md-8">
+            <input type="text" name="search" class="form-control" placeholder="Cari nama tujuan, kecamatan, atau kabupaten..." value="{{ search }}">
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+    <input type="hidden" name="sort" value="{{ sort }}">
+</form>
+
+<div class="mb-3 filter-status-group">
+    <a href="{{ url_for('tujuan_list', search=search, sort=sort) }}"
+       class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-dark' }}">Semua</a>
+    <a href="{{ url_for('tujuan_list', search=search, sort=sort, status='Belum Ada Rencana') }}"
+       class="btn btn-sm {{ 'btn-secondary' if status_filter == 'Belum Ada Rencana' else 'btn-outline-secondary' }}">Belum Ada Rencana</a>
+    <a href="{{ url_for('tujuan_list', search=search, sort=sort, status='Belum Dikirim') }}"
+       class="btn btn-sm {{ 'btn-danger' if status_filter == 'Belum Dikirim' else 'btn-outline-danger' }}">Belum Dikirim</a>
+    <a href="{{ url_for('tujuan_list', search=search, sort=sort, status='Sebagian') }}"
+       class="btn btn-sm {{ 'btn-warning' if status_filter == 'Sebagian' else 'btn-outline-warning' }}">Sebagian</a>
+    <a href="{{ url_for('tujuan_list', search=search, sort=sort, status='Lengkap') }}"
+       class="btn btn-sm {{ 'btn-success' if status_filter == 'Lengkap' else 'btn-outline-success' }}">Lengkap</a>
+</div>
+
 <div class="table-responsive">
 <table class="table table-hover align-middle">
     <thead>
         <tr>
             <th>No</th>
-            <th>Nama Tujuan</th>
+            <th><a href="{{ url_for('tujuan_list', search=search, status=status_filter, sort='nama') }}" class="text-dark text-decoration-none">Nama Tujuan</a></th>
             <th>Wilayah</th>
-            <th>Target Judul</th>
-            <th>Target Eksemplar</th>
-            <th>Aksi</th>
+            <th class="text-end"><a href="{{ url_for('tujuan_list', search=search, status=status_filter, sort='rencana') }}" class="text-dark text-decoration-none">Rencana</a></th>
+            <th class="text-end"><a href="{{ url_for('tujuan_list', search=search, status=status_filter, sort='persen_asc' if sort == 'persen_desc' else 'persen_desc') }}" class="text-dark text-decoration-none">Progress</a></th>
+            <th>Status</th>
         </tr>
     </thead>
     <tbody>
@@ -28,17 +53,18 @@
         <tr>
             <td class="text-muted mono">{{ loop.index }}</td>
             <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
-            <td class="small text-muted">{{ t.desa_kelurahan }}, {{ t.kecamatan }}<br>{{ t.kabupaten_kota }}, {{ t.provinsi }}</td>
-            <td class="mono">{{ t.total_judul_rencana }}</td>
-            <td class="mono">{{ t.total_rencana }}</td>
+            <td class="small text-muted">{{ t.desa_kelurahan }}, {{ t.kecamatan }}</td>
+            <td class="text-end mono">{{ t.total_judul_rencana }} judul / {{ t.total_rencana }} eks</td>
+            <td class="text-end mono">{{ t.total_terkirim }}/{{ t.total_rencana }} ({{ t.persen }}%)</td>
             <td>
-                {% if session.role == 'admin' %}
-                <a href="{{ url_for('tujuan_edit', tujuan_id=t.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                <form method="POST" action="{{ url_for('tujuan_hapus', tujuan_id=t.id) }}" class="d-inline"
-                      onsubmit="return confirm('Yakin hapus tujuan ini? Rencana distribusinya juga akan terhapus.');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
-                </form>
+                {% if t.status == 'Lengkap' %}
+                    <span class="badge bg-success">Lengkap</span>
+                {% elif t.status == 'Sebagian' %}
+                    <span class="badge bg-warning text-dark">Sebagian</span>
+                {% elif t.status == 'Belum Dikirim' %}
+                    <span class="badge bg-danger">Belum Dikirim</span>
+                {% else %}
+                    <span class="badge bg-secondary">Belum Ada Rencana</span>
                 {% endif %}
             </td>
         </tr>
