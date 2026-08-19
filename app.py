@@ -4,6 +4,8 @@ import barcode
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from barcode.writer import ImageWriter
 from flask import send_file
 from openpyxl import Workbook
@@ -103,6 +105,120 @@ def kirim_email_stok_kritis():
     except Exception as e:
         return False, f"Gagal kirim email: {str(e)}"
 
+def ambil_semua_data_backup():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM buku ORDER BY id ASC")
+    data_buku = cur.fetchall()
+
+    cur.execute("SELECT * FROM transaksi ORDER BY id ASC")
+    data_transaksi = cur.fetchall()
+
+    cur.execute("SELECT * FROM users ORDER BY id ASC")
+    data_users = cur.fetchall()
+
+    cur.close()
+    conn.close()
+    return data_buku, data_transaksi, data_users
+
+
+def buat_backup_excel():
+    data_buku, data_transaksi, data_users = ambil_semua_data_backup()
+
+    wb = Workbook()
+
+    ws_buku = wb.active
+    ws_buku.title = "Buku"
+    if data_buku:
+        headers = list(data_buku[0].keys())
+        ws_buku.append(headers)
+        for row in data_buku:
+            ws_buku.append([str(row[h]) if row[h] is not None else '' for h in headers])
+
+    ws_transaksi = wb.create_sheet("Transaksi")
+    if data_transaksi:
+        headers = list(data_transaksi[0].keys())
+        ws_transaksi.append(headers)
+        for row in data_transaksi:
+            ws_transaksi.append([str(row[h]) if row[h] is not None else '' for h in headers])
+
+    ws_users = wb.create_sheet("Users")
+    if data_users:
+        headers = [h for h in data_users[0].keys() if h != 'password_hash']
+        ws_users.append(headers)
+        for row in data_users:
+            ws_users.append([str(row[h]) if row[h] is not None else '' for h in headers])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+def buat_backup_json():
+    data_buku, data_transaksi, data_users = ambil_semua_data_backup()
+
+    def convert_row(row):
+        hasil = {}
+        for k, v in dict(row).items():
+            if hasattr(v, 'isoformat'):
+                hasil[k] = v.isoformat()
+            else:
+                hasil[k] = v
+        return hasil
+
+    backup = {
+        'dibuat_pada': datetime.now().isoformat(),
+        'buku': [convert_row(r) for r in data_buku],
+        'transaksi': [convert_row(r) for r in data_transaksi],
+        'users': [convert_row(r) for r in data_users],
+    }
+
+    output = io.BytesIO()
+    output.write(json_lib.dumps(backup, indent=2, ensure_ascii=False).encode('utf-8'))
+    output.seek(0)
+    return output
+
+
+def kirim_backup_email():
+    mail_username = os.environ.get('MAIL_USERNAME')
+    mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_to = os.environ.get('MAIL_TO')
+
+    if not all([mail_username, mail_password, mail_to]):
+        return False, "Konfigurasi email belum lengkap di environment variables."
+
+    try:
+        backup_file = buat_backup_json()
+        nama_file = f"backup-inventory-gudang-{datetime.now().strftime('%Y%m%d-%H%M')}.json"
+
+        msg = MIMEMultipart()
+        msg['Subject'] = f'📦 Backup Otomatis Inventory Gudang - {datetime.now().strftime("%d-%m-%Y")}'
+        msg['From'] = mail_username
+        msg['To'] = mail_to
+        msg.attach(MIMEText(
+            f"Backup otomatis dibuat pada {datetime.now().strftime('%d-%m-%Y %H:%M')}.\n\n"
+            f"File terlampir berisi seluruh data buku, transaksi, dan users (password terenkripsi).",
+            'plain'
+        ))
+
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(backup_file.read())
+        encoders.encode_base64(attachment)
+        attachment.add_header('Content-Disposition', f'attachment; filename="{nama_file}"')
+        msg.attach(attachment)
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(mail_username, mail_password)
+        server.sendmail(mail_username, mail_to.split(','), msg.as_string())
+        server.quit()
+
+        return True, f"Backup berhasil dikirim ke {mail_to}."
+    except Exception as e:
+        return False, f"Gagal membuat/mengirim backup: {str(e)}"
+
 def ambil_int(form, nama_field, default=0):
     """Ambil nilai integer dari form dengan aman, fallback ke default kalau kosong/tidak valid"""
     nilai = form.get(nama_field, '').strip()
@@ -136,7 +252,19 @@ def sync_ke_google_sheets():
     cur.close()
     conn.close()
 
-    header = ['No', 'ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Stok Minimum', 'Tanggal Masuk', 'Catatan']
+    header = ['No', 'ISBN', 'Judul', 'Penulis', 'Penerbit', 'Diterima', 'Rencana', 'Status', 'Stok Minimum', 'Tanggal Masuk', 'Catatan']
+
+    def hitung_status(buku):
+        if buku['jumlah_rencana'] <= 0:
+            return 'Tanpa Rencana'
+        if buku['stok'] == 0:
+            return 'Belum Ada'
+        elif buku['stok'] < buku['jumlah_rencana']:
+            return 'Sebagian'
+        elif buku['stok'] == buku['jumlah_rencana']:
+            return 'Lengkap'
+        else:
+            return 'Lebih'
 
     def buat_rows(buku_list):
         rows = [header]
@@ -144,48 +272,105 @@ def sync_ke_google_sheets():
             rows.append([
                 i, buku['isbn'], buku['judul'], buku['penulis'] or '-',
                 buku['penerbit'] or '-', buku['stok'], buku['jumlah_rencana'],
-                buku['stok_minimum'], str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-',
+                hitung_status(buku), buku['stok_minimum'],
+                str(buku['tanggal_masuk']) if buku['tanggal_masuk'] else '-',
                 buku['catatan'] or '-'
             ])
         return rows
+
+    def sanitize_nama_tab(nama):
+        nama = nama or 'Tanpa Penerbit'
+        for ch in [':', '\\', '/', '?', '*', '[', ']']:
+            nama = nama.replace(ch, '-')
+        return nama[:95]
 
     # filter buku dengan status "Sebagian", urutkan per-penerbit lalu alfabet judul
     daftar_sebagian = sorted(
         [b for b in daftar_buku if b['jumlah_rencana'] > 0 and 0 < b['stok'] < b['jumlah_rencana']],
         key=lambda b: ((b['penerbit'] or '').lower(), b['judul'].lower())
     )
+
     # filter buku dengan status "Lebih", urutkan per-penerbit lalu alfabet judul
     daftar_lebih = sorted(
         [b for b in daftar_buku if b['jumlah_rencana'] > 0 and b['stok'] > b['jumlah_rencana']],
         key=lambda b: ((b['penerbit'] or '').lower(), b['judul'].lower())
     )
+    # rekap per Tanggal Masuk + Penerbit, HANYA yang status Sebagian/Lengkap (match dashboard)
+    dari_rekap = {}
+    for b in daftar_buku:
+        if b['jumlah_rencana'] > 0 and b['stok'] > 0 and b['stok'] <= b['jumlah_rencana']:
+            tgl = str(b['tanggal_masuk']) if b['tanggal_masuk'] else '(Tanpa Tanggal)'
+            penerbit = b['penerbit'] or '(Tanpa Penerbit)'
+            key = (tgl, penerbit)
+            dari_rekap[key] = dari_rekap.get(key, 0) + 1
+
+    rekap_tanggal_rows = [['Tanggal Masuk', 'Penerbit', 'Jumlah Judul']]
+    for (tgl, penerbit) in sorted(dari_rekap.keys(), key=lambda k: (k[0], k[1].lower())):
+        rekap_tanggal_rows.append([tgl, penerbit, dari_rekap[(tgl, penerbit)]])
+
+    total_rekap = sum(dari_rekap.values())
+    rekap_tanggal_rows.append(['TOTAL', '', total_rekap])
+    # hitung ringkasan status per penerbit (persis logic Dashboard)
+    ringkasan_per_penerbit = {}
+    for b in daftar_buku:
+        nama_p = b['penerbit'] or '(Tanpa Penerbit)'
+        if nama_p not in ringkasan_per_penerbit:
+            ringkasan_per_penerbit[nama_p] = {'belum_ada': 0, 'sebagian': 0, 'lengkap': 0, 'lebih': 0, 'tanpa_rencana': 0}
+
+        if b['jumlah_rencana'] <= 0:
+            ringkasan_per_penerbit[nama_p]['tanpa_rencana'] += 1
+        elif b['stok'] == 0:
+            ringkasan_per_penerbit[nama_p]['belum_ada'] += 1
+        elif b['stok'] < b['jumlah_rencana']:
+            ringkasan_per_penerbit[nama_p]['sebagian'] += 1
+        elif b['stok'] == b['jumlah_rencana']:
+            ringkasan_per_penerbit[nama_p]['lengkap'] += 1
+        else:
+            ringkasan_per_penerbit[nama_p]['lebih'] += 1
+
+    ringkasan_header = ['Penerbit', 'Belum Ada', 'Sebagian', 'Lengkap', 'Lebih', 'Tanpa Rencana', 'Total Judul']
+    ringkasan_rows = [ringkasan_header]
+    total_keseluruhan = {'belum_ada': 0, 'sebagian': 0, 'lengkap': 0, 'lebih': 0, 'tanpa_rencana': 0}
+
+    for nama_p in sorted(ringkasan_per_penerbit.keys()):
+        s = ringkasan_per_penerbit[nama_p]
+        total_judul_p = s['belum_ada'] + s['sebagian'] + s['lengkap'] + s['lebih'] + s['tanpa_rencana']
+        ringkasan_rows.append([nama_p, s['belum_ada'], s['sebagian'], s['lengkap'], s['lebih'], s['tanpa_rencana'], total_judul_p])
+        for k in total_keseluruhan:
+            total_keseluruhan[k] += s[k]
+
+    total_semua = sum(total_keseluruhan.values())
+    ringkasan_rows.append([
+        'TOTAL KESELURUHAN', total_keseluruhan['belum_ada'], total_keseluruhan['sebagian'],
+        total_keseluruhan['lengkap'], total_keseluruhan['lebih'], total_keseluruhan['tanpa_rencana'], total_semua
+    ])
+
     try:
         sheet = service.spreadsheets()
 
-        # cek tab yang sudah ada
         meta = sheet.get(spreadsheetId=sheet_id).execute()
         tab_ada = [s['properties']['title'] for s in meta['sheets']]
 
-        # buat tab "Sebagian" dan "Lebih" kalau belum ada
         tab_baru_dibutuhkan = []
         if 'Sebagian' not in tab_ada:
             tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Sebagian'}}})
         if 'Lebih' not in tab_ada:
             tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Lebih'}}})
+        if 'Ringkasan Status' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Ringkasan Status'}}})
+        if 'Rekap per Tanggal' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Rekap per Tanggal'}}})
 
         if tab_baru_dibutuhkan:
             sheet.batchUpdate(
-                spreadsheetId=sheet_id,
-                body={'requests': tab_baru_dibutuhkan}
+                spreadsheetId=sheet_id, body={'requests': tab_baru_dibutuhkan}
             ).execute()
 
-        # kosongkan semua tab sekaligus
         sheet.values().batchClear(
             spreadsheetId=sheet_id,
-            body={'ranges': ['Sheet1', "'Sebagian'", "'Lebih'"]}
+            body={'ranges': ['Sheet1', "'Sebagian'", "'Lebih'", "'Ringkasan Status'", "'Rekap per Tanggal'"]}
         ).execute()
 
-        # tulis data ke semua tab sekaligus
         sheet.values().batchUpdate(
             spreadsheetId=sheet_id,
             body={
@@ -193,12 +378,14 @@ def sync_ke_google_sheets():
                 'data': [
                     {'range': 'Sheet1!A1', 'values': buat_rows(daftar_buku)},
                     {'range': "'Sebagian'!A1", 'values': buat_rows(daftar_sebagian)},
-                    {'range': "'Lebih'!A1", 'values': buat_rows(daftar_lebih)}
+                    {'range': "'Lebih'!A1", 'values': buat_rows(daftar_lebih)},
+                    {'range': "'Ringkasan Status'!A1", 'values': ringkasan_rows},
+                    {'range': "'Rekap per Tanggal'!A1", 'values': rekap_tanggal_rows}
                 ]
             }
         ).execute()
 
-        return True, f"Berhasil sync {len(daftar_buku)} buku ke Sheet1, {len(daftar_sebagian)} buku ke tab Sebagian, {len(daftar_lebih)} buku ke tab Lebih."
+        return True, f"Berhasil sync {len(daftar_buku)} buku. Total {total_rekap} judul (Sebagian+Lengkap) di tab 'Rekap per Tanggal', match dengan Dashboard."
     except Exception as e:
         return False, f"Gagal menulis ke Google Sheets: {str(e)}"
 # ------------------ DECORATOR: wajib login ------------------
@@ -1831,5 +2018,46 @@ def buku_sync_sheets():
 def file_terlalu_besar(e):
     flash('File terlalu besar. Maksimal ukuran file adalah 5MB.', 'danger')
     return redirect(request.referrer or url_for('dashboard'))
+
+# ------------------ BACKUP MANUAL - EXCEL ------------------
+@app.route('/admin/backup/excel')
+@login_required
+@admin_required
+def backup_excel():
+    output = buat_backup_excel()
+    filename = f"backup-inventory-gudang-{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx"
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# ------------------ BACKUP MANUAL - JSON (untuk restore) ------------------
+@app.route('/admin/backup/json')
+@login_required
+@admin_required
+def backup_json():
+    output = buat_backup_json()
+    filename = f"backup-inventory-gudang-{datetime.now().strftime('%Y%m%d-%H%M')}.json"
+    return send_file(
+        output,
+        mimetype='application/json',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# ------------------ BACKUP OTOMATIS TERJADWAL (dipanggil cron) ------------------
+@app.route('/cron/backup-otomatis')
+def cron_backup_otomatis():
+    secret = request.args.get('secret', '')
+    if secret != os.environ.get('CRON_SECRET'):
+        return {'error': 'unauthorized'}, 401
+
+    sukses, pesan = kirim_backup_email()
+    return {'success': sukses, 'message': pesan}
+
 if __name__ == '__main__':
     app.run(debug=True)
