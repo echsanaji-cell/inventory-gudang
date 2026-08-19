@@ -31,7 +31,17 @@
     </div>
     
     <div class="mb-3">
-        <label class="form-label">Untuk (peminjam/tujuan kirim)</label>
+        <label class="form-label">Tujuan</label>
+        <select name="tujuan_id" id="select-tujuan" class="form-select">
+            <option value="">-- Pilih Tujuan (opsional) --</option>
+            {% for t in daftar_tujuan %}
+            <option value="{{ t.id }}">{{ t.nama }} ({{ t.desa_kelurahan }}, {{ t.kecamatan }})</option>
+            {% endfor %}
+        </select>
+        <small class="text-muted">Kalau tujuan tidak ada di daftar, isi manual di kolom bawah.</small>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Untuk (manual, kalau tujuan tidak ada di daftar)</label>
         <input type="text" name="pihak_terkait" class="form-control">
     </div>
     <div class="mb-3">
