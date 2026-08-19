@@ -29,7 +29,7 @@ import json as json_lib
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
+app.config['MAX_CONTENT_LENGTH'] = 15 * 1024 * 1024  # 15MB
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -180,6 +180,63 @@ def buat_backup_json():
     output.seek(0)
     return output
 
+def restore_dari_backup(data_backup):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # hapus data lama, urutan penting karena foreign key
+        cur.execute("DELETE FROM transaksi")
+        cur.execute("DELETE FROM buku")
+        cur.execute("DELETE FROM users")
+
+        # restore users
+        for u in data_backup.get('users', []):
+            cur.execute(
+                """INSERT INTO users (id, username, password_hash, nama_lengkap, role, is_active, failed_attempts, locked_until, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (u['id'], u['username'], u['password_hash'], u.get('nama_lengkap'),
+                 u.get('role', 'staff'), u.get('is_active', True), u.get('failed_attempts', 0),
+                 u.get('locked_until'), u.get('created_at'))
+            )
+
+        # restore buku
+        for b in data_backup.get('buku', []):
+            cur.execute(
+                """INSERT INTO buku (id, isbn, judul, penulis, penerbit, sampul_url, stok, stok_minimum,
+                                      jumlah_rencana, tanggal_masuk, catatan, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (b['id'], b['isbn'], b['judul'], b.get('penulis'), b.get('penerbit'), b.get('sampul_url'),
+                 b.get('stok', 0), b.get('stok_minimum', 0), b.get('jumlah_rencana', 0),
+                 b.get('tanggal_masuk'), b.get('catatan'), b.get('created_at'), b.get('updated_at'))
+            )
+
+        # restore transaksi
+        for t in data_backup.get('transaksi', []):
+            cur.execute(
+                """INSERT INTO transaksi (id, buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal,
+                                           jenis_keluar, tanggal_kembali_rencana, tanggal_kembali_aktual, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (t['id'], t['buku_id'], t['tipe'], t['jumlah'], t.get('keterangan'), t.get('pihak_terkait'),
+                 t.get('user_id'), t.get('tanggal'), t.get('jenis_keluar'),
+                 t.get('tanggal_kembali_rencana'), t.get('tanggal_kembali_aktual'), t.get('created_at'))
+            )
+
+        # reset sequence ID biar data baru berikutnya nggak bentrok sama ID hasil restore
+        for tabel in ['buku', 'transaksi', 'users']:
+            cur.execute(
+                f"SELECT setval(pg_get_serial_sequence('{tabel}', 'id'), COALESCE((SELECT MAX(id) FROM {tabel}), 1))"
+            )
+
+        conn.commit()
+        jumlah = f"{len(data_backup.get('buku', []))} buku, {len(data_backup.get('transaksi', []))} transaksi, {len(data_backup.get('users', []))} users"
+        return True, f"Restore berhasil: {jumlah}."
+    except Exception as e:
+        conn.rollback()
+        return False, f"Restore GAGAL, data dikembalikan ke kondisi semula: {str(e)}"
+    finally:
+        cur.close()
+        conn.close()
 
 def kirim_backup_email():
     mail_username = os.environ.get('MAIL_USERNAME')
@@ -2058,6 +2115,49 @@ def cron_backup_otomatis():
 
     sukses, pesan = kirim_backup_email()
     return {'success': sukses, 'message': pesan}
+
+# ------------------ ADMIN: HALAMAN RESTORE ------------------
+@app.route('/admin/restore', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def restore_backup():
+    if request.method == 'POST':
+        konfirmasi = request.form.get('konfirmasi', '').strip()
+        file = request.files.get('file_backup')
+
+        if konfirmasi != 'RESTORE':
+            flash('Ketik "RESTORE" persis (huruf besar semua) untuk konfirmasi.', 'danger')
+            return render_template('admin/restore.html')
+
+        if not file or file.filename == '':
+            flash('Pilih file backup JSON dulu.', 'danger')
+            return render_template('admin/restore.html')
+
+        if not file.filename.endswith('.json'):
+            flash('File harus berformat .json (hasil dari fitur Backup JSON).', 'danger')
+            return render_template('admin/restore.html')
+
+        try:
+            data_backup = json_lib.loads(file.read().decode('utf-8'))
+        except Exception:
+            flash('File JSON tidak valid atau rusak.', 'danger')
+            return render_template('admin/restore.html')
+
+        if 'buku' not in data_backup or 'transaksi' not in data_backup or 'users' not in data_backup:
+            flash('Struktur file JSON tidak sesuai format backup aplikasi ini.', 'danger')
+            return render_template('admin/restore.html')
+
+        sukses, pesan = restore_dari_backup(data_backup)
+        flash(pesan, 'success' if sukses else 'danger')
+
+        if sukses:
+            session.clear()
+            flash('Silakan login ulang setelah restore.', 'success')
+            return redirect(url_for('login'))
+
+        return render_template('admin/restore.html')
+
+    return render_template('admin/restore.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
