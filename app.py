@@ -286,6 +286,21 @@ def ambil_int(form, nama_field, default=0):
     except (ValueError, TypeError):
         return default
     
+def catat_aktivitas(aksi, detail=''):
+    """Catat aktivitas penting ke activity_log. Gagal diam-diam kalau error, tidak boleh ganggu proses utama."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO activity_log (user_id, username, aksi, detail) VALUES (%s, %s, %s, %s)",
+            (session.get('user_id'), session.get('username'), aksi, detail)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass  # audit log tidak boleh bikin fitur utama gagal
+    
 def sync_ke_google_sheets():
     creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
     sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
@@ -1069,7 +1084,7 @@ def buku_tambah():
         conn.commit()
         cur.close()
         conn.close()
-
+        catat_aktivitas('Menambah Buku', f'Buku "{judul}" (ISBN {isbn}) ditambahkan')
         flash(f'Buku "{judul}" berhasil ditambahkan.', 'success')
         return redirect(url_for('buku_list'))
 
@@ -1111,7 +1126,7 @@ def buku_edit(buku_id):
         conn.commit()
         cur.close()
         conn.close()
-
+        catat_aktivitas('Mengedit Buku', f'Buku "{judul}" (ISBN {isbn}) diperbarui')
         flash(f'Buku "{judul}" berhasil diupdate.', 'success')
         return redirect(url_for('buku_list'))
 
@@ -1185,6 +1200,7 @@ def buku_hapus(buku_id):
         try:
             cur.execute("DELETE FROM buku WHERE id = %s", (buku_id,))
             conn.commit()
+            catat_aktivitas('Menghapus Buku', f'Buku "{buku["judul"]}" dihapus')
             flash(f'Buku "{buku["judul"]}" berhasil dihapus.', 'success')
         except Exception as e:
             conn.rollback()
@@ -1589,7 +1605,7 @@ def user_tambah():
         conn.commit()
         cur.close()
         conn.close()
-
+        catat_aktivitas('Menambah User', f'User baru "{username}" (role: {role}) ditambahkan')
         flash(f'User "{username}" berhasil ditambahkan.', 'success')
         return redirect(url_for('user_list'))
 
@@ -1607,13 +1623,16 @@ def user_toggle(user_id):
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT is_active FROM users WHERE id = %s", (user_id,))
+    cur.execute("SELECT username, is_active FROM users WHERE id = %s", (user_id,))
     user = cur.fetchone()
 
     if user:
-        cur.execute("UPDATE users SET is_active = %s WHERE id = %s", (not user['is_active'], user_id))
+        status_baru = not user['is_active']
+        cur.execute("UPDATE users SET is_active = %s WHERE id = %s", (status_baru, user_id))
         conn.commit()
         flash('Status user berhasil diubah.', 'success')
+        aksi_label = 'Mengaktifkan' if status_baru else 'Menonaktifkan'
+        catat_aktivitas(aksi_label, f'User "{user["username"]}" di{"aktifkan" if status_baru else "nonaktifkan"}')
 
     cur.close()
     conn.close()
@@ -1633,6 +1652,10 @@ def user_reset_password(user_id):
 
     conn = get_db_connection()
     cur = conn.cursor()
+
+    cur.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+    target_user = cur.fetchone()
+
     cur.execute(
         "UPDATE users SET password_hash = %s, failed_attempts = 0, locked_until = NULL WHERE id = %s",
         (generate_password_hash(password_baru), user_id)
@@ -1642,6 +1665,7 @@ def user_reset_password(user_id):
     conn.close()
 
     flash('Password berhasil direset.', 'success')
+    catat_aktivitas('Reset Password', f'Password user "{target_user["username"] if target_user else user_id}" direset')
     return redirect(url_for('user_list'))
 # ------------------ ADMIN: KIRIM NOTIFIKASI MANUAL ------------------
 @app.route('/admin/kirim-notifikasi-stok', methods=['POST'])
@@ -2052,6 +2076,7 @@ def gabung_penerbit():
         jumlah_terupdate = cur.rowcount
         conn.commit()
         print(f"[GABUNG PENERBIT] oleh {session.get('username')} pada {datetime.now()}: '{penerbit_lama}' -> '{penerbit_baru}' ({jumlah_terupdate} buku)")
+        catat_aktivitas('Menggabung Penerbit', f'"{penerbit_lama}" digabung ke "{penerbit_baru}" ({jumlah_terupdate} buku terpengaruh)')
         flash(f'{jumlah_terupdate} buku dari "{penerbit_lama}" berhasil diubah jadi "{penerbit_baru}".', 'success')
     except Exception as e:
         conn.rollback()
@@ -2158,7 +2183,7 @@ def restore_backup():
         if 'buku' not in data_backup or 'transaksi' not in data_backup or 'users' not in data_backup:
             flash('Struktur file JSON tidak sesuai format backup aplikasi ini.', 'danger')
             return render_template('admin/restore.html')
-
+        catat_aktivitas('Restore Backup', f'Database dipulihkan dari file "{file.filename}"')
         sukses, pesan = restore_dari_backup(data_backup)
         flash(pesan, 'success' if sukses else 'danger')
 
@@ -2170,6 +2195,36 @@ def restore_backup():
         return render_template('admin/restore.html')
 
     return render_template('admin/restore.html')
+
+# ------------------ ADMIN: LIHAT ACTIVITY LOG ------------------
+@app.route('/admin/activity-log')
+@login_required
+@admin_required
+def activity_log():
+    aksi_filter = request.args.get('aksi', '').strip()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = "SELECT * FROM activity_log WHERE 1=1"
+    params = []
+
+    if aksi_filter:
+        query += " AND aksi = %s"
+        params.append(aksi_filter)
+
+    query += " ORDER BY created_at DESC LIMIT 500"
+
+    cur.execute(query, tuple(params))
+    daftar_log = cur.fetchall()
+
+    cur.execute("SELECT DISTINCT aksi FROM activity_log ORDER BY aksi ASC")
+    daftar_aksi = [row['aksi'] for row in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+
+    return render_template('admin/activity_log.html', daftar_log=daftar_log, daftar_aksi=daftar_aksi, aksi_filter=aksi_filter)
 
 if __name__ == '__main__':
     app.run(debug=True)
