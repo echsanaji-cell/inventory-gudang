@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Restore Backup{% endblock %}
+{% block content %}
+<h3>Restore dari Backup</h3>
+
+<div class="card border-danger mb-4">
+    <div class="card-header bg-danger text-white">⚠️ PERINGATAN PENTING</div>
+    <div class="card-body">
+        <ul class="mb-0">
+            <li>Proses ini akan <strong>MENGHAPUS SEMUA data yang sedang berjalan</strong> (Buku, Transaksi, Users) dan menggantinya dengan isi file backup.</li>
+            <li>Aksi ini <strong>TIDAK BISA DIBATALKAN</strong> setelah berhasil.</li>
+            <li>Pastikan file yang diupload adalah backup <strong>JSON</strong> (bukan Excel) yang valid dari fitur "Backup JSON" aplikasi ini.</li>
+            <li>Setelah restore berhasil, semua orang yang sedang login (termasuk kamu) akan otomatis logout dan perlu login ulang.</li>
+            <li>Sebaiknya buat backup baru dari kondisi SEKARANG dulu sebelum restore, jaga-jaga kalau salah pilih file.</li>
+        </ul>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Backup (.json)</label>
+        <input type="file" name="file_backup" class="form-control" accept=".json" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Ketik <code>RESTORE</code> (huruf besar semua) untuk konfirmasi</label>
+        <input type="text" name="konfirmasi" class="form-control" required placeholder="RESTORE">
+    </div>
+    <button type="submit" class="btn btn-danger" onclick="return confirm('Yakin? Semua data saat ini akan diganti dan TIDAK BISA dibatalkan.');">
+        ⚠️ Restore Sekarang
+    </button>
+    <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}
