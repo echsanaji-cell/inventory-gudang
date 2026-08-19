@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Import Tujuan{% endblock %}
+{% block content %}
+<h3>Import Daftar Tujuan dari Excel</h3>
+<p class="text-muted">Upload file dengan kolom: Provinsi, Kabupaten/Kota, Kecamatan, Desa/Kelurahan, Nama Perpustakaan Desa/Kelurahan.</p>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Excel (.xlsx)</label>
+        <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-primary">📤 Import Sekarang</button>
+    <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}

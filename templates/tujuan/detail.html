@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ tujuan.nama }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3>{{ tujuan.nama }}</h3>
+        <p class="text-muted mb-0">{{ tujuan.desa_kelurahan }}, {{ tujuan.kecamatan }}, {{ tujuan.kabupaten_kota }}, {{ tujuan.provinsi }}</p>
+    </div>
+    <div>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
+        <a href="{{ url_for('tujuan_edit', tujuan_id=tujuan.id) }}" class="btn btn-outline-secondary">Edit</a>
+        {% endif %}
+        <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Kembali</a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Total Judul Rencana</h6>
+                <h2>{{ rencana|length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Eksemplar Terkirim</h6>
+                <h2>{{ total_terkirim }} / {{ total_rencana }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">Progress</h6>
+                <h2>{{ "%.0f"|format((total_terkirim / total_rencana * 100) if total_rencana > 0 else 0) }}%</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Rincian Rencana Distribusi</div>
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead>
+                <tr><th>Judul</th><th>ISBN</th><th>Penerbit</th><th>Terkirim / Rencana</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for r in rencana %}
+                <tr>
+                    <td>{{ r.judul }}</td>
+                    <td class="mono small">{{ r.isbn }}</td>
+                    <td class="small">{{ r.penerbit or '-' }}</td>
+                    <td class="mono">{{ r.jumlah_terkirim }} / {{ r.jumlah_rencana }}</td>
+                    <td>
+                        {% if r.jumlah_terkirim >= r.jumlah_rencana %}
+                            <span class="badge bg-success">Lengkap</span>
+                        {% elif r.jumlah_terkirim > 0 %}
+                            <span class="badge bg-warning text-dark">Sebagian</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Belum</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted">Belum ada rencana distribusi. Import dulu lewat tombol di atas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

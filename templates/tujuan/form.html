@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if tujuan_id else 'Tambah' }} Tujuan{% endblock %}
+{% block content %}
+<h3>{{ 'Edit Tujuan' if tujuan_id else 'Tambah Tujuan Baru' }}</h3>
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Nama Tujuan *</label>
+        <input type="text" name="nama" class="form-control" required autofocus
+               value="{{ tujuan.nama if tujuan else '' }}">
+    </div>
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Provinsi</label>
+            <input type="text" name="provinsi" class="form-control" value="{{ tujuan.provinsi if tujuan else '' }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Kabupaten/Kota</label>
+            <input type="text" name="kabupaten_kota" class="form-control" value="{{ tujuan.kabupaten_kota if tujuan else '' }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Kecamatan</label>
+            <input type="text" name="kecamatan" class="form-control" value="{{ tujuan.kecamatan if tujuan else '' }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Desa/Kelurahan</label>
+            <input type="text" name="desa_kelurahan" class="form-control" value="{{ tujuan.desa_kelurahan if tujuan else '' }}">
+        </div>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Alamat Tambahan</label>
+        <textarea name="alamat" class="form-control" rows="2">{{ tujuan.alamat if tujuan else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Catatan</label>
+        <textarea name="catatan" class="form-control" rows="2">{{ tujuan.catatan if tujuan else '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}
