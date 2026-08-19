@@ -17,7 +17,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from openpyxl import load_workbook
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
@@ -33,6 +33,7 @@ app.config['MAX_CONTENT_LENGTH'] = 15 * 1024 * 1024  # 15MB
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
 from flask_wtf import CSRFProtect
 from datetime import timedelta
 
@@ -466,6 +467,8 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('login'))
+        session.permanent = True
+        session.modified = True  # refresh waktu expired tiap ada request, biar user aktif nggak ke-logout
         return f(*args, **kwargs)
     return decorated_function
 
