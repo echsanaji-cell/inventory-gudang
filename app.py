@@ -2,6 +2,7 @@ import requests
 import os
 import barcode
 import smtplib
+import xlrd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -38,6 +39,23 @@ from flask_wtf import CSRFProtect
 from datetime import timedelta
 
 csrf = CSRFProtect(app)
+
+def baca_excel_universal(file_storage):
+    """Baca file Excel .xls maupun .xlsx, kembalikan list of rows (list of list)."""
+    nama_file = file_storage.filename.lower()
+
+    if nama_file.endswith('.xls'):
+        isi = file_storage.read()
+        wb = xlrd.open_workbook(file_contents=isi)
+        sheet = wb.sheet_by_index(0)
+        rows = []
+        for r in range(sheet.nrows):
+            rows.append([sheet.cell_value(r, c) if sheet.cell_value(r, c) != '' else None for c in range(sheet.ncols)])
+        return rows
+    else:
+        wb = load_workbook(file_storage, data_only=True)
+        ws = wb.worksheets[0]
+        return [list(row) for row in ws.iter_rows(values_only=True)]
 
 def kirim_email_stok_kritis():
     mail_username = os.environ.get('MAIL_USERNAME')
@@ -2251,6 +2269,388 @@ def activity_log():
     conn.close()
 
     return render_template('admin/activity_log.html', daftar_log=daftar_log, daftar_aksi=daftar_aksi, aksi_filter=aksi_filter)
+
+# ------------------ IMPORT TUJUAN DARI EXCEL ------------------
+@app.route('/tujuan/import', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_import():
+    if request.method == 'POST':
+        file = request.files.get('file_excel')
+
+        if not file or file.filename == '':
+            flash('Pilih file Excel dulu.', 'danger')
+            return render_template('tujuan/import.html')
+
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            flash('File harus berformat .xlsx atau .xls', 'danger')
+            return render_template('tujuan/import.html')
+
+        try:
+            wb = load_workbook(file, data_only=True)
+            ws = wb.worksheets[0]
+        except Exception:
+            flash('Gagal membaca file Excel. Pastikan formatnya benar.', 'danger')
+            return render_template('tujuan/import.html')
+
+        header_row = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
+
+        alias_kolom = {
+            'nama': ['nama perpustakaan desa/kelurahan', 'nama perpustakaan', 'nama'],
+            'provinsi': ['provinsi'],
+            'kabupaten_kota': ['kabupaten/kota', 'kabupaten', 'kota'],
+            'kecamatan': ['kecamatan'],
+            'desa_kelurahan': ['desa/kelurahan', 'desa', 'kelurahan'],
+        }
+        kolom_index = {}
+        for field, kemungkinan_nama in alias_kolom.items():
+            for nama in kemungkinan_nama:
+                if nama in header_row:
+                    kolom_index[field] = header_row.index(nama)
+                    break
+
+        if 'nama' not in kolom_index:
+            flash('Kolom "Nama Perpustakaan" tidak ditemukan di baris pertama file.', 'danger')
+            return render_template('tujuan/import.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        berhasil = 0
+        dilewati = 0
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            def ambil(field):
+                idx = kolom_index.get(field)
+                if idx is None or idx >= len(row) or row[idx] is None:
+                    return ''
+                return str(row[idx]).strip()
+
+            nama = ambil('nama')
+            if not nama:
+                continue
+
+            provinsi = ambil('provinsi')
+            kabupaten_kota = ambil('kabupaten_kota')
+            kecamatan = ambil('kecamatan')
+            desa_kelurahan = ambil('desa_kelurahan')
+
+            cur.execute(
+                """SELECT id FROM tujuan 
+                   WHERE nama = %s AND COALESCE(kecamatan, '') = %s AND COALESCE(desa_kelurahan, '') = %s""",
+                (nama, kecamatan, desa_kelurahan)
+            )
+            if cur.fetchone():
+                dilewati += 1
+                continue
+
+            cur.execute(
+                """INSERT INTO tujuan (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (nama, ambil('provinsi'), ambil('kabupaten_kota'), ambil('kecamatan'), ambil('desa_kelurahan'))
+            )
+            berhasil += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Import Tujuan', f'{berhasil} tujuan baru ditambahkan, {dilewati} dilewati (sudah ada)')
+        flash(f'{berhasil} tujuan berhasil diimpor. {dilewati} dilewati (nama sudah ada).', 'success')
+        return redirect(url_for('tujuan_list'))
+
+    return render_template('tujuan/import.html')
+
+# ------------------ ADMIN: DAFTAR TUJUAN ------------------
+@app.route('/tujuan')
+@login_required
+@viewer_blocked
+def tujuan_list():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.*, 
+             COALESCE(SUM(dr.jumlah_rencana), 0) as total_rencana,
+             COUNT(DISTINCT dr.buku_id) as total_judul_rencana
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           GROUP BY t.id
+           ORDER BY t.nama ASC"""
+    )
+    daftar_tujuan = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('tujuan/list.html', daftar_tujuan=daftar_tujuan)
+
+
+# ------------------ ADMIN: TAMBAH TUJUAN ------------------
+@app.route('/tujuan/tambah', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_tambah():
+    if request.method == 'POST':
+        nama = request.form.get('nama', '').strip()
+        provinsi = request.form.get('provinsi', '').strip()
+        kabupaten_kota = request.form.get('kabupaten_kota', '').strip()
+        kecamatan = request.form.get('kecamatan', '').strip()
+        desa_kelurahan = request.form.get('desa_kelurahan', '').strip()
+        alamat = request.form.get('alamat', '').strip()
+        catatan = request.form.get('catatan', '').strip()
+
+        if not nama:
+            flash('Nama tujuan wajib diisi.', 'danger')
+            return render_template('tujuan/form.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id FROM tujuan WHERE nama = %s", (nama,))
+        if cur.fetchone():
+            flash('Tujuan dengan nama ini sudah ada.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('tujuan/form.html')
+
+        cur.execute(
+            """INSERT INTO tujuan (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Menambah Tujuan', f'Tujuan "{nama}" ditambahkan')
+        flash(f'Tujuan "{nama}" berhasil ditambahkan.', 'success')
+        return redirect(url_for('tujuan_list'))
+
+    return render_template('tujuan/form.html')
+
+
+# ------------------ ADMIN: EDIT TUJUAN ------------------
+@app.route('/tujuan/edit/<int:tujuan_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_edit(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if request.method == 'POST':
+        nama = request.form.get('nama', '').strip()
+        provinsi = request.form.get('provinsi', '').strip()
+        kabupaten_kota = request.form.get('kabupaten_kota', '').strip()
+        kecamatan = request.form.get('kecamatan', '').strip()
+        desa_kelurahan = request.form.get('desa_kelurahan', '').strip()
+        alamat = request.form.get('alamat', '').strip()
+        catatan = request.form.get('catatan', '').strip()
+
+        if not nama:
+            flash('Nama tujuan wajib diisi.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('tujuan/form.html', tujuan=request.form, tujuan_id=tujuan_id)
+
+        cur.execute(
+            """UPDATE tujuan SET nama=%s, provinsi=%s, kabupaten_kota=%s, kecamatan=%s, desa_kelurahan=%s, alamat=%s, catatan=%s
+               WHERE id=%s""",
+            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, tujuan_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Mengedit Tujuan', f'Tujuan "{nama}" diperbarui')
+        flash(f'Tujuan "{nama}" berhasil diupdate.', 'success')
+        return redirect(url_for('tujuan_list'))
+
+    cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not tujuan:
+        flash('Tujuan tidak ditemukan.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    return render_template('tujuan/form.html', tujuan=tujuan, tujuan_id=tujuan_id)
+
+
+# ------------------ ADMIN: HAPUS TUJUAN ------------------
+@app.route('/tujuan/hapus/<int:tujuan_id>', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_hapus(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT nama FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        flash('Tujuan tidak ditemukan.', 'danger')
+    else:
+        try:
+            cur.execute("DELETE FROM distribusi_rencana WHERE tujuan_id = %s", (tujuan_id,))
+            cur.execute("DELETE FROM tujuan WHERE id = %s", (tujuan_id,))
+            conn.commit()
+            catat_aktivitas('Menghapus Tujuan', f'Tujuan "{tujuan["nama"]}" dihapus')
+            flash(f'Tujuan "{tujuan["nama"]}" berhasil dihapus.', 'success')
+        except Exception:
+            conn.rollback()
+            flash('Gagal menghapus tujuan — mungkin masih ada transaksi terkait.', 'danger')
+
+    cur.close()
+    conn.close()
+    return redirect(url_for('tujuan_list'))
+
+# ------------------ DETAIL TUJUAN + RENCANA DISTRIBUSI ------------------
+@app.route('/tujuan/<int:tujuan_id>/detail')
+@login_required
+@viewer_blocked
+def tujuan_detail(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        cur.close()
+        conn.close()
+        flash('Tujuan tidak ditemukan.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    cur.execute(
+        """SELECT dr.*, b.isbn, b.judul, b.penerbit,
+             COALESCE((
+                 SELECT SUM(t.jumlah) FROM transaksi t
+                 WHERE t.tujuan_id = dr.tujuan_id AND t.buku_id = dr.buku_id AND t.tipe = 'keluar'
+             ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN buku b ON dr.buku_id = b.id
+           WHERE dr.tujuan_id = %s
+           ORDER BY b.judul ASC""",
+        (tujuan_id,)
+    )
+    rencana = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    total_rencana = sum(r['jumlah_rencana'] for r in rencana)
+    total_terkirim = sum(r['jumlah_terkirim'] for r in rencana)
+
+    return render_template('tujuan/detail.html', tujuan=tujuan, rencana=rencana,
+                            total_rencana=total_rencana, total_terkirim=total_terkirim)
+
+
+# ------------------ IMPORT RENCANA DISTRIBUSI UNTUK 1 TUJUAN ------------------
+@app.route('/tujuan/<int:tujuan_id>/import-rencana', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_import_rencana(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        cur.close()
+        conn.close()
+        flash('Tujuan tidak ditemukan.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    if request.method == 'POST':
+        file = request.files.get('file_excel')
+
+        if not file or file.filename == '':
+            flash('Pilih file Excel dulu.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+        try:
+            semua_rows = baca_excel_universal(file)
+        except Exception as e:
+            flash(f'Gagal membaca file Excel: {str(e)}', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+        # cari baris header (file "Laporan Per Faktur" ada judul di baris atas sebelum tabel)
+        header_row_idx = None
+        kolom_index = {}
+        alias_kolom = {
+            'isbn': ['isbn'],
+            'eksemplar': ['eksemplar', 'jumlah eksemplar', 'jumlah'],
+        }
+
+        for i, row in enumerate(semua_rows[:15]):
+            row_values = [str(cell).strip().lower() if cell is not None else '' for cell in row]
+            if 'isbn' in row_values:
+                header_row_idx = i
+                for field, kemungkinan_nama in alias_kolom.items():
+                    for nama in kemungkinan_nama:
+                        if nama in row_values:
+                            kolom_index[field] = row_values.index(nama)
+                            break
+                break
+
+        if header_row_idx is None or 'isbn' not in kolom_index:
+            flash('Kolom ISBN tidak ditemukan di file.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+        berhasil = 0
+        tidak_ketemu = []
+
+        for row in semua_rows[header_row_idx + 1:]:
+            def ambil(field, default=''):
+                idx = kolom_index.get(field)
+                if idx is None or idx >= len(row) or row[idx] is None:
+                    return default
+                return row[idx]
+
+            isbn = str(ambil('isbn')).strip()
+            if not isbn or isbn.lower() == 'none':
+                continue
+
+            try:
+                eksemplar = int(float(ambil('eksemplar', 1) or 1))
+            except (ValueError, TypeError):
+                eksemplar = 1
+
+            cur.execute("SELECT id FROM buku WHERE isbn = %s", (isbn,))
+            buku = cur.fetchone()
+
+            if not buku:
+                tidak_ketemu.append(isbn)
+                continue
+
+            cur.execute(
+                """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (tujuan_id, buku_id) 
+                   DO UPDATE SET jumlah_rencana = distribusi_rencana.jumlah_rencana + EXCLUDED.jumlah_rencana""",
+                (tujuan_id, buku['id'], eksemplar)
+            )
+            berhasil += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Import Rencana Distribusi', f'{berhasil} judul untuk tujuan "{tujuan["nama"]}"')
+        pesan = f'{berhasil} rencana distribusi berhasil diimpor untuk "{tujuan["nama"]}".'
+        if tidak_ketemu:
+            pesan += f' {len(tidak_ketemu)} ISBN tidak ditemukan di master data buku.'
+        flash(pesan, 'success')
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    cur.close()
+    conn.close()
+    return render_template('tujuan/import_rencana.html', tujuan=tujuan)
 
 if __name__ == '__main__':
     app.run(debug=True)

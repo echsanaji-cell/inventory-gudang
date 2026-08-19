@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Tujuan Distribusi{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Tujuan Distribusi</h3>
+    <div>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('tujuan_import') }}" class="btn btn-outline-secondary btn-sm">📤 Import Excel</a>
+        <a href="{{ url_for('tujuan_tambah') }}" class="btn btn-primary btn-sm">+ Tambah Tujuan</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>No</th>
+            <th>Nama Tujuan</th>
+            <th>Wilayah</th>
+            <th>Target Judul</th>
+            <th>Target Eksemplar</th>
+            <th>Aksi</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in daftar_tujuan %}
+        <tr>
+            <td class="text-muted mono">{{ loop.index }}</td>
+            <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
+            <td class="small text-muted">{{ t.desa_kelurahan }}, {{ t.kecamatan }}<br>{{ t.kabupaten_kota }}, {{ t.provinsi }}</td>
+            <td class="mono">{{ t.total_judul_rencana }}</td>
+            <td class="mono">{{ t.total_rencana }}</td>
+            <td>
+                {% if session.role == 'admin' %}
+                <a href="{{ url_for('tujuan_edit', tujuan_id=t.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                <form method="POST" action="{{ url_for('tujuan_hapus', tujuan_id=t.id) }}" class="d-inline"
+                      onsubmit="return confirm('Yakin hapus tujuan ini? Rencana distribusinya juga akan terhapus.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" class="text-center text-muted">Belum ada tujuan distribusi.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

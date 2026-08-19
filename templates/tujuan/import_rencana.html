@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Import Rencana - {{ tujuan.nama }}{% endblock %}
+{% block content %}
+<h3>Import Rencana Distribusi</h3>
+<p class="text-muted">Untuk tujuan: <strong>{{ tujuan.nama }}</strong></p>
+<p class="text-muted small">Upload file dengan kolom ISBN dan Eksemplar (format sama seperti "Laporan Per Faktur"). ISBN harus sudah terdaftar di Data Buku.</p>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Excel</label>
+        <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-primary">📤 Import Sekarang</button>
+    <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id) }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}

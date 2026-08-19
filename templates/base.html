@@ -34,6 +34,7 @@
                     <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Buku Masuk</a>
                     <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Buku Keluar</a>
                     <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
+<a class="nav-link" href="{{ url_for('tujuan_list') }}">Tujuan</a>
                     {% endif %}
                     {% if session.role == 'admin' %}
 <a class="nav-link" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a>
