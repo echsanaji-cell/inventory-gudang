@@ -287,14 +287,14 @@ def ambil_int(form, nama_field, default=0):
     except (ValueError, TypeError):
         return default
     
-def catat_aktivitas(aksi, detail=''):
+def catat_aktivitas(aksi, detail='', buku_id=None):
     """Catat aktivitas penting ke activity_log. Gagal diam-diam kalau error, tidak boleh ganggu proses utama."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO activity_log (user_id, username, aksi, detail) VALUES (%s, %s, %s, %s)",
-            (session.get('user_id'), session.get('username'), aksi, detail)
+            "INSERT INTO activity_log (user_id, username, aksi, detail, buku_id) VALUES (%s, %s, %s, %s, %s)",
+            (session.get('user_id'), session.get('username'), aksi, detail, buku_id)
         )
         conn.commit()
         cur.close()
@@ -1119,6 +1119,20 @@ def buku_edit(buku_id):
             conn.close()
             return render_template('buku/form.html', buku=request.form, buku_id=buku_id)
 
+        cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
+        buku_lama = cur.fetchone()
+
+        perubahan = []
+        if buku_lama:
+            if buku_lama['judul'] != judul:
+                perubahan.append(f"judul: \"{buku_lama['judul']}\" → \"{judul}\"")
+            if buku_lama['penerbit'] != penerbit:
+                perubahan.append(f"penerbit: \"{buku_lama['penerbit'] or '-'}\" → \"{penerbit or '-'}\"")
+            if str(buku_lama['stok']) != str(stok):
+                perubahan.append(f"stok: {buku_lama['stok']} → {stok}")
+            if str(buku_lama['jumlah_rencana']) != str(jumlah_rencana):
+                perubahan.append(f"rencana: {buku_lama['jumlah_rencana']} → {jumlah_rencana}")
+
         cur.execute(
             """UPDATE buku 
                SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, 
@@ -1129,7 +1143,10 @@ def buku_edit(buku_id):
         conn.commit()
         cur.close()
         conn.close()
-        catat_aktivitas('Mengedit Buku', f'Buku "{judul}" (ISBN {isbn}) diperbarui')
+
+        detail_perubahan = '; '.join(perubahan) if perubahan else 'tidak ada perubahan data'
+        catat_aktivitas('Mengedit Buku', f'Buku "{judul}": {detail_perubahan}', buku_id=buku_id)
+
         flash(f'Buku "{judul}" berhasil diupdate.', 'success')
         return redirect(url_for('buku_list'))
 
@@ -1160,7 +1177,7 @@ def buku_detail(buku_id):
         flash('Buku tidak ditemukan.', 'danger')
         return redirect(url_for('buku_list'))
 
-    cur.execute(
+        cur.execute(
         """SELECT t.*, u.nama_lengkap, u.username
            FROM transaksi t
            LEFT JOIN users u ON t.user_id = u.id
@@ -1169,6 +1186,12 @@ def buku_detail(buku_id):
         (buku_id,)
     )
     riwayat = cur.fetchall()
+
+    cur.execute(
+        "SELECT * FROM activity_log WHERE buku_id = %s ORDER BY created_at DESC LIMIT 20",
+        (buku_id,)
+    )
+    riwayat_edit = cur.fetchall()
 
     # ringkasan total masuk & keluar sepanjang waktu untuk buku ini
     cur.execute(
@@ -1184,7 +1207,7 @@ def buku_detail(buku_id):
     cur.close()
     conn.close()
 
-    return render_template('buku/detail.html', buku=buku, riwayat=riwayat, ringkasan=ringkasan)
+    return render_template('buku/detail.html', buku=buku, riwayat=riwayat, ringkasan=ringkasan, riwayat_edit=riwayat_edit)
 
 # ------------------ HAPUS BUKU ------------------
 @app.route('/buku/hapus/<int:buku_id>', methods=['POST'])
