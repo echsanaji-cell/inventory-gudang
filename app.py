@@ -2654,6 +2654,7 @@ def tujuan_import_rencana(tujuan_id):
 
         berhasil = 0
         tidak_ketemu = []
+        agregasi_per_buku = {}
 
         for row in semua_rows[header_row_idx + 1:]:
             def ambil(field, default=''):
@@ -2678,12 +2679,15 @@ def tujuan_import_rencana(tujuan_id):
                 tidak_ketemu.append(isbn)
                 continue
 
+            agregasi_per_buku[buku['id']] = agregasi_per_buku.get(buku['id'], 0) + eksemplar
+
+        for buku_id, total_eksemplar in agregasi_per_buku.items():
             cur.execute(
                 """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
                    VALUES (%s, %s, %s)
-                   ON CONFLICT (tujuan_id, buku_id) 
-                   DO UPDATE SET jumlah_rencana = distribusi_rencana.jumlah_rencana + EXCLUDED.jumlah_rencana""",
-                (tujuan_id, buku['id'], eksemplar)
+                   ON CONFLICT (tujuan_id, buku_id)
+                   DO UPDATE SET jumlah_rencana = EXCLUDED.jumlah_rencana""",
+                (tujuan_id, buku_id, total_eksemplar)
             )
             berhasil += 1
 
@@ -2719,10 +2723,9 @@ def tujuan_import_rencana_massal():
 
         cur.execute("SELECT id, nama FROM tujuan")
         semua_tujuan = cur.fetchall()
-        # peta nama tujuan (huruf kecil, di-trim) -> LIST id, buat deteksi nama yang bentrok
         peta_tujuan = {}
         for t in semua_tujuan:
-            key = t['nama'].strip().lower()
+            key = re.sub(r'\s+', ' ', t['nama'].strip().lower())
             peta_tujuan.setdefault(key, []).append(t['id'])
 
         cur.execute("SELECT id, isbn FROM buku")
@@ -2732,6 +2735,7 @@ def tujuan_import_rencana_massal():
         file_tujuan_tidak_ketemu = []
         file_nama_bentrok = []
         file_gagal_baca = []
+        file_ada_duplikat = []  # list of (nama_file, [isbn, isbn, ...])
         total_baris_masuk = 0
         total_isbn_tidak_ketemu = 0
 
@@ -2740,13 +2744,11 @@ def tujuan_import_rencana_massal():
             if not nama_file or not nama_file.lower().endswith(('.xls', '.xlsx')):
                 continue
 
-            # ambil nama tujuan dari nama file: {nomor urut}__{Nama_Tujuan}.xls
+            # ambil nama tujuan dari nama file, buang nomor urut + pemisah apapun di depan
+            # (mendukung "684. Nama", "690__Nama", "690_Nama", "690 Nama", dst)
             nama_tanpa_ext = re.sub(r'\.(xls|xlsx)$', '', nama_file, flags=re.IGNORECASE)
-            if '__' in nama_tanpa_ext:
-                bagian_nama = nama_tanpa_ext.split('__', 1)[1]
-            else:
-                bagian_nama = nama_tanpa_ext
-            nama_tujuan_dicari = bagian_nama.replace('_', ' ').strip().lower()
+            bagian_nama = re.sub(r'^\d+[\.\s_\-]+', '', nama_tanpa_ext)
+            nama_tujuan_dicari = re.sub(r'[_\s]+', ' ', bagian_nama).strip().lower()
 
             daftar_id_cocok = peta_tujuan.get(nama_tujuan_dicari, [])
 
@@ -2755,7 +2757,7 @@ def tujuan_import_rencana_massal():
                 continue
 
             if len(daftar_id_cocok) > 1:
-                file_nama_bentrok.append(f'{nama_file} → cocok dengan {len(daftar_id_cocok)} tujuan sekaligus (nama sama, wilayah beda)')
+                file_nama_bentrok.append(f'{nama_file} → cocok dengan {len(daftar_id_cocok)} tujuan sekaligus')
                 continue
 
             tujuan_id = daftar_id_cocok[0]
@@ -2785,6 +2787,9 @@ def tujuan_import_rencana_massal():
                 file_gagal_baca.append(nama_file)
                 continue
 
+            agregasi_per_buku = {}
+            isbn_muncul = {}
+
             for row in semua_rows[header_row_idx + 1:]:
                 idx_isbn = kolom_index.get('isbn')
                 idx_eks = kolom_index.get('eksemplar')
@@ -2801,17 +2806,26 @@ def tujuan_import_rencana_massal():
                 except (ValueError, TypeError):
                     eksemplar = 1
 
+                isbn_muncul[isbn] = isbn_muncul.get(isbn, 0) + 1
+
                 buku_id = peta_buku.get(isbn)
                 if not buku_id:
                     total_isbn_tidak_ketemu += 1
                     continue
 
+                agregasi_per_buku[buku_id] = agregasi_per_buku.get(buku_id, 0) + eksemplar
+
+            isbn_dobel = [isbn for isbn, jumlah in isbn_muncul.items() if jumlah > 1]
+            if isbn_dobel:
+                file_ada_duplikat.append((nama_file, isbn_dobel))
+
+            for buku_id, total_eksemplar in agregasi_per_buku.items():
                 cur.execute(
                     """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
                        VALUES (%s, %s, %s)
                        ON CONFLICT (tujuan_id, buku_id)
-                       DO UPDATE SET jumlah_rencana = distribusi_rencana.jumlah_rencana + EXCLUDED.jumlah_rencana""",
-                    (tujuan_id, buku_id, eksemplar)
+                       DO UPDATE SET jumlah_rencana = EXCLUDED.jumlah_rencana""",
+                    (tujuan_id, buku_id, total_eksemplar)
                 )
                 total_baris_masuk += 1
 
@@ -2825,20 +2839,23 @@ def tujuan_import_rencana_massal():
 
         pesan = f'{file_berhasil} file berhasil diproses ({total_baris_masuk} baris rencana distribusi masuk).'
         if file_tujuan_tidak_ketemu:
-            pesan += f' {len(file_tujuan_tidak_ketemu)} file nama tujuannya tidak ditemukan sama sekali.'
+            pesan += f' {len(file_tujuan_tidak_ketemu)} file nama tujuannya tidak ditemukan.'
         if file_nama_bentrok:
-            pesan += f' {len(file_nama_bentrok)} file nama tujuannya BENTROK (cocok ke lebih dari 1 tujuan) — dilewati, perlu diproses manual.'
+            pesan += f' {len(file_nama_bentrok)} file nama tujuannya bentrok.'
         if file_gagal_baca:
             pesan += f' {len(file_gagal_baca)} file gagal dibaca/format salah.'
         if total_isbn_tidak_ketemu:
             pesan += f' {total_isbn_tidak_ketemu} baris ISBN tidak ditemukan di Data Buku.'
+        if file_ada_duplikat:
+            pesan += f' {len(file_ada_duplikat)} file punya ISBN dobel di dalamnya (sudah dijumlahkan otomatis, lihat detail di bawah untuk cek manual).'
 
         return render_template(
             'tujuan/import_rencana_massal.html',
             hasil=True, pesan=pesan,
             file_tujuan_tidak_ketemu=file_tujuan_tidak_ketemu,
             file_nama_bentrok=file_nama_bentrok,
-            file_gagal_baca=file_gagal_baca
+            file_gagal_baca=file_gagal_baca,
+            file_ada_duplikat=file_ada_duplikat
         )
 
     return render_template('tujuan/import_rencana_massal.html')

@@ -33,7 +33,20 @@
     </div>
 </div>
 {% endif %}
-
+{% if file_ada_duplikat %}
+<div class="card mb-3">
+    <div class="card-header bg-info-subtle">ℹ️ File dengan ISBN dobel di dalamnya ({{ file_ada_duplikat|length }})</div>
+    <div class="card-body">
+        <p class="small text-muted">Eksemplar sudah otomatis dijumlahkan, tapi cek manual disarankan untuk memastikan bukan salah input.</p>
+        {% for nama_file, daftar_isbn in file_ada_duplikat %}
+        <div class="mb-2">
+            <strong class="small">{{ nama_file }}</strong>
+            <div class="small text-muted mono">ISBN dobel: {{ daftar_isbn|join(', ') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 {% if file_gagal_baca %}
 <div class="card mb-3">
     <div class="card-header bg-danger-subtle">❌ File gagal dibaca ({{ file_gagal_baca|length }})</div>
