@@ -131,8 +131,6 @@ async function prosesScanKirim(isbn) {
         let peringatan = '';
         if (data.lebih_dari_rencana) {
             peringatan = ' ⚠️ Melebihi rencana!';
-        } else if (data.tidak_ada_rencana) {
-            peringatan = ' ℹ️ Buku ini tidak ada di rencana tujuan ini.';
         }
 
         scanKirimStatus.innerHTML = `<div class="alert alert-success py-2 mb-0">✅ ${data.judul} (${data.jumlah_terkirim}/${data.jumlah_rencana})${peringatan}</div>`;
