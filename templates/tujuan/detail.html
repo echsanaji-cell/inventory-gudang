@@ -7,6 +7,9 @@
         <p class="text-muted mb-0">{{ tujuan.desa_kelurahan }}, {{ tujuan.kecamatan }}, {{ tujuan.kabupaten_kota }}, {{ tujuan.provinsi }}</p>
     </div>
     <div>
+        <button type="button" class="btn btn-success" data-bs-toggle="collapse" data-bs-target="#panelScan">
+            📷 Mode Scan Kirim
+        </button>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
         <a href="{{ url_for('tujuan_edit', tujuan_id=tujuan.id) }}" class="btn btn-outline-secondary">Edit</a>
@@ -28,7 +31,7 @@
         <div class="card text-center">
             <div class="card-body">
                 <h6 class="text-muted">Eksemplar Terkirim</h6>
-                <h2>{{ total_terkirim }} / {{ total_rencana }}</h2>
+                <h2><span id="total-terkirim">{{ total_terkirim }}</span> / <span id="total-rencana">{{ total_rencana }}</span></h2>
             </div>
         </div>
     </div>
@@ -36,12 +39,33 @@
         <div class="card text-center">
             <div class="card-body">
                 <h6 class="text-muted">Progress</h6>
-                <h2>{{ "%.0f"|format((total_terkirim / total_rencana * 100) if total_rencana > 0 else 0) }}%</h2>
+                <h2><span id="total-persen">{{ "%.0f"|format((total_terkirim / total_rencana * 100) if total_rencana > 0 else 0) }}</span>%</h2>
             </div>
         </div>
     </div>
 </div>
-
+<div class="collapse mb-4" id="panelScan">
+    <div class="card border-success">
+        <div class="card-header bg-success text-white">📷 Mode Scan Kirim — Aktif</div>
+        <div class="card-body">
+            <div class="input-group mb-2">
+                <input type="text" id="scan-kirim-input" class="form-control form-control-lg" placeholder="Scan atau ketik ISBN di sini...">
+                <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanKirim)">
+                    📷 Kamera
+                </button>
+            </div>
+            <div id="scan-kirim-status" class="mb-2"></div>
+            <div id="scan-kirim-log" style="max-height: 300px; overflow-y: auto;">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr><th>Waktu</th><th>Judul</th><th>Terkirim/Rencana</th></tr>
+                    </thead>
+                    <tbody id="scan-kirim-log-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="card">
     <div class="card-header">Rincian Rencana Distribusi</div>
     <div class="table-responsive">
@@ -51,12 +75,12 @@
             </thead>
             <tbody>
                 {% for r in rencana %}
-                <tr>
+                <tr data-buku-id="{{ r.buku_id }}">
                     <td>{{ r.judul }}</td>
                     <td class="mono small">{{ r.isbn }}</td>
                     <td class="small">{{ r.penerbit or '-' }}</td>
-                    <td class="mono">{{ r.jumlah_terkirim }} / {{ r.jumlah_rencana }}</td>
-                    <td>
+                    <td class="mono"><span id="jumlah-terkirim-{{ r.buku_id }}">{{ r.jumlah_terkirim }}</span> / {{ r.jumlah_rencana }}</td>
+                    <td id="status-badge-{{ r.buku_id }}">
                         {% if r.jumlah_terkirim >= r.jumlah_rencana %}
                             <span class="badge bg-success">Lengkap</span>
                         {% elif r.jumlah_terkirim > 0 %}
@@ -75,4 +99,69 @@
         </table>
     </div>
 </div>
+<script>
+const scanKirimInput = document.getElementById('scan-kirim-input');
+const scanKirimStatus = document.getElementById('scan-kirim-status');
+const scanKirimLogBody = document.getElementById('scan-kirim-log-body');
+const csrfToken = '{{ csrf_token() }}';
+
+function handleScanKirim(kode) {
+    scanKirimInput.value = kode;
+    prosesScanKirim(kode);
+}
+
+initPhysicalScanner(scanKirimInput, handleScanKirim);
+
+async function prosesScanKirim(isbn) {
+    scanKirimStatus.innerHTML = '<div class="text-muted">Memproses...</div>';
+
+    try {
+        const res = await fetch('{{ url_for("tujuan_scan_kirim", tujuan_id=tujuan.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ isbn: isbn })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+            scanKirimStatus.innerHTML = `<div class="alert alert-danger py-2 mb-0">❌ ${data.message}</div>`;
+            return;
+        }
+
+        let peringatan = '';
+        if (data.lebih_dari_rencana) {
+            peringatan = ' ⚠️ Melebihi rencana!';
+        } else if (data.tidak_ada_rencana) {
+            peringatan = ' ℹ️ Buku ini tidak ada di rencana tujuan ini.';
+        }
+
+        scanKirimStatus.innerHTML = `<div class="alert alert-success py-2 mb-0">✅ ${data.judul} (${data.jumlah_terkirim}/${data.jumlah_rencana})${peringatan}</div>`;
+
+        const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const baris = document.createElement('tr');
+        baris.innerHTML = `<td class="small mono">${waktu}</td><td class="small">${data.judul}</td><td class="small mono">${data.jumlah_terkirim}/${data.jumlah_rencana}</td>`;
+        scanKirimLogBody.prepend(baris);
+
+        // update kartu total di atas
+        document.getElementById('total-terkirim').textContent = parseInt(document.getElementById('total-terkirim').textContent) + 1;
+
+        // update baris di tabel rincian kalau ketemu
+        const elJumlah = document.getElementById(`jumlah-terkirim-${data.buku_id}`);
+        if (elJumlah) {
+            elJumlah.textContent = data.jumlah_terkirim;
+            const elBadge = document.getElementById(`status-badge-${data.buku_id}`);
+            if (data.jumlah_terkirim >= data.jumlah_rencana && data.jumlah_rencana > 0) {
+                elBadge.innerHTML = '<span class="badge bg-success">Lengkap</span>';
+            } else if (data.jumlah_terkirim > 0) {
+                elBadge.innerHTML = '<span class="badge bg-warning text-dark">Sebagian</span>';
+            }
+        }
+
+        scanKirimInput.value = '';
+        scanKirimInput.focus();
+    } catch (e) {
+        scanKirimStatus.innerHTML = `<div class="alert alert-danger py-2 mb-0">❌ Gagal terhubung ke server.</div>`;
+    }
+}
+</script>
 {% endblock %}

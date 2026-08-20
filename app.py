@@ -2860,5 +2860,255 @@ def tujuan_import_rencana_massal():
 
     return render_template('tujuan/import_rencana_massal.html')
 
+# ------------------ IMPORT MASSAL PENGIRIMAN (BUKU KELUAR PER TUJUAN) ------------------
+@app.route('/tujuan/import-pengiriman-massal', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_import_pengiriman_massal():
+    if request.method == 'POST':
+        files = request.files.getlist('files')
+        tanggal_kirim = request.form.get('tanggal_kirim', '').strip() or datetime.now().date().isoformat()
+
+        if not files or files[0].filename == '':
+            flash('Pilih minimal satu file.', 'danger')
+            return render_template('tujuan/import_pengiriman_massal.html', today=datetime.now().date().isoformat())
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id, nama FROM tujuan")
+        semua_tujuan = cur.fetchall()
+        peta_tujuan = {}
+        for t in semua_tujuan:
+            key = re.sub(r'\s+', ' ', t['nama'].strip().lower())
+            peta_tujuan.setdefault(key, []).append(t['id'])
+
+        cur.execute("SELECT id, isbn, stok FROM buku")
+        peta_buku = {b['isbn'].strip(): {'id': b['id'], 'stok': b['stok']} for b in cur.fetchall()}
+
+        file_berhasil = 0
+        file_tujuan_tidak_ketemu = []
+        file_nama_bentrok = []
+        file_gagal_baca = []
+        file_ada_duplikat = []
+        file_stok_kurang = []  # (nama_file, [(isbn, diminta, tersedia), ...])
+        total_baris_masuk = 0
+        total_isbn_tidak_ketemu = 0
+
+        for f in files:
+            nama_file = f.filename
+            if not nama_file or not nama_file.lower().endswith(('.xls', '.xlsx')):
+                continue
+
+            nama_tanpa_ext = re.sub(r'\.(xls|xlsx)$', '', nama_file, flags=re.IGNORECASE)
+            bagian_nama = re.sub(r'^\d+[\.\s_\-]+', '', nama_tanpa_ext)
+            nama_tujuan_dicari = re.sub(r'[_\s]+', ' ', bagian_nama).strip().lower()
+
+            daftar_id_cocok = peta_tujuan.get(nama_tujuan_dicari, [])
+
+            if len(daftar_id_cocok) == 0:
+                file_tujuan_tidak_ketemu.append(nama_file)
+                continue
+            if len(daftar_id_cocok) > 1:
+                file_nama_bentrok.append(f'{nama_file} → cocok dengan {len(daftar_id_cocok)} tujuan sekaligus')
+                continue
+
+            tujuan_id = daftar_id_cocok[0]
+
+            try:
+                semua_rows = baca_excel_universal(f)
+            except Exception:
+                file_gagal_baca.append(nama_file)
+                continue
+
+            header_row_idx = None
+            kolom_index = {}
+            alias_kolom = {'isbn': ['isbn'], 'eksemplar': ['eksemplar', 'jumlah eksemplar', 'jumlah']}
+
+            for i, row in enumerate(semua_rows[:15]):
+                row_values = [str(cell).strip().lower() if cell is not None else '' for cell in row]
+                if 'isbn' in row_values:
+                    header_row_idx = i
+                    for field, kemungkinan_nama in alias_kolom.items():
+                        for nama in kemungkinan_nama:
+                            if nama in row_values:
+                                kolom_index[field] = row_values.index(nama)
+                                break
+                    break
+
+            if header_row_idx is None or 'isbn' not in kolom_index:
+                file_gagal_baca.append(nama_file)
+                continue
+
+            agregasi_per_buku = {}
+            isbn_muncul = {}
+
+            for row in semua_rows[header_row_idx + 1:]:
+                idx_isbn = kolom_index.get('isbn')
+                idx_eks = kolom_index.get('eksemplar')
+
+                if idx_isbn is None or idx_isbn >= len(row) or row[idx_isbn] is None:
+                    continue
+
+                isbn = str(row[idx_isbn]).strip()
+                if not isbn:
+                    continue
+
+                try:
+                    eksemplar = int(float(row[idx_eks])) if idx_eks is not None and idx_eks < len(row) and row[idx_eks] else 1
+                except (ValueError, TypeError):
+                    eksemplar = 1
+
+                isbn_muncul[isbn] = isbn_muncul.get(isbn, 0) + 1
+
+                info_buku = peta_buku.get(isbn)
+                if not info_buku:
+                    total_isbn_tidak_ketemu += 1
+                    continue
+
+                agregasi_per_buku[info_buku['id']] = agregasi_per_buku.get(info_buku['id'], 0) + eksemplar
+
+            isbn_dobel = [isbn for isbn, jumlah in isbn_muncul.items() if jumlah > 1]
+            if isbn_dobel:
+                file_ada_duplikat.append((nama_file, isbn_dobel))
+
+            # cek stok cukup sebelum proses transaksi
+            stok_kurang_file = []
+            for buku_id, jumlah_diminta in agregasi_per_buku.items():
+                cur.execute("SELECT isbn, stok FROM buku WHERE id = %s", (buku_id,))
+                b = cur.fetchone()
+                if b and b['stok'] < jumlah_diminta:
+                    stok_kurang_file.append((b['isbn'], jumlah_diminta, b['stok']))
+
+            if stok_kurang_file:
+                file_stok_kurang.append((nama_file, stok_kurang_file))
+                continue  # skip seluruh file ini, jangan proses sebagian
+
+            for buku_id, jumlah in agregasi_per_buku.items():
+                cur.execute(
+                    """INSERT INTO transaksi (buku_id, tipe, jumlah, user_id, tanggal, tujuan_id, keterangan)
+                       VALUES (%s, 'keluar', %s, %s, %s, %s, %s)""",
+                    (buku_id, jumlah, session['user_id'], tanggal_kirim, tujuan_id, f'Import massal: {nama_file}')
+                )
+                cur.execute(
+                    "UPDATE buku SET stok = stok - %s, updated_at = NOW() WHERE id = %s",
+                    (jumlah, buku_id)
+                )
+                total_baris_masuk += 1
+
+            file_berhasil += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Import Pengiriman Massal', f'{file_berhasil} file diproses, {total_baris_masuk} baris pengiriman dicatat')
+
+        pesan = f'{file_berhasil} file berhasil diproses ({total_baris_masuk} baris pengiriman dicatat).'
+        if file_tujuan_tidak_ketemu:
+            pesan += f' {len(file_tujuan_tidak_ketemu)} file nama tujuannya tidak ditemukan.'
+        if file_nama_bentrok:
+            pesan += f' {len(file_nama_bentrok)} file nama tujuannya bentrok.'
+        if file_gagal_baca:
+            pesan += f' {len(file_gagal_baca)} file gagal dibaca/format salah.'
+        if total_isbn_tidak_ketemu:
+            pesan += f' {total_isbn_tidak_ketemu} baris ISBN tidak ditemukan di Data Buku.'
+        if file_ada_duplikat:
+            pesan += f' {len(file_ada_duplikat)} file punya ISBN dobel (sudah dijumlahkan).'
+        if file_stok_kurang:
+            pesan += f' {len(file_stok_kurang)} file DILEWATI karena stok tidak cukup — lihat detail di bawah.'
+
+        return render_template(
+            'tujuan/import_pengiriman_massal.html',
+            hasil=True, pesan=pesan,
+            file_tujuan_tidak_ketemu=file_tujuan_tidak_ketemu,
+            file_nama_bentrok=file_nama_bentrok,
+            file_gagal_baca=file_gagal_baca,
+            file_ada_duplikat=file_ada_duplikat,
+            file_stok_kurang=file_stok_kurang
+        )
+
+    return render_template('tujuan/import_pengiriman_massal.html', today=datetime.now().date().isoformat())
+
+# ------------------ SCAN CEPAT: CATAT PENGIRIMAN PER SCAN ------------------
+@app.route('/tujuan/<int:tujuan_id>/scan', methods=['POST'])
+@login_required
+@viewer_blocked
+def tujuan_scan_kirim(tujuan_id):
+    isbn = request.json.get('isbn', '').strip() if request.is_json else request.form.get('isbn', '').strip()
+
+    if not isbn:
+        return {'success': False, 'message': 'ISBN kosong.'}, 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, judul, stok FROM buku WHERE isbn = %s", (isbn,))
+    buku = cur.fetchone()
+
+    if not buku:
+        cur.close()
+        conn.close()
+        return {'success': False, 'message': f'ISBN {isbn} tidak ditemukan di Data Buku.'}
+
+    if buku['stok'] <= 0:
+        cur.close()
+        conn.close()
+        return {'success': False, 'message': f'Stok "{buku["judul"]}" sudah habis (0).'}
+
+    try:
+        # cek apakah sudah ada baris transaksi scan cepat untuk buku+tujuan ini hari ini, kalau ada tambah jumlahnya
+        cur.execute(
+            """SELECT id, jumlah FROM transaksi 
+               WHERE tujuan_id = %s AND buku_id = %s AND tipe = 'keluar' 
+                     AND tanggal = CURRENT_DATE AND keterangan = 'Scan Cepat Tujuan'""",
+            (tujuan_id, buku['id'])
+        )
+        existing = cur.fetchone()
+
+        if existing:
+            cur.execute("UPDATE transaksi SET jumlah = jumlah + 1 WHERE id = %s", (existing['id'],))
+        else:
+            cur.execute(
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, user_id, tanggal, tujuan_id, keterangan)
+                   VALUES (%s, 'keluar', 1, %s, CURRENT_DATE, %s, 'Scan Cepat Tujuan')""",
+                (buku['id'], session['user_id'], tujuan_id)
+            )
+
+        cur.execute("UPDATE buku SET stok = stok - 1, updated_at = NOW() WHERE id = %s", (buku['id'],))
+
+        # ambil total rencana & total terkirim terbaru untuk buku ini di tujuan ini
+        cur.execute(
+            "SELECT jumlah_rencana FROM distribusi_rencana WHERE tujuan_id = %s AND buku_id = %s",
+            (tujuan_id, buku['id'])
+        )
+        rencana_row = cur.fetchone()
+        jumlah_rencana = rencana_row['jumlah_rencana'] if rencana_row else 0
+
+        cur.execute(
+            "SELECT COALESCE(SUM(jumlah), 0) as total FROM transaksi WHERE tujuan_id = %s AND buku_id = %s AND tipe = 'keluar'",
+            (tujuan_id, buku['id'])
+        )
+        jumlah_terkirim = cur.fetchone()['total']
+
+        conn.commit()
+
+        return {
+            'success': True,
+            'buku_id': buku['id'],
+            'judul': buku['judul'],
+            'isbn': isbn,
+            'jumlah_terkirim': jumlah_terkirim,
+            'jumlah_rencana': jumlah_rencana,
+            'lebih_dari_rencana': jumlah_rencana > 0 and jumlah_terkirim > jumlah_rencana,
+            'tidak_ada_rencana': jumlah_rencana == 0
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'message': f'Gagal memproses: {str(e)}'}
+    finally:
+        cur.close()
+        conn.close()
+
 if __name__ == '__main__':
     app.run(debug=True)
