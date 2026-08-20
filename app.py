@@ -3114,5 +3114,183 @@ def tujuan_scan_kirim(tujuan_id):
         cur.close()
         conn.close()
 
+# ------------------ EXPORT LAPORAN 1 TUJUAN - EXCEL ------------------
+@app.route('/tujuan/<int:tujuan_id>/export/excel')
+@login_required
+@viewer_blocked
+def tujuan_export_excel(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        cur.close()
+        conn.close()
+        flash('Tujuan tidak ditemukan.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    cur.execute(
+        """SELECT dr.*, b.isbn, b.judul, b.penerbit,
+             COALESCE((
+                 SELECT SUM(t.jumlah) FROM transaksi t
+                 WHERE t.tujuan_id = dr.tujuan_id AND t.buku_id = dr.buku_id AND t.tipe = 'keluar'
+             ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN buku b ON dr.buku_id = b.id
+           WHERE dr.tujuan_id = %s
+           ORDER BY b.judul ASC""",
+        (tujuan_id,)
+    )
+    rencana = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Surat Jalan"
+
+    ws.merge_cells('A1:F1')
+    ws['A1'] = f'SURAT JALAN / CHECKLIST PENGIRIMAN BUKU'
+    ws['A1'].font = Font(bold=True, size=14)
+
+    ws.merge_cells('A2:F2')
+    ws['A2'] = f'Tujuan: {tujuan["nama"]}'
+    ws['A2'].font = Font(bold=True)
+
+    ws.merge_cells('A3:F3')
+    ws['A3'] = f'{tujuan["desa_kelurahan"] or "-"}, {tujuan["kecamatan"] or "-"}, {tujuan["kabupaten_kota"] or "-"}, {tujuan["provinsi"] or "-"}'
+
+    ws['A4'] = f'Dicetak: {datetime.now().strftime("%d-%m-%Y %H:%M")}'
+
+    headers = ['No', 'ISBN', 'Judul', 'Penerbit', 'Rencana', 'Terkirim', 'Status', 'Ceklis Fisik']
+    ws.append([])
+    ws.append(headers)
+    header_row_num = ws.max_row
+    for cell in ws[header_row_num]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+
+    for i, r in enumerate(rencana, start=1):
+        if r['jumlah_terkirim'] >= r['jumlah_rencana']:
+            status = 'Lengkap'
+        elif r['jumlah_terkirim'] > 0:
+            status = 'Sebagian'
+        else:
+            status = 'Belum'
+        ws.append([i, r['isbn'], r['judul'], r['penerbit'] or '-', r['jumlah_rencana'], r['jumlah_terkirim'], status, ''])
+
+    lebar_kolom = {'A': 5, 'B': 16, 'C': 45, 'D': 25, 'E': 10, 'F': 10, 'G': 10, 'H': 14}
+    for kolom, lebar in lebar_kolom.items():
+        ws.column_dimensions[kolom].width = lebar
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    nama_file_aman = re.sub(r'[^\w\-]', '_', tujuan['nama'])
+    filename = f"surat-jalan-{nama_file_aman}-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# ------------------ EXPORT LAPORAN 1 TUJUAN - PDF ------------------
+@app.route('/tujuan/<int:tujuan_id>/export/pdf')
+@login_required
+@viewer_blocked
+def tujuan_export_pdf(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        cur.close()
+        conn.close()
+        flash('Tujuan tidak ditemukan.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    cur.execute(
+        """SELECT dr.*, b.isbn, b.judul, b.penerbit,
+             COALESCE((
+                 SELECT SUM(t.jumlah) FROM transaksi t
+                 WHERE t.tujuan_id = dr.tujuan_id AND t.buku_id = dr.buku_id AND t.tipe = 'keluar'
+             ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN buku b ON dr.buku_id = b.id
+           WHERE dr.tujuan_id = %s
+           ORDER BY b.judul ASC""",
+        (tujuan_id,)
+    )
+    rencana = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=landscape(A4),
+        topMargin=1*cm, bottomMargin=1*cm, leftMargin=1*cm, rightMargin=1*cm
+    )
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("Surat Jalan / Checklist Pengiriman Buku", styles['Title']))
+    elements.append(Paragraph(f"Tujuan: {tujuan['nama']}", styles['Heading3']))
+    elements.append(Paragraph(
+        f"{tujuan['desa_kelurahan'] or '-'}, {tujuan['kecamatan'] or '-'}, {tujuan['kabupaten_kota'] or '-'}, {tujuan['provinsi'] or '-'}",
+        styles['Normal']
+    ))
+    elements.append(Paragraph(f"Dicetak: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
+    elements.append(Spacer(1, 0.5*cm))
+
+    style_sel = ParagraphStyle('sel', fontSize=8, leading=10, fontName='Helvetica')
+    style_header = ParagraphStyle('header', fontSize=8.5, leading=10, fontName='Helvetica-Bold', textColor=colors.white)
+
+    data = [[
+        Paragraph('No', style_header), Paragraph('ISBN', style_header), Paragraph('Judul', style_header),
+        Paragraph('Penerbit', style_header), Paragraph('Rencana', style_header), Paragraph('Terkirim', style_header),
+        Paragraph('Status', style_header), Paragraph('Ceklis', style_header)
+    ]]
+    for i, r in enumerate(rencana, start=1):
+        if r['jumlah_terkirim'] >= r['jumlah_rencana']:
+            status = 'Lengkap'
+        elif r['jumlah_terkirim'] > 0:
+            status = 'Sebagian'
+        else:
+            status = 'Belum'
+        data.append([
+            Paragraph(str(i), style_sel), Paragraph(r['isbn'], style_sel), Paragraph(r['judul'], style_sel),
+            Paragraph(r['penerbit'] or '-', style_sel), Paragraph(str(r['jumlah_rencana']), style_sel),
+            Paragraph(str(r['jumlah_terkirim']), style_sel), Paragraph(status, style_sel), Paragraph('☐', style_sel)
+        ])
+
+    col_widths = [1.0*cm, 2.5*cm, 8.0*cm, 5.0*cm, 2.0*cm, 2.0*cm, 2.0*cm, 1.5*cm]
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0D6EFD')),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    output.seek(0)
+
+    nama_file_aman = re.sub(r'[^\w\-]', '_', tujuan['nama'])
+    filename = f"surat-jalan-{nama_file_aman}-{datetime.now().strftime('%Y%m%d')}.pdf"
+    return send_file(output, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
 if __name__ == '__main__':
     app.run(debug=True)
