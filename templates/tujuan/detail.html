@@ -10,6 +10,8 @@
         <button type="button" class="btn btn-success" data-bs-toggle="collapse" data-bs-target="#panelScan">
             📷 Mode Scan Kirim
         </button>
+        <a href="{{ url_for('tujuan_export_excel', tujuan_id=tujuan.id) }}" class="btn btn-outline-success">📊 Excel</a>
+        <a href="{{ url_for('tujuan_export_pdf', tujuan_id=tujuan.id) }}" class="btn btn-outline-danger">📄 PDF</a>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
         <a href="{{ url_for('tujuan_edit', tujuan_id=tujuan.id) }}" class="btn btn-outline-secondary">Edit</a>
