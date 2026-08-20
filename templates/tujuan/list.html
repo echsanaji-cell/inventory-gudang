@@ -5,7 +5,8 @@
     <h3 class="mb-0">Tujuan Distribusi</h3>
     <div>
         {% if session.role == 'admin' %}
-        <a href="{{ url_for('tujuan_import') }}" class="btn btn-outline-secondary btn-sm">📤 Import Excel</a>
+        <a href="{{ url_for('tujuan_import') }}" class="btn btn-outline-secondary btn-sm">📤 Import Tujuan</a>
+        <a href="{{ url_for('tujuan_import_rencana_massal') }}" class="btn btn-outline-primary btn-sm">📦 Import Rencana Massal</a>
         <a href="{{ url_for('tujuan_tambah') }}" class="btn btn-primary btn-sm">+ Tambah Tujuan</a>
         {% endif %}
     </div>
