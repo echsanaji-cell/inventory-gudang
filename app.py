@@ -3056,6 +3056,17 @@ def tujuan_scan_kirim(tujuan_id):
         conn.close()
         return {'success': False, 'message': f'Stok "{buku["judul"]}" sudah habis (0).'}
 
+    cur.execute(
+        "SELECT jumlah_rencana FROM distribusi_rencana WHERE tujuan_id = %s AND buku_id = %s",
+        (tujuan_id, buku['id'])
+    )
+    cek_rencana = cur.fetchone()
+
+    if not cek_rencana or cek_rencana['jumlah_rencana'] <= 0:
+        cur.close()
+        conn.close()
+        return {'success': False, 'message': f'❌ "{buku["judul"]}" TIDAK ADA di rencana distribusi tujuan ini. Ditolak.'}
+
     try:
         # cek apakah sudah ada baris transaksi scan cepat untuk buku+tujuan ini hari ini, kalau ada tambah jumlahnya
         cur.execute(
@@ -3077,13 +3088,7 @@ def tujuan_scan_kirim(tujuan_id):
 
         cur.execute("UPDATE buku SET stok = stok - 1, updated_at = NOW() WHERE id = %s", (buku['id'],))
 
-        # ambil total rencana & total terkirim terbaru untuk buku ini di tujuan ini
-        cur.execute(
-            "SELECT jumlah_rencana FROM distribusi_rencana WHERE tujuan_id = %s AND buku_id = %s",
-            (tujuan_id, buku['id'])
-        )
-        rencana_row = cur.fetchone()
-        jumlah_rencana = rencana_row['jumlah_rencana'] if rencana_row else 0
+        jumlah_rencana = cek_rencana['jumlah_rencana']
 
         cur.execute(
             "SELECT COALESCE(SUM(jumlah), 0) as total FROM transaksi WHERE tujuan_id = %s AND buku_id = %s AND tipe = 'keluar'",
@@ -3100,8 +3105,7 @@ def tujuan_scan_kirim(tujuan_id):
             'isbn': isbn,
             'jumlah_terkirim': jumlah_terkirim,
             'jumlah_rencana': jumlah_rencana,
-            'lebih_dari_rencana': jumlah_rencana > 0 and jumlah_terkirim > jumlah_rencana,
-            'tidak_ada_rencana': jumlah_rencana == 0
+            'lebih_dari_rencana': jumlah_terkirim > jumlah_rencana
         }
     except Exception as e:
         conn.rollback()
