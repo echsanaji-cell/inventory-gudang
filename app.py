@@ -3,6 +3,7 @@ import os
 import barcode
 import smtplib
 import xlrd
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -30,7 +31,7 @@ import json as json_lib
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config['MAX_CONTENT_LENGTH'] = 15 * 1024 * 1024  # 15MB
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -2424,7 +2425,7 @@ def tujuan_list():
     sort_map = {
         'nama': lambda x: x['nama'].lower(),
         'persen_asc': lambda x: x['persen'],
-        'persen_desc': lambda x: -x['persen'],
+        'persen_desc': lambda x: -x['persen'],  
         'rencana': lambda x: -x['total_rencana'],
     }
     daftar_tujuan.sort(key=sort_map.get(sort, sort_map['nama']))
@@ -2700,6 +2701,147 @@ def tujuan_import_rencana(tujuan_id):
     cur.close()
     conn.close()
     return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+# ------------------ IMPORT RENCANA DISTRIBUSI MASSAL (BANYAK FILE SEKALIGUS) ------------------
+@app.route('/tujuan/import-rencana-massal', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_import_rencana_massal():
+    if request.method == 'POST':
+        files = request.files.getlist('files')
+
+        if not files or files[0].filename == '':
+            flash('Pilih minimal satu file.', 'danger')
+            return render_template('tujuan/import_rencana_massal.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id, nama FROM tujuan")
+        semua_tujuan = cur.fetchall()
+        # peta nama tujuan (huruf kecil, di-trim) -> LIST id, buat deteksi nama yang bentrok
+        peta_tujuan = {}
+        for t in semua_tujuan:
+            key = t['nama'].strip().lower()
+            peta_tujuan.setdefault(key, []).append(t['id'])
+
+        cur.execute("SELECT id, isbn FROM buku")
+        peta_buku = {b['isbn'].strip(): b['id'] for b in cur.fetchall()}
+
+        file_berhasil = 0
+        file_tujuan_tidak_ketemu = []
+        file_nama_bentrok = []
+        file_gagal_baca = []
+        total_baris_masuk = 0
+        total_isbn_tidak_ketemu = 0
+
+        for f in files:
+            nama_file = f.filename
+            if not nama_file or not nama_file.lower().endswith(('.xls', '.xlsx')):
+                continue
+
+            # ambil nama tujuan dari nama file: {nomor urut}__{Nama_Tujuan}.xls
+            nama_tanpa_ext = re.sub(r'\.(xls|xlsx)$', '', nama_file, flags=re.IGNORECASE)
+            if '__' in nama_tanpa_ext:
+                bagian_nama = nama_tanpa_ext.split('__', 1)[1]
+            else:
+                bagian_nama = nama_tanpa_ext
+            nama_tujuan_dicari = bagian_nama.replace('_', ' ').strip().lower()
+
+            daftar_id_cocok = peta_tujuan.get(nama_tujuan_dicari, [])
+
+            if len(daftar_id_cocok) == 0:
+                file_tujuan_tidak_ketemu.append(nama_file)
+                continue
+
+            if len(daftar_id_cocok) > 1:
+                file_nama_bentrok.append(f'{nama_file} → cocok dengan {len(daftar_id_cocok)} tujuan sekaligus (nama sama, wilayah beda)')
+                continue
+
+            tujuan_id = daftar_id_cocok[0]
+
+            try:
+                semua_rows = baca_excel_universal(f)
+            except Exception:
+                file_gagal_baca.append(nama_file)
+                continue
+
+            header_row_idx = None
+            kolom_index = {}
+            alias_kolom = {'isbn': ['isbn'], 'eksemplar': ['eksemplar', 'jumlah eksemplar', 'jumlah']}
+
+            for i, row in enumerate(semua_rows[:15]):
+                row_values = [str(cell).strip().lower() if cell is not None else '' for cell in row]
+                if 'isbn' in row_values:
+                    header_row_idx = i
+                    for field, kemungkinan_nama in alias_kolom.items():
+                        for nama in kemungkinan_nama:
+                            if nama in row_values:
+                                kolom_index[field] = row_values.index(nama)
+                                break
+                    break
+
+            if header_row_idx is None or 'isbn' not in kolom_index:
+                file_gagal_baca.append(nama_file)
+                continue
+
+            for row in semua_rows[header_row_idx + 1:]:
+                idx_isbn = kolom_index.get('isbn')
+                idx_eks = kolom_index.get('eksemplar')
+
+                if idx_isbn is None or idx_isbn >= len(row) or row[idx_isbn] is None:
+                    continue
+
+                isbn = str(row[idx_isbn]).strip()
+                if not isbn:
+                    continue
+
+                try:
+                    eksemplar = int(float(row[idx_eks])) if idx_eks is not None and idx_eks < len(row) and row[idx_eks] else 1
+                except (ValueError, TypeError):
+                    eksemplar = 1
+
+                buku_id = peta_buku.get(isbn)
+                if not buku_id:
+                    total_isbn_tidak_ketemu += 1
+                    continue
+
+                cur.execute(
+                    """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (tujuan_id, buku_id)
+                       DO UPDATE SET jumlah_rencana = distribusi_rencana.jumlah_rencana + EXCLUDED.jumlah_rencana""",
+                    (tujuan_id, buku_id, eksemplar)
+                )
+                total_baris_masuk += 1
+
+            file_berhasil += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Import Rencana Massal', f'{file_berhasil} file diproses, {total_baris_masuk} baris rencana masuk')
+
+        pesan = f'{file_berhasil} file berhasil diproses ({total_baris_masuk} baris rencana distribusi masuk).'
+        if file_tujuan_tidak_ketemu:
+            pesan += f' {len(file_tujuan_tidak_ketemu)} file nama tujuannya tidak ditemukan sama sekali.'
+        if file_nama_bentrok:
+            pesan += f' {len(file_nama_bentrok)} file nama tujuannya BENTROK (cocok ke lebih dari 1 tujuan) — dilewati, perlu diproses manual.'
+        if file_gagal_baca:
+            pesan += f' {len(file_gagal_baca)} file gagal dibaca/format salah.'
+        if total_isbn_tidak_ketemu:
+            pesan += f' {total_isbn_tidak_ketemu} baris ISBN tidak ditemukan di Data Buku.'
+
+        return render_template(
+            'tujuan/import_rencana_massal.html',
+            hasil=True, pesan=pesan,
+            file_tujuan_tidak_ketemu=file_tujuan_tidak_ketemu,
+            file_nama_bentrok=file_nama_bentrok,
+            file_gagal_baca=file_gagal_baca
+        )
+
+    return render_template('tujuan/import_rencana_massal.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
