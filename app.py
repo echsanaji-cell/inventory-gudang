@@ -655,7 +655,48 @@ def dashboard():
            LIMIT 5"""
     )
     aktivitas_terbaru = cur.fetchall()
+    # ringkasan progress distribusi ke tujuan
+    cur.execute(
+        """SELECT 
+             COUNT(DISTINCT t.id) as total_tujuan,
+             COALESCE(SUM(dr.jumlah_rencana), 0) as total_rencana_distribusi
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id"""
+    )
+    ringkasan_distribusi = cur.fetchone()
 
+    cur.execute(
+        "SELECT COALESCE(SUM(jumlah), 0) as total FROM transaksi WHERE tipe = 'keluar' AND tujuan_id IS NOT NULL"
+    )
+    total_terkirim_distribusi = cur.fetchone()['total']
+
+    cur.execute(
+        """SELECT 
+             t.id,
+             COALESCE(SUM(dr.jumlah_rencana), 0) as rencana,
+             COALESCE((
+                 SELECT SUM(tr.jumlah) FROM transaksi tr 
+                 WHERE tr.tujuan_id = t.id AND tr.tipe = 'keluar'
+             ), 0) as terkirim
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           GROUP BY t.id"""
+    )
+    semua_tujuan_ringkas = cur.fetchall()
+
+    tujuan_belum_ada_rencana = 0
+    tujuan_belum_dikirim = 0
+    tujuan_sebagian = 0
+    tujuan_lengkap = 0
+    for t in semua_tujuan_ringkas:
+        if t['rencana'] == 0:
+            tujuan_belum_ada_rencana += 1
+        elif t['terkirim'] == 0:
+            tujuan_belum_dikirim += 1
+        elif t['terkirim'] < t['rencana']:
+            tujuan_sebagian += 1
+        else:
+            tujuan_lengkap += 1
     cur.close()
     conn.close()
 
@@ -666,7 +707,13 @@ def dashboard():
         transaksi_hari_ini=transaksi_hari_ini,
         aktivitas_terbaru=aktivitas_terbaru,
         status_penerimaan=status_penerimaan,
-        judul_masuk_hari_ini=judul_masuk_hari_ini
+        judul_masuk_hari_ini=judul_masuk_hari_ini,
+        ringkasan_distribusi=ringkasan_distribusi,
+        total_terkirim_distribusi=total_terkirim_distribusi,
+        tujuan_belum_ada_rencana=tujuan_belum_ada_rencana,
+        tujuan_belum_dikirim=tujuan_belum_dikirim,
+        tujuan_sebagian=tujuan_sebagian,
+        tujuan_lengkap=tujuan_lengkap
     )
 
 # ------------------ LIST BUKU ------------------
