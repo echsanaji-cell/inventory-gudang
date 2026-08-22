@@ -437,7 +437,68 @@ def sync_ke_google_sheets():
         'TOTAL KESELURUHAN', total_keseluruhan['belum_ada'], total_keseluruhan['sebagian'],
         total_keseluruhan['lengkap'], total_keseluruhan['lebih'], total_keseluruhan['tanpa_rencana'], total_semua
     ])
+    # data distribusi ke tujuan (rencana vs terkirim, per tujuan per buku)
+    conn2 = get_db_connection()
+    cur2 = conn2.cursor()
+    cur2.execute(
+        """SELECT t.nama as nama_tujuan, t.kecamatan, t.kabupaten_kota,
+                  b.isbn, b.judul, b.penerbit, dr.jumlah_rencana,
+                  COALESCE((
+                      SELECT SUM(tr.jumlah) FROM transaksi tr
+                      WHERE tr.tujuan_id = dr.tujuan_id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'
+                  ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON dr.tujuan_id = t.id
+           JOIN buku b ON dr.buku_id = b.id
+           ORDER BY t.nama ASC, b.judul ASC"""
+    )
+    data_distribusi = cur2.fetchall()
 
+    cur2.execute(
+        """SELECT t.nama, t.kecamatan, t.kabupaten_kota,
+                  COALESCE(SUM(dr.jumlah_rencana), 0) as rencana,
+                  COALESCE((
+                      SELECT SUM(tr.jumlah) FROM transaksi tr WHERE tr.tujuan_id = t.id AND tr.tipe = 'keluar'
+                  ), 0) as terkirim
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           GROUP BY t.id, t.nama, t.kecamatan, t.kabupaten_kota
+           ORDER BY t.nama ASC"""
+    )
+    data_ringkasan_tujuan = cur2.fetchall()
+    cur2.close()
+    conn2.close()
+
+    distribusi_header = ['Tujuan', 'Kecamatan', 'Kabupaten/Kota', 'ISBN', 'Judul', 'Penerbit', 'Rencana', 'Terkirim', 'Status']
+    distribusi_rows = [distribusi_header]
+    for d in data_distribusi:
+        if d['jumlah_terkirim'] >= d['jumlah_rencana']:
+            status = 'Lengkap'
+        elif d['jumlah_terkirim'] > 0:
+            status = 'Sebagian'
+        else:
+            status = 'Belum'
+        distribusi_rows.append([
+            d['nama_tujuan'], d['kecamatan'] or '-', d['kabupaten_kota'] or '-',
+            d['isbn'], d['judul'], d['penerbit'] or '-', d['jumlah_rencana'], d['jumlah_terkirim'], status
+        ])
+
+    ringkasan_tujuan_header = ['Tujuan', 'Kecamatan', 'Kabupaten/Kota', 'Rencana', 'Terkirim', 'Persen', 'Status']
+    ringkasan_tujuan_rows = [ringkasan_tujuan_header]
+    for t in data_ringkasan_tujuan:
+        persen = round((t['terkirim'] / t['rencana'] * 100), 1) if t['rencana'] > 0 else 0
+        if t['rencana'] == 0:
+            status_t = 'Belum Ada Rencana'
+        elif t['terkirim'] == 0:
+            status_t = 'Belum Dikirim'
+        elif t['terkirim'] < t['rencana']:
+            status_t = 'Sebagian'
+        else:
+            status_t = 'Lengkap'
+        ringkasan_tujuan_rows.append([
+            t['nama'], t['kecamatan'] or '-', t['kabupaten_kota'] or '-',
+            t['rencana'], t['terkirim'], f"{persen}%", status_t
+        ])
     try:
         sheet = service.spreadsheets()
 
@@ -453,6 +514,10 @@ def sync_ke_google_sheets():
             tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Ringkasan Status'}}})
         if 'Rekap per Tanggal' not in tab_ada:
             tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Rekap per Tanggal'}}})
+        if 'Distribusi Tujuan' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Distribusi Tujuan'}}})
+        if 'Ringkasan Tujuan' not in tab_ada:
+            tab_baru_dibutuhkan.append({'addSheet': {'properties': {'title': 'Ringkasan Tujuan'}}})
 
         if tab_baru_dibutuhkan:
             sheet.batchUpdate(
@@ -461,7 +526,7 @@ def sync_ke_google_sheets():
 
         sheet.values().batchClear(
             spreadsheetId=sheet_id,
-            body={'ranges': ['Sheet1', "'Sebagian'", "'Lebih'", "'Ringkasan Status'", "'Rekap per Tanggal'"]}
+            body={'ranges': ['Sheet1', "'Sebagian'", "'Lebih'", "'Ringkasan Status'", "'Rekap per Tanggal'", "'Distribusi Tujuan'", "'Ringkasan Tujuan'"]}
         ).execute()
 
         sheet.values().batchUpdate(
@@ -473,12 +538,14 @@ def sync_ke_google_sheets():
                     {'range': "'Sebagian'!A1", 'values': buat_rows(daftar_sebagian)},
                     {'range': "'Lebih'!A1", 'values': buat_rows(daftar_lebih)},
                     {'range': "'Ringkasan Status'!A1", 'values': ringkasan_rows},
-                    {'range': "'Rekap per Tanggal'!A1", 'values': rekap_tanggal_rows}
+                    {'range': "'Rekap per Tanggal'!A1", 'values': rekap_tanggal_rows},
+                    {'range': "'Distribusi Tujuan'!A1", 'values': distribusi_rows},
+                    {'range': "'Ringkasan Tujuan'!A1", 'values': ringkasan_tujuan_rows}
                 ]
             }
         ).execute()
 
-        return True, f"Berhasil sync {len(daftar_buku)} buku. Total {total_rekap} judul (Sebagian+Lengkap) di tab 'Rekap per Tanggal', match dengan Dashboard."
+        return True, f"Berhasil sync {len(daftar_buku)} buku dan {len(data_distribusi)} baris data distribusi ke {len(tab_baru_dibutuhkan) + len(tab_ada)} tab."
     except Exception as e:
         return False, f"Gagal menulis ke Google Sheets: {str(e)}"
 # ------------------ DECORATOR: wajib login ------------------
