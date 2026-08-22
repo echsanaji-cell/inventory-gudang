@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Pratinjau Import Rencana{% endblock %}
+{% block content %}
+<h3>🔍 Pratinjau Import Rencana Distribusi</h3>
+<div class="alert alert-warning">
+    <strong>Belum tersimpan.</strong> Data di bawah ini baru hasil analisis file, BELUM masuk ke database.
+    Cek dulu dengan teliti, baru klik "Konfirmasi & Simpan" kalau sudah yakin benar.
+</div>
+
+<div class="row mb-3 text-center">
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">Tujuan Terpengaruh</h6>
+            <h3>{{ total_tujuan_terpengaruh }}</h3>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">Total Eksemplar</h6>
+            <h3>{{ total_eksemplar_preview }}</h3>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">File Diproses</h6>
+            <h3>{{ ringkasan_per_file|length }}</h3>
+        </div></div>
+    </div>
+</div>
+
+{% if file_tujuan_tidak_ketemu %}
+<div class="card mb-3">
+    <div class="card-header bg-warning-subtle">⚠️ Tujuan tidak ditemukan ({{ file_tujuan_tidak_ketemu|length }})</div>
+    <div class="card-body"><ul class="small mb-0">{% for f in file_tujuan_tidak_ketemu %}<li>{{ f }}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+
+{% if file_nama_bentrok %}
+<div class="card mb-3">
+    <div class="card-header bg-danger-subtle">⚠️ Nama tujuan bentrok ({{ file_nama_bentrok|length }})</div>
+    <div class="card-body"><ul class="small mb-0">{% for f in file_nama_bentrok %}<li>{{ f }}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+
+{% if file_gagal_baca %}
+<div class="card mb-3">
+    <div class="card-header bg-danger-subtle">❌ Gagal dibaca ({{ file_gagal_baca|length }})</div>
+    <div class="card-body"><ul class="small mb-0">{% for f in file_gagal_baca %}<li>{{ f }}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+
+{% if detail_tujuan_dobel %}
+<div class="card mb-3">
+    <div class="card-header bg-info-subtle">ℹ️ Tujuan menerima lebih dari 1 file (sudah digabung otomatis)</div>
+    <div class="card-body">
+        {% for nama_tujuan, daftar_file in detail_tujuan_dobel %}
+        <div class="mb-1"><strong class="small">{{ nama_tujuan }}</strong>: <span class="small text-muted">{{ daftar_file|join(', ') }}</span></div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-3">
+    <div class="card-header">📄 Rincian per File</div>
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead>
+                <tr><th>Nama File</th><th>Tujuan Terdeteksi</th><th>Judul</th><th>Eksemplar</th><th>Catatan</th></tr>
+            </thead>
+            <tbody>
+                {% for nama_file, nama_tujuan, jml_judul, jml_eks, isbn_dobel, isbn_hilang in ringkasan_per_file %}
+                <tr>
+                    <td class="small">{{ nama_file }}</td>
+                    <td class="small"><strong>{{ nama_tujuan }}</strong></td>
+                    <td class="mono small">{{ jml_judul }}</td>
+                    <td class="mono small">{{ jml_eks }}</td>
+                    <td class="small text-muted">
+                        {% if isbn_dobel %}ISBN dobel: {{ isbn_dobel|join(', ') }}<br>{% endif %}
+                        {% if isbn_hilang %}{{ isbn_hilang }} ISBN tidak ditemukan di Data Buku{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="d-flex gap-2">
+    <form method="POST" action="{{ url_for('tujuan_import_rencana_konfirmasi') }}" onsubmit="return confirm('Yakin data di atas sudah benar? Ini akan menyimpan permanen ke database.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+        <button type="submit" class="btn btn-success">✅ Konfirmasi & Simpan Semua</button>
+    </form>
+    <form method="POST" action="{{ url_for('tujuan_import_rencana_batal') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+        <button type="submit" class="btn btn-outline-danger">✕ Batalkan, Upload Ulang</button>
+    </form>
+</div>
+{% endblock %}
