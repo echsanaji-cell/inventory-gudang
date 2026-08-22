@@ -4,6 +4,7 @@ import barcode
 import smtplib
 import xlrd
 import re
+import secrets as secrets_lib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -2774,25 +2775,23 @@ def tujuan_import_rencana_massal():
         for t in semua_tujuan:
             key = re.sub(r'\s+', ' ', t['nama'].strip().lower())
             peta_tujuan.setdefault(key, []).append(t['id'])
+        peta_nama_by_id = {t['id']: t['nama'] for t in semua_tujuan}
 
         cur.execute("SELECT id, isbn FROM buku")
         peta_buku = {b['isbn'].strip(): b['id'] for b in cur.fetchall()}
 
-        file_berhasil = 0
         file_tujuan_tidak_ketemu = []
         file_nama_bentrok = []
         file_gagal_baca = []
-        file_ada_duplikat = []  # list of (nama_file, [isbn, isbn, ...])
-        total_baris_masuk = 0
-        total_isbn_tidak_ketemu = 0
+        ringkasan_per_file = []  # (nama_file, nama_tujuan, jumlah_judul, total_eksemplar, isbn_dobel, isbn_tidak_ketemu)
+        gabungan_staging = {}  # (tujuan_id, buku_id) -> {'jumlah': int, 'files': set()}
+        tujuan_id_ke_file = {}
 
         for f in files:
             nama_file = f.filename
             if not nama_file or not nama_file.lower().endswith(('.xls', '.xlsx')):
                 continue
 
-            # ambil nama tujuan dari nama file, buang nomor urut + pemisah apapun di depan
-            # (mendukung "684. Nama", "690__Nama", "690_Nama", "690 Nama", dst)
             nama_tanpa_ext = re.sub(r'\.(xls|xlsx)$', '', nama_file, flags=re.IGNORECASE)
             bagian_nama = re.sub(r'^\d+[\.\s_\-]+', '', nama_tanpa_ext)
             nama_tujuan_dicari = re.sub(r'[_\s]+', ' ', bagian_nama).strip().lower()
@@ -2802,12 +2801,12 @@ def tujuan_import_rencana_massal():
             if len(daftar_id_cocok) == 0:
                 file_tujuan_tidak_ketemu.append(nama_file)
                 continue
-
             if len(daftar_id_cocok) > 1:
                 file_nama_bentrok.append(f'{nama_file} → cocok dengan {len(daftar_id_cocok)} tujuan sekaligus')
                 continue
 
             tujuan_id = daftar_id_cocok[0]
+            tujuan_id_ke_file.setdefault(tujuan_id, []).append(nama_file)
 
             try:
                 semua_rows = baca_excel_universal(f)
@@ -2834,8 +2833,9 @@ def tujuan_import_rencana_massal():
                 file_gagal_baca.append(nama_file)
                 continue
 
-            agregasi_per_buku = {}
+            agregasi_file_ini = {}
             isbn_muncul = {}
+            isbn_tdk_ketemu_file = 0
 
             for row in semua_rows[header_row_idx + 1:]:
                 idx_isbn = kolom_index.get('isbn')
@@ -2857,55 +2857,116 @@ def tujuan_import_rencana_massal():
 
                 buku_id = peta_buku.get(isbn)
                 if not buku_id:
-                    total_isbn_tidak_ketemu += 1
+                    isbn_tdk_ketemu_file += 1
                     continue
 
-                agregasi_per_buku[buku_id] = agregasi_per_buku.get(buku_id, 0) + eksemplar
+                agregasi_file_ini[buku_id] = agregasi_file_ini.get(buku_id, 0) + eksemplar
 
             isbn_dobel = [isbn for isbn, jumlah in isbn_muncul.items() if jumlah > 1]
-            if isbn_dobel:
-                file_ada_duplikat.append((nama_file, isbn_dobel))
 
-            for buku_id, total_eksemplar in agregasi_per_buku.items():
-                cur.execute(
-                    """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (tujuan_id, buku_id)
-                       DO UPDATE SET jumlah_rencana = EXCLUDED.jumlah_rencana""",
-                    (tujuan_id, buku_id, total_eksemplar)
-                )
-                total_baris_masuk += 1
+            for buku_id, jumlah in agregasi_file_ini.items():
+                key = (tujuan_id, buku_id)
+                if key not in gabungan_staging:
+                    gabungan_staging[key] = {'jumlah': 0, 'files': set()}
+                gabungan_staging[key]['jumlah'] += jumlah
+                gabungan_staging[key]['files'].add(nama_file)
 
-            file_berhasil += 1
+            ringkasan_per_file.append((
+                nama_file, peta_nama_by_id.get(tujuan_id, '?'),
+                len(agregasi_file_ini), sum(agregasi_file_ini.values()),
+                isbn_dobel, isbn_tdk_ketemu_file
+            ))
 
+        # simpan hasil parsing ke staging (belum masuk ke distribusi_rencana)
+        batch_id = secrets_lib.token_hex(8)
+        for (tujuan_id, buku_id), info in gabungan_staging.items():
+            cur.execute(
+                """INSERT INTO import_staging (batch_id, tujuan_id, buku_id, jumlah_rencana, nama_file)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (batch_id, tujuan_id, buku_id, info['jumlah'], ', '.join(info['files']))
+            )
         conn.commit()
         cur.close()
         conn.close()
 
-        catat_aktivitas('Import Rencana Massal', f'{file_berhasil} file diproses, {total_baris_masuk} baris rencana masuk')
+        tujuan_dobel_file = {tid: fls for tid, fls in tujuan_id_ke_file.items() if len(fls) > 1}
+        detail_tujuan_dobel = [(peta_nama_by_id.get(tid, '?'), fls) for tid, fls in tujuan_dobel_file.items()]
 
-        pesan = f'{file_berhasil} file berhasil diproses ({total_baris_masuk} baris rencana distribusi masuk).'
-        if file_tujuan_tidak_ketemu:
-            pesan += f' {len(file_tujuan_tidak_ketemu)} file nama tujuannya tidak ditemukan.'
-        if file_nama_bentrok:
-            pesan += f' {len(file_nama_bentrok)} file nama tujuannya bentrok.'
-        if file_gagal_baca:
-            pesan += f' {len(file_gagal_baca)} file gagal dibaca/format salah.'
-        if total_isbn_tidak_ketemu:
-            pesan += f' {total_isbn_tidak_ketemu} baris ISBN tidak ditemukan di Data Buku.'
-        if file_ada_duplikat:
-            pesan += f' {len(file_ada_duplikat)} file punya ISBN dobel di dalamnya (sudah dijumlahkan otomatis, lihat detail di bawah untuk cek manual).'
+        total_tujuan_terpengaruh = len(tujuan_id_ke_file)
+        total_eksemplar_preview = sum(info['jumlah'] for info in gabungan_staging.values())
 
         return render_template(
-            'tujuan/import_rencana_massal.html',
-            hasil=True, pesan=pesan,
+            'tujuan/import_rencana_preview.html',
+            batch_id=batch_id,
+            ringkasan_per_file=ringkasan_per_file,
             file_tujuan_tidak_ketemu=file_tujuan_tidak_ketemu,
             file_nama_bentrok=file_nama_bentrok,
             file_gagal_baca=file_gagal_baca,
-            file_ada_duplikat=file_ada_duplikat
+            detail_tujuan_dobel=detail_tujuan_dobel,
+            total_tujuan_terpengaruh=total_tujuan_terpengaruh,
+            total_eksemplar_preview=total_eksemplar_preview
         )
 
     return render_template('tujuan/import_rencana_massal.html')
+
+
+# ------------------ KONFIRMASI: SIMPAN HASIL PRATINJAU KE DATABASE ------------------
+@app.route('/tujuan/import-rencana-massal/konfirmasi', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_import_rencana_konfirmasi():
+    batch_id = request.form.get('batch_id', '').strip()
+    if not batch_id:
+        flash('Batch tidak valid.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM import_staging WHERE batch_id = %s", (batch_id,))
+    staging_rows = cur.fetchall()
+
+    if not staging_rows:
+        cur.close()
+        conn.close()
+        flash('Data pratinjau sudah tidak ada (mungkin sudah dikonfirmasi/dibatalkan sebelumnya).', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    for row in staging_rows:
+        cur.execute(
+            """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (tujuan_id, buku_id)
+               DO UPDATE SET jumlah_rencana = EXCLUDED.jumlah_rencana""",
+            (row['tujuan_id'], row['buku_id'], row['jumlah_rencana'])
+        )
+
+    cur.execute("DELETE FROM import_staging WHERE batch_id = %s", (batch_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Import Rencana Massal (Konfirmasi)', f'{len(staging_rows)} baris rencana dikonfirmasi dan disimpan')
+    flash(f'{len(staging_rows)} rencana distribusi berhasil disimpan.', 'success')
+    return redirect(url_for('tujuan_list'))
+
+
+# ------------------ BATALKAN PRATINJAU ------------------
+@app.route('/tujuan/import-rencana-massal/batal', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_import_rencana_batal():
+    batch_id = request.form.get('batch_id', '').strip()
+    if batch_id:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM import_staging WHERE batch_id = %s", (batch_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    flash('Import dibatalkan, tidak ada perubahan data.', 'success')
+    return redirect(url_for('tujuan_import_rencana_massal'))
 
 # ------------------ IMPORT MASSAL PENGIRIMAN (BUKU KELUAR PER TUJUAN) ------------------
 @app.route('/tujuan/import-pengiriman-massal', methods=['GET', 'POST'])
@@ -3338,6 +3399,61 @@ def tujuan_export_pdf(tujuan_id):
     nama_file_aman = re.sub(r'[^\w\-]', '_', tujuan['nama'])
     filename = f"surat-jalan-{nama_file_aman}-{datetime.now().strftime('%Y%m%d')}.pdf"
     return send_file(output, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+# ------------------ EXPORT AUDIT LENGKAP - SEMUA RENCANA DISTRIBUSI ------------------
+@app.route('/tujuan/audit-export')
+@login_required
+@admin_required
+def tujuan_audit_export():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.nama as nama_tujuan, t.kecamatan, t.kabupaten_kota,
+                  b.isbn, b.judul, b.penerbit, dr.jumlah_rencana,
+                  COALESCE((
+                      SELECT SUM(tr.jumlah) FROM transaksi tr
+                      WHERE tr.tujuan_id = dr.tujuan_id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'
+                  ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON dr.tujuan_id = t.id
+           JOIN buku b ON dr.buku_id = b.id
+           ORDER BY t.nama ASC, b.judul ASC"""
+    )
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Audit Rencana Distribusi"
+
+    headers = ['Tujuan', 'Kecamatan', 'Kabupaten/Kota', 'ISBN', 'Judul', 'Penerbit', 'Rencana', 'Terkirim']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+
+    for d in data:
+        ws.append([
+            d['nama_tujuan'], d['kecamatan'] or '-', d['kabupaten_kota'] or '-',
+            d['isbn'], d['judul'], d['penerbit'] or '-', d['jumlah_rencana'], d['jumlah_terkirim']
+        ])
+
+    lebar_kolom = {'A': 30, 'B': 20, 'C': 20, 'D': 16, 'E': 40, 'F': 25, 'G': 10, 'H': 10}
+    for kolom, lebar in lebar_kolom.items():
+        ws.column_dimensions[kolom].width = lebar
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"audit-rencana-distribusi-{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx"
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)

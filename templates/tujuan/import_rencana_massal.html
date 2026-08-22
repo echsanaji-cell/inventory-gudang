@@ -47,6 +47,22 @@
     </div>
 </div>
 {% endif %}
+{% if detail_tujuan_dobel %}
+<div class="card mb-3">
+    <div class="card-header bg-warning-subtle">⚠️ Tujuan yang menerima lebih dari 1 file ({{ detail_tujuan_dobel|length }})</div>
+    <div class="card-body">
+        <p class="small text-muted">Ini kemungkinan penyebab jumlah "file berhasil" lebih besar dari jumlah "tujuan unik" — 2+ file mengarah ke tujuan yang sama (kalau memang disengaja, misal 2 invoice untuk 1 lokasi, ini aman & datanya sudah dijumlahkan dengan benar).</p>
+        {% for nama_tujuan, daftar_file in detail_tujuan_dobel %}
+        <div class="mb-2">
+            <strong class="small">{{ nama_tujuan }}</strong>
+            <ul class="small mb-0">
+                {% for f in daftar_file %}<li>{{ f }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 {% if file_gagal_baca %}
 <div class="card mb-3">
     <div class="card-header bg-danger-subtle">❌ File gagal dibaca ({{ file_gagal_baca|length }})</div>
