@@ -3484,13 +3484,12 @@ def tujuan_audit_export():
     cur.execute(
         """SELECT t.nama as nama_tujuan, t.kecamatan, t.kabupaten_kota,
                   b.isbn, b.judul, b.penerbit, dr.jumlah_rencana,
-                  COALESCE((
-                      SELECT SUM(tr.jumlah) FROM transaksi tr
-                      WHERE tr.tujuan_id = dr.tujuan_id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'
-                  ), 0) as jumlah_terkirim
+                  COALESCE(SUM(tr.jumlah), 0) as jumlah_terkirim
            FROM distribusi_rencana dr
            JOIN tujuan t ON dr.tujuan_id = t.id
            JOIN buku b ON dr.buku_id = b.id
+           LEFT JOIN transaksi tr ON tr.tujuan_id = dr.tujuan_id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'
+           GROUP BY t.nama, t.kecamatan, t.kabupaten_kota, b.isbn, b.judul, b.penerbit, dr.jumlah_rencana
            ORDER BY t.nama ASC, b.judul ASC"""
     )
     data = cur.fetchall()

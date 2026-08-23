@@ -8,7 +8,10 @@
         <a href="{{ url_for('tujuan_import') }}" class="btn btn-outline-secondary btn-sm">📤 Import Tujuan</a>
         <a href="{{ url_for('tujuan_import_rencana_massal') }}" class="btn btn-outline-primary btn-sm">📦 Import Rencana Massal</a>
         <a href="{{ url_for('tujuan_import_pengiriman_massal') }}" class="btn btn-outline-success btn-sm">🚚 Import Pengiriman Massal</a>
-        <a href="{{ url_for('tujuan_audit_export') }}" class="btn btn-outline-dark btn-sm">🔍 Export Audit Lengkap</a>
+        <a href="{{ url_for('tujuan_audit_export') }}" class="btn btn-outline-dark btn-sm" id="btn-audit-export"
+           onclick="this.innerHTML='⏳ Memproses...'; this.classList.add('disabled'); setTimeout(() => { this.innerHTML='🔍 Export Audit Lengkap'; this.classList.remove('disabled'); }, 15000);">
+            🔍 Export Audit Lengkap
+        </a>
         <a href="{{ url_for('tujuan_tambah') }}" class="btn btn-primary btn-sm">+ Tambah Tujuan</a>
         {% endif %}
     </div>
