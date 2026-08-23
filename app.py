@@ -2379,7 +2379,14 @@ def activity_log():
     query += " ORDER BY created_at DESC LIMIT 500"
 
     cur.execute(query, tuple(params))
-    daftar_log = cur.fetchall()
+    daftar_log_raw = cur.fetchall()
+
+    daftar_log = []
+    for log in daftar_log_raw:
+        log_dict = dict(log)
+        if log_dict.get('created_at'):
+            log_dict['created_at'] = log_dict['created_at'] + timedelta(hours=7)
+        daftar_log.append(log_dict)
 
     cur.execute("SELECT DISTINCT aksi FROM activity_log ORDER BY aksi ASC")
     daftar_aksi = [row['aksi'] for row in cur.fetchall()]
