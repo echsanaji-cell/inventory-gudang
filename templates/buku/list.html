@@ -42,10 +42,15 @@
 <div class="collapse {{ 'show' if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai else '' }}" id="filterPanel">
     <div class="card mb-3">
         <div class="card-body">
-            <form method="GET">
-                <div class="mb-2">
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
-                </div>
+            <form method="GET" id="form-cari-buku">
+    <div class="mb-2">
+        <div class="input-group input-group-sm">
+            <input type="text" name="search" id="input-cari-buku" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
+            <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariBuku)">
+                📷 Scan
+            </button>
+        </div>
+    </div>
                 <div class="mb-2">
                     <select name="penerbit" class="form-select form-select-sm">
                         <option value="">-- Semua Penerbit --</option>
@@ -173,4 +178,12 @@
     </tbody>
 </table>
 </div>
+<script>
+function handleScanCariBuku(kode) {
+    document.getElementById('input-cari-buku').value = kode;
+    document.getElementById('form-cari-buku').submit();
+}
+
+initPhysicalScanner(document.getElementById('input-cari-buku'), handleScanCariBuku);
+</script>
 {% endblock %}
