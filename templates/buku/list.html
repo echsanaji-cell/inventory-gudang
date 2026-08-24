@@ -39,18 +39,26 @@
     </div>
 </div>
 
-<div class="collapse {{ 'show' if search or status_filter or penerbit_filter or tgl_dari or tgl_sampai else '' }}" id="filterPanel">
+<form method="GET" id="form-cari-buku" class="mb-2">
+    <div class="input-group">
+        <input type="text" name="search" id="input-cari-buku" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
+        <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariBuku)">
+            📷 Scan
+        </button>
+        <button class="btn btn-outline-secondary" type="submit">Cari</button>
+    </div>
+    <input type="hidden" name="penerbit" value="{{ penerbit_filter }}">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="hidden" name="tgl_dari" value="{{ tgl_dari }}">
+    <input type="hidden" name="tgl_sampai" value="{{ tgl_sampai }}">
+    <input type="hidden" name="catatan" value="{{ catatan_filter }}">
+</form>
+
+<div class="collapse {{ 'show' if status_filter or penerbit_filter or tgl_dari or tgl_sampai or catatan_filter else '' }}" id="filterPanel">
     <div class="card mb-3">
         <div class="card-body">
-            <form method="GET" id="form-cari-buku">
-    <div class="mb-2">
-        <div class="input-group input-group-sm">
-            <input type="text" name="search" id="input-cari-buku" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
-            <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariBuku)">
-                📷 Scan
-            </button>
-        </div>
-    </div>
+            <form method="GET">
+                <input type="hidden" name="search" value="{{ search }}">
                 <div class="mb-2">
                     <select name="penerbit" class="form-select form-select-sm">
                         <option value="">-- Semua Penerbit --</option>
@@ -69,7 +77,7 @@
                         <input type="date" name="tgl_sampai" class="form-control form-control-sm" value="{{ tgl_sampai }}">
                     </div>
                 </div>
-                <input type="hidden" name="status" value="{{ status_filter }}" id="hiddenStatus">
+                
                 <button class="btn btn-sm btn-primary w-100 mb-2" type="submit">Terapkan Filter</button>
             </form>
 
