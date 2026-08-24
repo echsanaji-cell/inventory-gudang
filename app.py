@@ -2857,9 +2857,13 @@ def tujuan_import_rencana_massal():
         file_tujuan_tidak_ketemu = []
         file_nama_bentrok = []
         file_gagal_baca = []
-        ringkasan_per_file = []  # (nama_file, nama_tujuan, jumlah_judul, total_eksemplar, isbn_dobel, isbn_tidak_ketemu)
+        cur.execute("SELECT DISTINCT tujuan_id FROM distribusi_rencana")
+        tujuan_sudah_ada_rencana = {row['tujuan_id'] for row in cur.fetchall()}
+
+        ringkasan_per_file = []  # (nama_file, nama_tujuan, jumlah_judul, total_eksemplar, isbn_dobel, isbn_tidak_ketemu, sudah_ada_data_lama)
         gabungan_staging = {}  # (tujuan_id, buku_id) -> {'jumlah': int, 'files': set()}
         tujuan_id_ke_file = {}
+        tujuan_akan_overwrite = set()
 
         for f in files:
             nama_file = f.filename
@@ -2881,6 +2885,9 @@ def tujuan_import_rencana_massal():
 
             tujuan_id = daftar_id_cocok[0]
             tujuan_id_ke_file.setdefault(tujuan_id, []).append(nama_file)
+
+            if tujuan_id in tujuan_sudah_ada_rencana:
+                tujuan_akan_overwrite.add(tujuan_id)
 
             try:
                 semua_rows = baca_excel_universal(f)
@@ -2948,7 +2955,8 @@ def tujuan_import_rencana_massal():
             ringkasan_per_file.append((
                 nama_file, peta_nama_by_id.get(tujuan_id, '?'),
                 len(agregasi_file_ini), sum(agregasi_file_ini.values()),
-                isbn_dobel, isbn_tdk_ketemu_file
+                isbn_dobel, isbn_tdk_ketemu_file,
+                tujuan_id in tujuan_sudah_ada_rencana
             ))
 
         # simpan hasil parsing ke staging (belum masuk ke distribusi_rencana)
@@ -2969,6 +2977,8 @@ def tujuan_import_rencana_massal():
         total_tujuan_terpengaruh = len(tujuan_id_ke_file)
         total_eksemplar_preview = sum(info['jumlah'] for info in gabungan_staging.values())
 
+        daftar_nama_tujuan_overwrite = [peta_nama_by_id.get(tid, '?') for tid in tujuan_akan_overwrite]
+
         return render_template(
             'tujuan/import_rencana_preview.html',
             batch_id=batch_id,
@@ -2978,7 +2988,8 @@ def tujuan_import_rencana_massal():
             file_gagal_baca=file_gagal_baca,
             detail_tujuan_dobel=detail_tujuan_dobel,
             total_tujuan_terpengaruh=total_tujuan_terpengaruh,
-            total_eksemplar_preview=total_eksemplar_preview
+            total_eksemplar_preview=total_eksemplar_preview,
+            daftar_nama_tujuan_overwrite=daftar_nama_tujuan_overwrite
         )
 
     return render_template('tujuan/import_rencana_massal.html')

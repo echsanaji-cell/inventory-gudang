@@ -15,6 +15,11 @@
         {% if session.role == 'admin' %}
         <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
         <a href="{{ url_for('tujuan_edit', tujuan_id=tujuan.id) }}" class="btn btn-outline-secondary">Edit</a>
+        <form method="POST" action="{{ url_for('tujuan_hapus', tujuan_id=tujuan.id) }}" class="d-inline"
+              onsubmit="return confirm('Yakin hapus tujuan ini? Rencana distribusinya juga akan terhapus.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger">🗑️ Hapus Tujuan</button>
+        </form>
         {% endif %}
         <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Kembali</a>
     </div>

@@ -6,7 +6,17 @@
     <strong>Belum tersimpan.</strong> Data di bawah ini baru hasil analisis file, BELUM masuk ke database.
     Cek dulu dengan teliti, baru klik "Konfirmasi & Simpan" kalau sudah yakin benar.
 </div>
-
+{% if daftar_nama_tujuan_overwrite %}
+<div class="alert alert-danger">
+    <strong>⚠️ {{ daftar_nama_tujuan_overwrite|length }} tujuan berikut SUDAH PERNAH punya rencana distribusi sebelumnya.</strong>
+    Kalau kamu konfirmasi, data lama untuk tujuan-tujuan ini akan <strong>DITIMPA (overwrite)</strong> dengan data dari file yang baru saja diupload.
+    <ul class="small mb-0 mt-2">
+        {% for nama in daftar_nama_tujuan_overwrite %}
+        <li>{{ nama }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
 <div class="row mb-3 text-center">
     <div class="col-md-4">
         <div class="card"><div class="card-body">
@@ -65,22 +75,25 @@
     <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead>
-                <tr><th>Nama File</th><th>Tujuan Terdeteksi</th><th>Judul</th><th>Eksemplar</th><th>Catatan</th></tr>
-            </thead>
-            <tbody>
-                {% for nama_file, nama_tujuan, jml_judul, jml_eks, isbn_dobel, isbn_hilang in ringkasan_per_file %}
-                <tr>
-                    <td class="small">{{ nama_file }}</td>
-                    <td class="small"><strong>{{ nama_tujuan }}</strong></td>
-                    <td class="mono small">{{ jml_judul }}</td>
-                    <td class="mono small">{{ jml_eks }}</td>
-                    <td class="small text-muted">
-                        {% if isbn_dobel %}ISBN dobel: {{ isbn_dobel|join(', ') }}<br>{% endif %}
-                        {% if isbn_hilang %}{{ isbn_hilang }} ISBN tidak ditemukan di Data Buku{% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
+    <tr><th>Nama File</th><th>Tujuan Terdeteksi</th><th>Judul</th><th>Eksemplar</th><th>Catatan</th></tr>
+</thead>
+<tbody>
+    {% for nama_file, nama_tujuan, jml_judul, jml_eks, isbn_dobel, isbn_hilang, sudah_ada_lama in ringkasan_per_file %}
+    <tr class="{{ 'table-danger' if sudah_ada_lama else '' }}">
+        <td class="small">{{ nama_file }}</td>
+        <td class="small">
+            <strong>{{ nama_tujuan }}</strong>
+            {% if sudah_ada_lama %}<span class="badge bg-danger">⚠️ Akan Overwrite</span>{% endif %}
+        </td>
+        <td class="mono small">{{ jml_judul }}</td>
+        <td class="mono small">{{ jml_eks }}</td>
+        <td class="small text-muted">
+            {% if isbn_dobel %}ISBN dobel: {{ isbn_dobel|join(', ') }}<br>{% endif %}
+            {% if isbn_hilang %}{{ isbn_hilang }} ISBN tidak ditemukan di Data Buku{% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</tbody>
         </table>
     </div>
 </div>
