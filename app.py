@@ -5,6 +5,7 @@ import smtplib
 import xlrd
 import re
 import secrets as secrets_lib
+import gc
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -33,7 +34,7 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
+app.config['MAX_CONTENT_LENGTH'] = 40 * 1024 * 1024  # 40MB — lebih aman untuk RAM terbatas
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -2905,6 +2906,10 @@ def tujuan_import_rencana_massal():
             flash('Pilih minimal satu file.', 'danger')
             return render_template('tujuan/import_rencana_massal.html')
 
+        if len(files) > 100:
+            flash(f'Terlalu banyak file sekaligus ({len(files)}). Maksimal 100 file per upload untuk menjaga stabilitas server. Silakan upload bertahap.', 'danger')
+            return render_template('tujuan/import_rencana_massal.html')
+
         conn = get_db_connection()
         cur = conn.cursor()
 
@@ -3024,6 +3029,9 @@ def tujuan_import_rencana_massal():
                 tujuan_id in tujuan_sudah_ada_rencana
             ))
 
+            del semua_rows
+            gc.collect()
+
         # simpan hasil parsing ke staging (belum masuk ke distribusi_rencana)
         batch_id = secrets_lib.token_hex(8)
         for (tujuan_id, buku_id), info in gabungan_staging.items():
@@ -3129,7 +3137,11 @@ def tujuan_import_pengiriman_massal():
 
         if not files or files[0].filename == '':
             flash('Pilih minimal satu file.', 'danger')
-            return render_template('tujuan/import_pengiriman_massal.html', today=datetime.now().date().isoformat())
+            return render_template('tujuan/import_pengiriman_massal.html')
+
+        if len(files) > 100:
+            flash(f'Terlalu banyak file sekaligus ({len(files)}). Maksimal 100 file per upload untuk menjaga stabilitas server. Silakan upload bertahap.', 'danger')
+            return render_template('tujuan/import_pengiriman_massal.html')
 
         conn = get_db_connection()
         cur = conn.cursor()
@@ -3255,6 +3267,8 @@ def tujuan_import_pengiriman_massal():
                 total_baris_masuk += 1
 
             file_berhasil += 1
+            del semua_rows
+            gc.collect()
 
         conn.commit()
         cur.close()
