@@ -29,6 +29,7 @@ from reportlab.lib.styles import ParagraphStyle
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import json as json_lib
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -43,21 +44,60 @@ from datetime import timedelta
 csrf = CSRFProtect(app)
 
 def baca_excel_universal(file_storage):
-    """Baca file Excel .xls maupun .xlsx, kembalikan list of rows (list of list)."""
+    """Baca file Excel .xls maupun .xlsx, dengan fallback ke HTML (file .xls palsu yang sebenarnya HTML table)."""
     nama_file = file_storage.filename.lower()
 
     if nama_file.endswith('.xls'):
         isi = file_storage.read()
-        wb = xlrd.open_workbook(file_contents=isi)
-        sheet = wb.sheet_by_index(0)
-        rows = []
-        for r in range(sheet.nrows):
-            rows.append([sheet.cell_value(r, c) if sheet.cell_value(r, c) != '' else None for c in range(sheet.ncols)])
-        return rows
+        try:
+            wb = xlrd.open_workbook(file_contents=isi)
+            sheet = wb.sheet_by_index(0)
+            rows = []
+            for r in range(sheet.nrows):
+                rows.append([sheet.cell_value(r, c) if sheet.cell_value(r, c) != '' else None for c in range(sheet.ncols)])
+            return rows
+        except Exception:
+            # bukan file Excel asli, kemungkinan HTML table menyamar jadi .xls
+            return baca_html_table_sebagai_rows(isi)
     else:
-        wb = load_workbook(file_storage, data_only=True)
-        ws = wb.worksheets[0]
-        return [list(row) for row in ws.iter_rows(values_only=True)]
+        try:
+            wb = load_workbook(file_storage, data_only=True)
+            ws = wb.worksheets[0]
+            return [list(row) for row in ws.iter_rows(values_only=True)]
+        except Exception:
+            file_storage.seek(0)
+            isi = file_storage.read()
+            return baca_html_table_sebagai_rows(isi)
+
+
+def baca_html_table_sebagai_rows(isi_bytes):
+    """Parse file HTML (yang menyamar sebagai .xls) jadi list of rows, ambil tabel terbesar di dalamnya."""
+    for encoding in ['utf-8', 'windows-1252', 'latin-1']:
+        try:
+            teks = isi_bytes.decode(encoding)
+            break
+        except (UnicodeDecodeError, AttributeError):
+            continue
+    else:
+        teks = isi_bytes.decode('utf-8', errors='ignore')
+
+    soup = BeautifulSoup(teks, 'lxml')
+    tables = soup.find_all('table')
+
+    if not tables:
+        raise ValueError('Tidak ditemukan tabel di dalam file.')
+
+    # ambil tabel dengan baris terbanyak (biasanya itu tabel data utamanya)
+    tabel_terpilih = max(tables, key=lambda t: len(t.find_all('tr')))
+
+    rows = []
+    for tr in tabel_terpilih.find_all('tr'):
+        sel = tr.find_all(['td', 'th'])
+        baris = [cell.get_text(strip=True) or None for cell in sel]
+        if baris:
+            rows.append(baris)
+
+    return rows
 
 def kirim_email_stok_kritis():
     mail_username = os.environ.get('MAIL_USERNAME')
