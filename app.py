@@ -834,6 +834,8 @@ def buku_list():
     tgl_dari = request.args.get('tgl_dari', '').strip()
     tgl_sampai = request.args.get('tgl_sampai', '').strip()
     catatan_filter = request.args.get('catatan', '').strip()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
     catatan_filter = request.args.get('catatan', '').strip()
 
     conn = get_db_connection()
@@ -872,9 +874,18 @@ def buku_list():
     elif catatan_filter == 'isi':
         query += " AND catatan IS NOT NULL AND catatan != ''"
 
-    query += " ORDER BY judul ASC"
+    # hitung total dulu (buat pagination), pakai query yang sama tanpa ORDER/LIMIT
+    query_count = query.replace("SELECT *", "SELECT COUNT(*)", 1)
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['count']
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
 
-    cur.execute(query, tuple(params))
+    query += " ORDER BY judul ASC LIMIT %s OFFSET %s"
+    params_with_limit = params + [per_page, offset]
+
+    cur.execute(query, tuple(params_with_limit))
     daftar_buku = cur.fetchall()
 
     # daftar penerbit unik untuk dropdown filter
@@ -893,7 +904,10 @@ def buku_list():
         daftar_penerbit=daftar_penerbit,
         tgl_dari=tgl_dari,
         tgl_sampai=tgl_sampai,
-        catatan_filter=catatan_filter
+        catatan_filter=catatan_filter,
+        page=page,
+        total_halaman=total_halaman,
+        total_data=total_data
     )
 
 # ------------------ EXPORT BUKU - EXCEL ------------------
@@ -2535,6 +2549,8 @@ def tujuan_list():
     search = request.args.get('search', '').strip()
     status_filter = request.args.get('status', '').strip()
     sort = request.args.get('sort', 'nama')
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -2587,13 +2603,22 @@ def tujuan_list():
     sort_map = {
         'nama': lambda x: x['nama'].lower(),
         'persen_asc': lambda x: x['persen'],
-        'persen_desc': lambda x: -x['persen'],  
+        'persen_desc': lambda x: -x['persen'],
         'rencana': lambda x: -x['total_rencana'],
     }
     daftar_tujuan.sort(key=sort_map.get(sort, sort_map['nama']))
 
-    return render_template('tujuan/list.html', daftar_tujuan=daftar_tujuan, search=search, status_filter=status_filter, sort=sort)
+    total_data = len(daftar_tujuan)
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+    daftar_tujuan_halaman = daftar_tujuan[offset:offset + per_page]
 
+    return render_template(
+        'tujuan/list.html', daftar_tujuan=daftar_tujuan_halaman,
+        search=search, status_filter=status_filter, sort=sort,
+        page=page, total_halaman=total_halaman, total_data=total_data
+    )
 
 # ------------------ ADMIN: TAMBAH TUJUAN ------------------
 @app.route('/tujuan/tambah', methods=['GET', 'POST'])
