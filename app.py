@@ -3676,6 +3676,197 @@ def tujuan_audit_export():
         as_attachment=True,
         download_name=filename
     )
+# ------------------ IMPORT KODE AREA (RED/YELLOW/GREEN) UNTUK TUJUAN YANG SUDAH ADA ------------------
+@app.route('/tujuan/import-area', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def tujuan_import_area():
+    if request.method == 'POST':
+        file = request.files.get('file_excel')
 
+        if not file or file.filename == '':
+            flash('Pilih file Excel dulu.', 'danger')
+            return render_template('tujuan/import_area.html')
+
+        try:
+            wb = load_workbook(file, data_only=True)
+            ws = wb.worksheets[0]
+        except Exception:
+            flash('Gagal membaca file Excel.', 'danger')
+            return render_template('tujuan/import_area.html')
+
+        header_row = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
+
+        alias_kolom = {
+            'nama': ['nama perpustakaan desa/kelurahan', 'nama perpustakaan', 'nama'],
+            'area': ['notes color', 'area', 'warna', 'kode warna'],
+        }
+        kolom_index = {}
+        for field, kemungkinan_nama in alias_kolom.items():
+            for nama in kemungkinan_nama:
+                if nama in header_row:
+                    kolom_index[field] = header_row.index(nama)
+                    break
+
+        if 'nama' not in kolom_index or 'area' not in kolom_index:
+            flash('Kolom "Nama Perpustakaan" dan "Notes Color" tidak ditemukan di baris pertama file.', 'danger')
+            return render_template('tujuan/import_area.html')
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        berhasil = 0
+        tidak_ketemu = []
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            idx_nama = kolom_index['nama']
+            idx_area = kolom_index['area']
+
+            if idx_nama >= len(row) or row[idx_nama] is None:
+                continue
+
+            nama = str(row[idx_nama]).strip()
+            area = str(row[idx_area]).strip().upper() if idx_area < len(row) and row[idx_area] else None
+
+            if not nama or not area:
+                continue
+
+            cur.execute("UPDATE tujuan SET area = %s WHERE nama = %s", (area, nama))
+            if cur.rowcount > 0:
+                berhasil += 1
+            else:
+                tidak_ketemu.append(nama)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas('Import Area Tujuan', f'{berhasil} tujuan berhasil diberi kode area')
+        pesan = f'{berhasil} tujuan berhasil diberi kode area (RED/YELLOW/GREEN).'
+        if tidak_ketemu:
+            pesan += f' {len(tidak_ketemu)} nama tidak ditemukan di Data Tujuan.'
+        flash(pesan, 'success')
+        return render_template('tujuan/import_area.html', tidak_ketemu=tidak_ketemu)
+
+    return render_template('tujuan/import_area.html')
+
+# ------------------ MAPPING JUDUL BUKU KE 3 AREA (RED/YELLOW/GREEN) ------------------
+@app.route('/buku/mapping-area')
+@login_required
+@viewer_blocked
+def buku_mapping_area():
+    search = request.args.get('search', '').strip()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # ringkasan total per area
+    cur.execute(
+        """SELECT t.area, COUNT(DISTINCT t.id) as total_tujuan, COALESCE(SUM(dr.jumlah_rencana), 0) as total_eksemplar
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           WHERE t.area IS NOT NULL
+           GROUP BY t.area"""
+    )
+    ringkasan_area_raw = cur.fetchall()
+    ringkasan_area = {r['area']: r for r in ringkasan_area_raw}
+
+    cur.execute("SELECT COUNT(*) as total FROM tujuan WHERE area IS NULL")
+    tujuan_tanpa_area = cur.fetchone()['total']
+
+    # mapping per judul
+    query = """
+        SELECT b.id, b.isbn, b.judul, b.penerbit,
+            COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
+            COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
+            COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
+            COALESCE(SUM(dr.jumlah_rencana), 0) as total_eks
+        FROM buku b
+        LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
+        LEFT JOIN tujuan t ON dr.tujuan_id = t.id
+        WHERE 1=1
+    """
+    params = []
+    if search:
+        query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s)"
+        params.extend([f'%{search}%', f'%{search}%'])
+
+    query += " GROUP BY b.id, b.isbn, b.judul, b.penerbit ORDER BY b.judul ASC"
+
+    query_count = f"SELECT COUNT(*) as count FROM ({query}) sub"
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['count']
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+
+    query_paged = query + " LIMIT %s OFFSET %s"
+    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    daftar_mapping = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'buku/mapping_area.html',
+        daftar_mapping=daftar_mapping, search=search,
+        ringkasan_area=ringkasan_area, tujuan_tanpa_area=tujuan_tanpa_area,
+        page=page, total_halaman=total_halaman, total_data=total_data
+    )
+
+
+# ------------------ EXPORT MAPPING AREA - EXCEL ------------------
+@app.route('/buku/mapping-area/export')
+@login_required
+@viewer_blocked
+def buku_mapping_area_export():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT b.isbn, b.judul, b.penerbit,
+            COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
+            COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
+            COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
+            COALESCE(SUM(dr.jumlah_rencana), 0) as total_eks
+           FROM buku b
+           LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
+           LEFT JOIN tujuan t ON dr.tujuan_id = t.id
+           GROUP BY b.id, b.isbn, b.judul, b.penerbit
+           ORDER BY b.judul ASC"""
+    )
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Mapping Area"
+
+    headers = ['No', 'ISBN', 'Judul', 'Penerbit', 'RED (Eks)', 'YELLOW (Eks)', 'GREEN (Eks)', 'Total Eks']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+
+    for i, d in enumerate(data, start=1):
+        ws.append([i, d['isbn'], d['judul'], d['penerbit'] or '-', d['red_eks'], d['yellow_eks'], d['green_eks'], d['total_eks']])
+
+    lebar_kolom = {'A': 5, 'B': 16, 'C': 45, 'D': 25, 'E': 12, 'F': 12, 'G': 12, 'H': 12}
+    for kolom, lebar in lebar_kolom.items():
+        ws.column_dimensions[kolom].width = lebar
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"mapping-area-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 if __name__ == '__main__':
     app.run(debug=True)

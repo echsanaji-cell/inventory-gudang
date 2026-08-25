@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Mapping Judul per Area{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Mapping Judul Buku per Area</h3>
+    <div>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('tujuan_import_area') }}" class="btn btn-outline-secondary btn-sm">📤 Import Kode Area</a>
+        {% endif %}
+        <a href="{{ url_for('buku_mapping_area_export') }}" class="btn btn-outline-success btn-sm">📊 Export Excel</a>
+    </div>
+</div>
+
+<div class="row mb-3 text-center">
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body">
+                <h6 class="text-danger mb-1">🔴 RED</h6>
+                <div class="mono">{{ ringkasan_area.get('RED', {}).get('total_tujuan', 0) }} tujuan</div>
+                <div class="mono small text-muted">{{ ringkasan_area.get('RED', {}).get('total_eksemplar', 0) }} eksemplar</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6 class="text-warning mb-1">🟡 YELLOW</h6>
+                <div class="mono">{{ ringkasan_area.get('YELLOW', {}).get('total_tujuan', 0) }} tujuan</div>
+                <div class="mono small text-muted">{{ ringkasan_area.get('YELLOW', {}).get('total_eksemplar', 0) }} eksemplar</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <h6 class="text-success mb-1">🟢 GREEN</h6>
+                <div class="mono">{{ ringkasan_area.get('GREEN', {}).get('total_tujuan', 0) }} tujuan</div>
+                <div class="mono small text-muted">{{ ringkasan_area.get('GREEN', {}).get('total_eksemplar', 0) }} eksemplar</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">⚪ Tanpa Area</h6>
+                <div class="mono">{{ tujuan_tanpa_area }} tujuan</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="GET" class="mb-3">
+    <div class="row g-2">
+        <div class="col-md-9">
+            <input type="text" name="search" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>No</th>
+            <th>Judul</th>
+            <th>Penerbit</th>
+            <th class="text-end text-danger">🔴 RED</th>
+            <th class="text-end text-warning">🟡 YELLOW</th>
+            <th class="text-end text-success">🟢 GREEN</th>
+            <th class="text-end">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in daftar_mapping %}
+        <tr>
+            <td class="text-muted mono">{{ loop.index + (page - 1) * 50 }}</td>
+            <td>{{ d.judul }}<br><small class="text-muted mono">{{ d.isbn }}</small></td>
+            <td class="small">{{ d.penerbit or '-' }}</td>
+            <td class="text-end mono">{{ d.red_eks if d.red_eks > 0 else '-' }}</td>
+            <td class="text-end mono">{{ d.yellow_eks if d.yellow_eks > 0 else '-' }}</td>
+            <td class="text-end mono">{{ d.green_eks if d.green_eks > 0 else '-' }}</td>
+            <td class="text-end mono fw-bold">{{ d.total_eks }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted">Belum ada data.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if total_halaman > 1 %}
+<nav class="mt-3">
+    <p class="text-muted small">Halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} judul)</p>
+    <ul class="pagination pagination-sm flex-wrap">
+        <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+            <a class="page-link" href="{{ url_for('buku_mapping_area', search=search, page=page-1) }}">← Sebelumnya</a>
+        </li>
+        {% for p in range(1, total_halaman + 1) %}
+            {% if p == 1 or p == total_halaman or (p >= page - 2 and p <= page + 2) %}
+            <li class="page-item {{ 'active' if p == page else '' }}">
+                <a class="page-link" href="{{ url_for('buku_mapping_area', search=search, page=p) }}">{{ p }}</a>
+            </li>
+            {% elif p == page - 3 or p == page + 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page >= total_halaman else '' }}">
+            <a class="page-link" href="{{ url_for('buku_mapping_area', search=search, page=page+1) }}">Selanjutnya →</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

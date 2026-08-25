@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Import Kode Area{% endblock %}
+{% block content %}
+<h3>Import Kode Area (RED/YELLOW/GREEN)</h3>
+<p class="text-muted">Upload file dengan kolom "Nama Perpustakaan Desa/Kelurahan" dan "Notes Color". Sistem akan mencocokkan nama tujuan yang sudah ada, lalu mengisi kode areanya.</p>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+        <label class="form-label">Pilih File Excel</label>
+        <input type="file" name="file_excel" class="form-control" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-primary">📤 Import Sekarang</button>
+    <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Batal</a>
+</form>
+
+{% if tidak_ketemu %}
+<div class="card mt-3">
+    <div class="card-header bg-warning-subtle">⚠️ Nama tidak ditemukan di Data Tujuan ({{ tidak_ketemu|length }})</div>
+    <div class="card-body"><ul class="small mb-0">{% for n in tidak_ketemu %}<li>{{ n }}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+{% endblock %}
