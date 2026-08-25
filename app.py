@@ -2782,6 +2782,8 @@ def tujuan_hapus(tujuan_id):
 @login_required
 @viewer_blocked
 def tujuan_detail(tujuan_id):
+    status_rincian = request.args.get('status_rincian', '').strip()
+
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -2806,16 +2808,37 @@ def tujuan_detail(tujuan_id):
            ORDER BY b.judul ASC""",
         (tujuan_id,)
     )
-    rencana = cur.fetchall()
+    rencana_semua = cur.fetchall()
 
     cur.close()
     conn.close()
 
-    total_rencana = sum(r['jumlah_rencana'] for r in rencana)
-    total_terkirim = sum(r['jumlah_terkirim'] for r in rencana)
+    total_rencana = sum(r['jumlah_rencana'] for r in rencana_semua)
+    total_terkirim = sum(r['jumlah_terkirim'] for r in rencana_semua)
 
-    return render_template('tujuan/detail.html', tujuan=tujuan, rencana=rencana,
-                            total_rencana=total_rencana, total_terkirim=total_terkirim)
+    jumlah_belum = sum(1 for r in rencana_semua if r['jumlah_terkirim'] == 0)
+    jumlah_sebagian = sum(1 for r in rencana_semua if 0 < r['jumlah_terkirim'] < r['jumlah_rencana'])
+    jumlah_lengkap = sum(1 for r in rencana_semua if r['jumlah_terkirim'] >= r['jumlah_rencana'] and r['jumlah_rencana'] > 0)
+
+    if status_rincian == 'belum':
+        rencana = [r for r in rencana_semua if r['jumlah_terkirim'] == 0]
+    elif status_rincian == 'sebagian':
+        rencana = [r for r in rencana_semua if 0 < r['jumlah_terkirim'] < r['jumlah_rencana']]
+    elif status_rincian == 'lengkap':
+        rencana = [r for r in rencana_semua if r['jumlah_terkirim'] >= r['jumlah_rencana'] and r['jumlah_rencana'] > 0]
+    elif status_rincian == 'belum_lengkap':
+        rencana = [r for r in rencana_semua if r['jumlah_terkirim'] < r['jumlah_rencana']]
+    else:
+        rencana = rencana_semua
+
+    return render_template(
+        'tujuan/detail.html', tujuan=tujuan, rencana=rencana,
+        total_rencana=total_rencana, total_terkirim=total_terkirim,
+        status_rincian=status_rincian,
+        jumlah_belum=jumlah_belum, jumlah_sebagian=jumlah_sebagian, jumlah_lengkap=jumlah_lengkap,
+        jumlah_belum_lengkap=jumlah_belum + jumlah_sebagian,
+        total_judul_semua=len(rencana_semua)
+    )
 
 
 # ------------------ IMPORT RENCANA DISTRIBUSI UNTUK 1 TUJUAN ------------------

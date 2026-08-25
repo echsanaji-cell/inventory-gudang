@@ -74,7 +74,21 @@
     </div>
 </div>
 <div class="card">
-    <div class="card-header">Rincian Rencana Distribusi</div>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>Rincian Rencana Distribusi</span>
+        <div class="filter-status-group" style="min-width: 280px;">
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id) }}"
+               class="btn btn-sm {{ 'btn-dark' if not status_rincian else 'btn-outline-dark' }}">Semua ({{ total_judul_semua }})</a>
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='belum_lengkap') }}"
+               class="btn btn-sm {{ 'btn-danger' if status_rincian == 'belum_lengkap' else 'btn-outline-danger' }}">Belum Lengkap ({{ jumlah_belum_lengkap }})</a>
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='belum') }}"
+               class="btn btn-sm {{ 'btn-secondary' if status_rincian == 'belum' else 'btn-outline-secondary' }}">Belum Kirim ({{ jumlah_belum }})</a>
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='sebagian') }}"
+               class="btn btn-sm {{ 'btn-warning' if status_rincian == 'sebagian' else 'btn-outline-warning' }}">Sebagian ({{ jumlah_sebagian }})</a>
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='lengkap') }}"
+               class="btn btn-sm {{ 'btn-success' if status_rincian == 'lengkap' else 'btn-outline-success' }}">Lengkap ({{ jumlah_lengkap }})</a>
+        </div>
+    </div>
     <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead>
