@@ -180,13 +180,19 @@ def ambil_semua_data_backup():
     cur.execute("SELECT * FROM users ORDER BY id ASC")
     data_users = cur.fetchall()
 
+    cur.execute("SELECT * FROM tujuan ORDER BY id ASC")
+    data_tujuan = cur.fetchall()
+
+    cur.execute("SELECT * FROM distribusi_rencana ORDER BY id ASC")
+    data_distribusi_rencana = cur.fetchall()
+
     cur.close()
     conn.close()
-    return data_buku, data_transaksi, data_users
+    return data_buku, data_transaksi, data_users, data_tujuan, data_distribusi_rencana
 
 
 def buat_backup_excel():
-    data_buku, data_transaksi, data_users = ambil_semua_data_backup()
+    data_buku, data_transaksi, data_users, data_tujuan, data_distribusi_rencana = ambil_semua_data_backup()
 
     wb = Workbook()
 
@@ -212,6 +218,20 @@ def buat_backup_excel():
         for row in data_users:
             ws_users.append([str(row[h]) if row[h] is not None else '' for h in headers])
 
+    ws_tujuan = wb.create_sheet("Tujuan")
+    if data_tujuan:
+        headers = list(data_tujuan[0].keys())
+        ws_tujuan.append(headers)
+        for row in data_tujuan:
+            ws_tujuan.append([str(row[h]) if row[h] is not None else '' for h in headers])
+
+    ws_distribusi = wb.create_sheet("Distribusi Rencana")
+    if data_distribusi_rencana:
+        headers = list(data_distribusi_rencana[0].keys())
+        ws_distribusi.append(headers)
+        for row in data_distribusi_rencana:
+            ws_distribusi.append([str(row[h]) if row[h] is not None else '' for h in headers])
+
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -219,7 +239,7 @@ def buat_backup_excel():
 
 
 def buat_backup_json():
-    data_buku, data_transaksi, data_users = ambil_semua_data_backup()
+    data_buku, data_transaksi, data_users, data_tujuan, data_distribusi_rencana = ambil_semua_data_backup()
 
     def convert_row(row):
         hasil = {}
@@ -235,6 +255,8 @@ def buat_backup_json():
         'buku': [convert_row(r) for r in data_buku],
         'transaksi': [convert_row(r) for r in data_transaksi],
         'users': [convert_row(r) for r in data_users],
+        'tujuan': [convert_row(r) for r in data_tujuan],
+        'distribusi_rencana': [convert_row(r) for r in data_distribusi_rencana],
     }
 
     output = io.BytesIO()
@@ -248,18 +270,19 @@ def restore_dari_backup(data_backup):
 
     try:
         # hapus data lama, urutan penting karena foreign key
+        cur.execute("DELETE FROM distribusi_rencana")
         cur.execute("DELETE FROM transaksi")
         cur.execute("DELETE FROM buku")
+        cur.execute("DELETE FROM tujuan")
         cur.execute("DELETE FROM users")
 
-        # restore users
-        for u in data_backup.get('users', []):
+        # restore tujuan
+        for t in data_backup.get('tujuan', []):
             cur.execute(
-                """INSERT INTO users (id, username, password_hash, nama_lengkap, role, is_active, failed_attempts, locked_until, created_at)
+                """INSERT INTO tujuan (id, nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, created_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (u['id'], u['username'], u['password_hash'], u.get('nama_lengkap'),
-                 u.get('role', 'staff'), u.get('is_active', True), u.get('failed_attempts', 0),
-                 u.get('locked_until'), u.get('created_at'))
+                (t['id'], t['nama'], t.get('provinsi'), t.get('kabupaten_kota'), t.get('kecamatan'),
+                 t.get('desa_kelurahan'), t.get('alamat'), t.get('catatan'), t.get('created_at'))
             )
 
         # restore buku
@@ -277,21 +300,34 @@ def restore_dari_backup(data_backup):
         for t in data_backup.get('transaksi', []):
             cur.execute(
                 """INSERT INTO transaksi (id, buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal,
-                                           jenis_keluar, tanggal_kembali_rencana, tanggal_kembali_aktual, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                           jenis_keluar, tanggal_kembali_rencana, tanggal_kembali_aktual, created_at, tujuan_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (t['id'], t['buku_id'], t['tipe'], t['jumlah'], t.get('keterangan'), t.get('pihak_terkait'),
                  t.get('user_id'), t.get('tanggal'), t.get('jenis_keluar'),
-                 t.get('tanggal_kembali_rencana'), t.get('tanggal_kembali_aktual'), t.get('created_at'))
+                 t.get('tanggal_kembali_rencana'), t.get('tanggal_kembali_aktual'), t.get('created_at'),
+                 t.get('tujuan_id'))
+            )
+
+        # restore distribusi_rencana
+        for dr in data_backup.get('distribusi_rencana', []):
+            cur.execute(
+                """INSERT INTO distribusi_rencana (id, tujuan_id, buku_id, jumlah_rencana, created_at)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (dr['id'], dr['tujuan_id'], dr['buku_id'], dr['jumlah_rencana'], dr.get('created_at'))
             )
 
         # reset sequence ID biar data baru berikutnya nggak bentrok sama ID hasil restore
-        for tabel in ['buku', 'transaksi', 'users']:
+        for tabel in ['buku', 'transaksi', 'users', 'tujuan', 'distribusi_rencana']:
             cur.execute(
                 f"SELECT setval(pg_get_serial_sequence('{tabel}', 'id'), COALESCE((SELECT MAX(id) FROM {tabel}), 1))"
             )
 
         conn.commit()
-        jumlah = f"{len(data_backup.get('buku', []))} buku, {len(data_backup.get('transaksi', []))} transaksi, {len(data_backup.get('users', []))} users"
+        jumlah = (
+            f"{len(data_backup.get('buku', []))} buku, {len(data_backup.get('transaksi', []))} transaksi, "
+            f"{len(data_backup.get('users', []))} users, {len(data_backup.get('tujuan', []))} tujuan, "
+            f"{len(data_backup.get('distribusi_rencana', []))} rencana distribusi"
+        )
         return True, f"Restore berhasil: {jumlah}."
     except Exception as e:
         conn.rollback()
