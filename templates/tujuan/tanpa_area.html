@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Tujuan Tanpa Kode Area{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Tujuan Tanpa Kode Area</h3>
+    <div>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('tujuan_import_area') }}" class="btn btn-outline-primary btn-sm">📤 Import Kode Area</a>
+        {% endif %}
+        <a href="{{ url_for('buku_mapping_area') }}" class="btn btn-secondary btn-sm">← Kembali ke Mapping Area</a>
+    </div>
+</div>
+<p class="text-muted">{{ daftar|length }} tujuan berikut belum punya kode area (RED/YELLOW/GREEN), sehingga rencana pengirimannya tidak ikut kehitung di ringkasan Mapping Area.</p>
+
+<div class="table-responsive">
+<table class="table table-hover table-sm align-middle">
+    <thead>
+        <tr>
+            <th>No</th>
+            <th>Nama Tujuan</th>
+            <th>Desa/Kelurahan</th>
+            <th>Kecamatan</th>
+            <th>Kabupaten/Kota</th>
+            <th>Provinsi</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in daftar %}
+        <tr>
+            <td class="text-muted mono">{{ loop.index }}</td>
+            <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
+            <td class="small">{{ t.desa_kelurahan or '-' }}</td>
+            <td class="small">{{ t.kecamatan or '-' }}</td>
+            <td class="small">{{ t.kabupaten_kota or '-' }}</td>
+            <td class="small">{{ t.provinsi or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted">Semua tujuan sudah punya kode area.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

@@ -3868,5 +3868,23 @@ def buku_mapping_area_export():
         as_attachment=True,
         download_name=filename
     )
+
+# ------------------ DAFTAR TUJUAN TANPA KODE AREA ------------------
+@app.route('/tujuan/tanpa-area')
+@login_required
+@viewer_blocked
+def tujuan_tanpa_area():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan
+           FROM tujuan
+           WHERE area IS NULL
+           ORDER BY nama ASC"""
+    )
+    daftar = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('tujuan/tanpa_area.html', daftar=daftar)
 if __name__ == '__main__':
     app.run(debug=True)

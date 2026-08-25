@@ -40,12 +40,15 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="text-muted mb-1">⚪ Tanpa Area</h6>
-                <div class="mono">{{ tujuan_tanpa_area }} tujuan</div>
+        <a href="{{ url_for('tujuan_tanpa_area') }}" class="text-decoration-none">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">⚪ Tanpa Area</h6>
+                    <div class="mono">{{ tujuan_tanpa_area }} tujuan</div>
+                    <div class="small text-primary">Lihat daftar →</div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
