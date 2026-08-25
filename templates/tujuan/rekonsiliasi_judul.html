@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Rekonsiliasi Judul{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Rekonsiliasi Judul: Target BOQ vs Rencana Distribusi</h3>
+    <a href="{{ url_for('tujuan_verifikasi') }}" class="btn btn-secondary btn-sm">← Kembali</a>
+</div>
+
+<div class="mb-3 filter-status-group">
+    <a href="{{ url_for('tujuan_rekonsiliasi_judul') }}" class="btn btn-sm {{ 'btn-dark' if not filter_status else 'btn-outline-dark' }}">Semua</a>
+    <a href="{{ url_for('tujuan_rekonsiliasi_judul', status='kurang') }}" class="btn btn-sm {{ 'btn-danger' if filter_status == 'kurang' else 'btn-outline-danger' }}">Kurang</a>
+    <a href="{{ url_for('tujuan_rekonsiliasi_judul', status='lebih') }}" class="btn btn-sm {{ 'btn-info' if filter_status == 'lebih' else 'btn-outline-info' }}">Lebih</a>
+    <a href="{{ url_for('tujuan_rekonsiliasi_judul', status='pas') }}" class="btn btn-sm {{ 'btn-success' if filter_status == 'pas' else 'btn-outline-success' }}">Pas</a>
+</div>
+
+<div class="table-responsive">
+<table class="table table-hover table-sm align-middle">
+    <thead>
+        <tr>
+            <th>No</th><th>Judul</th><th>Penerbit</th>
+            <th class="text-end">Target BOQ</th><th class="text-end">Direncanakan Kirim</th>
+            <th class="text-end">Selisih</th><th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in daftar %}
+        <tr>
+            <td class="text-muted mono">{{ loop.index }}</td>
+            <td>{{ d.judul }}<br><small class="text-muted mono">{{ d.isbn }}</small></td>
+            <td class="small">{{ d.penerbit or '-' }}</td>
+            <td class="text-end mono">{{ d.target_boq }}</td>
+            <td class="text-end mono">{{ d.total_didistribusikan }}</td>
+            <td class="text-end mono {{ 'text-danger' if d.selisih < 0 else 'text-info' if d.selisih > 0 else 'text-success' }}">
+                {{ d.selisih }}
+            </td>
+            <td>
+                {% if d.status == 'kurang' %}<span class="badge bg-danger">Kurang</span>
+                {% elif d.status == 'lebih' %}<span class="badge bg-info text-dark">Lebih</span>
+                {% else %}<span class="badge bg-success">Pas</span>{% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted">Tidak ada data untuk filter ini.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

@@ -3886,5 +3886,121 @@ def tujuan_tanpa_area():
     cur.close()
     conn.close()
     return render_template('tujuan/tanpa_area.html', daftar=daftar)
+
+# ------------------ PUSAT VERIFIKASI DISTRIBUSI ------------------
+@app.route('/tujuan/verifikasi')
+@login_required
+@viewer_blocked
+def tujuan_verifikasi():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # kelengkapan tujuan
+    cur.execute("SELECT COUNT(*) as total FROM tujuan")
+    total_tujuan = cur.fetchone()['total']
+
+    cur.execute(
+        """SELECT COUNT(DISTINCT t.id) as total FROM tujuan t
+           JOIN distribusi_rencana dr ON dr.tujuan_id = t.id"""
+    )
+    tujuan_ada_rencana = cur.fetchone()['total']
+    tujuan_belum_rencana = total_tujuan - tujuan_ada_rencana
+
+    cur.execute("SELECT COUNT(*) as total FROM tujuan WHERE area IS NOT NULL")
+    tujuan_ada_area = cur.fetchone()['total']
+    tujuan_belum_area = total_tujuan - tujuan_ada_area
+
+    # rekonsiliasi per judul: target BOQ vs total rencana distribusi
+    cur.execute(
+        """SELECT b.id, b.isbn, b.judul, b.jumlah_rencana as target_boq,
+                  COALESCE(SUM(dr.jumlah_rencana), 0) as total_didistribusikan
+           FROM buku b
+           LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
+           WHERE b.jumlah_rencana > 0
+           GROUP BY b.id, b.isbn, b.judul, b.jumlah_rencana"""
+    )
+    semua_rekonsiliasi = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    jumlah_kurang = sum(1 for r in semua_rekonsiliasi if r['total_didistribusikan'] < r['target_boq'])
+    jumlah_lebih = sum(1 for r in semua_rekonsiliasi if r['total_didistribusikan'] > r['target_boq'])
+    jumlah_pas = sum(1 for r in semua_rekonsiliasi if r['total_didistribusikan'] == r['target_boq'])
+
+    total_target_boq = sum(r['target_boq'] for r in semua_rekonsiliasi)
+    total_didistribusikan = sum(r['total_didistribusikan'] for r in semua_rekonsiliasi)
+
+    return render_template(
+        'tujuan/verifikasi.html',
+        total_tujuan=total_tujuan,
+        tujuan_ada_rencana=tujuan_ada_rencana, tujuan_belum_rencana=tujuan_belum_rencana,
+        tujuan_ada_area=tujuan_ada_area, tujuan_belum_area=tujuan_belum_area,
+        jumlah_kurang=jumlah_kurang, jumlah_lebih=jumlah_lebih, jumlah_pas=jumlah_pas,
+        total_judul=len(semua_rekonsiliasi),
+        total_target_boq=total_target_boq, total_didistribusikan=total_didistribusikan
+    )
+
+
+# ------------------ DAFTAR TUJUAN TANPA RENCANA DISTRIBUSI ------------------
+@app.route('/tujuan/belum-ada-rencana')
+@login_required
+@viewer_blocked
+def tujuan_belum_ada_rencana():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.id, t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.area
+           FROM tujuan t
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           WHERE dr.id IS NULL
+           ORDER BY t.nama ASC"""
+    )
+    daftar = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('tujuan/belum_ada_rencana.html', daftar=daftar)
+
+
+# ------------------ REKONSILIASI JUDUL: TARGET BOQ VS RENCANA DISTRIBUSI ------------------
+@app.route('/tujuan/rekonsiliasi-judul')
+@login_required
+@viewer_blocked
+def tujuan_rekonsiliasi_judul():
+    filter_status = request.args.get('status', '').strip()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT b.id, b.isbn, b.judul, b.penerbit, b.jumlah_rencana as target_boq,
+                  COALESCE(SUM(dr.jumlah_rencana), 0) as total_didistribusikan
+           FROM buku b
+           LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
+           WHERE b.jumlah_rencana > 0
+           GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.jumlah_rencana
+           ORDER BY b.judul ASC"""
+    )
+    semua = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    hasil = []
+    for r in semua:
+        selisih = r['total_didistribusikan'] - r['target_boq']
+        if selisih < 0:
+            status = 'kurang'
+        elif selisih > 0:
+            status = 'lebih'
+        else:
+            status = 'pas'
+        item = dict(r)
+        item['selisih'] = selisih
+        item['status'] = status
+        hasil.append(item)
+
+    if filter_status:
+        hasil = [h for h in hasil if h['status'] == filter_status]
+
+    return render_template('tujuan/rekonsiliasi_judul.html', daftar=hasil, filter_status=filter_status)
 if __name__ == '__main__':
     app.run(debug=True)

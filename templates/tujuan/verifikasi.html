@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Pusat Verifikasi Distribusi{% endblock %}
+{% block content %}
+<h3>✅ Pusat Verifikasi Distribusi</h3>
+<p class="text-muted">Checklist kelengkapan sebelum proses distribusi dianggap final.</p>
+
+<div class="card mb-4">
+    <div class="card-header">📍 Kelengkapan Tujuan ({{ total_tujuan }} lokasi total)</div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <h4 class="text-success mb-0">{{ tujuan_ada_rencana }}</h4>
+                <small class="text-muted">Sudah Ada Rencana</small>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-danger mb-0">{{ tujuan_belum_rencana }}</h4>
+                <small class="text-muted">
+                    {% if tujuan_belum_rencana > 0 %}
+                    <a href="{{ url_for('tujuan_belum_ada_rencana') }}">Belum Ada Rencana →</a>
+                    {% else %}Belum Ada Rencana{% endif %}
+                </small>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-success mb-0">{{ tujuan_ada_area }}</h4>
+                <small class="text-muted">Sudah Ada Area</small>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-danger mb-0">{{ tujuan_belum_area }}</h4>
+                <small class="text-muted">
+                    {% if tujuan_belum_area > 0 %}
+                    <a href="{{ url_for('tujuan_tanpa_area') }}">Belum Ada Area →</a>
+                    {% else %}Belum Ada Area{% endif %}
+                </small>
+            </div>
+        </div>
+        {% if tujuan_belum_rencana == 0 and tujuan_belum_area == 0 %}
+        <div class="alert alert-success mt-3 mb-0">✅ Semua tujuan sudah lengkap (rencana + area).</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">📚 Rekonsiliasi Judul: Target BOQ vs Rencana Distribusi ({{ total_judul }} judul)</div>
+    <div class="card-body">
+        <p class="text-muted small">Membandingkan target eksemplar yang seharusnya diterima gudang, dengan total eksemplar yang sudah direncanakan untuk dikirim ke seluruh tujuan.</p>
+        <div class="row text-center mb-3">
+            <div class="col-md-4">
+                <h4 class="mb-0">{{ total_target_boq }}</h4>
+                <small class="text-muted">Total Target BOQ (eks)</small>
+            </div>
+            <div class="col-md-4">
+                <h4 class="mb-0">{{ total_didistribusikan }}</h4>
+                <small class="text-muted">Total Direncanakan Kirim (eks)</small>
+            </div>
+            <div class="col-md-4">
+                <h4 class="{{ 'text-success' if total_didistribusikan == total_target_boq else 'text-danger' }} mb-0">
+                    {{ total_didistribusikan - total_target_boq }}
+                </h4>
+                <small class="text-muted">Selisih</small>
+            </div>
+        </div>
+        <div class="row text-center">
+            <div class="col-4">
+                <h5 class="text-danger mb-0">{{ jumlah_kurang }}</h5>
+                <small class="text-muted"><a href="{{ url_for('tujuan_rekonsiliasi_judul', status='kurang') }}">Judul Kurang →</a></small>
+            </div>
+            <div class="col-4">
+                <h5 class="text-info mb-0">{{ jumlah_lebih }}</h5>
+                <small class="text-muted"><a href="{{ url_for('tujuan_rekonsiliasi_judul', status='lebih') }}">Judul Lebih →</a></small>
+            </div>
+            <div class="col-4">
+                <h5 class="text-success mb-0">{{ jumlah_pas }}</h5>
+                <small class="text-muted"><a href="{{ url_for('tujuan_rekonsiliasi_judul', status='pas') }}">Judul Pas →</a></small>
+            </div>
+        </div>
+        {% if jumlah_kurang == 0 and jumlah_lebih == 0 %}
+        <div class="alert alert-success mt-3 mb-0">✅ Semua judul sudah pas antara target BOQ dan rencana distribusi.</div>
+        {% endif %}
+    </div>
+</div>
+
+<a href="{{ url_for('tujuan_rekonsiliasi_judul') }}" class="btn btn-primary">Lihat Semua Rekonsiliasi Judul</a>
+<a href="{{ url_for('buku_mapping_area') }}" class="btn btn-outline-secondary">Lihat Mapping Area</a>
+{% endblock %}
