@@ -1287,6 +1287,7 @@ def buku_tambah():
         jumlah_rencana = ambil_int(request.form, 'jumlah_rencana', 0)
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
+        lokasi_rak = request.form.get('lokasi_rak', '').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -1305,9 +1306,9 @@ def buku_tambah():
             return render_template('buku/form.html', buku=request.form)
 
         cur.execute(
-            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan)
+            """INSERT INTO buku (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan, lokasi_rak)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan, lokasi_rak)
         )
         conn.commit()
         cur.close()
@@ -1337,6 +1338,7 @@ def buku_edit(buku_id):
         jumlah_rencana = ambil_int(request.form, 'jumlah_rencana', 0)
         tanggal_masuk = request.form.get('tanggal_masuk', '').strip() or None
         catatan = request.form.get('catatan', '').strip()
+        lokasi_rak = request.form.get('lokasi_rak', '').strip()
 
         if not isbn or not judul:
             flash('ISBN dan Judul wajib diisi.', 'danger')
@@ -1361,9 +1363,9 @@ def buku_edit(buku_id):
         cur.execute(
             """UPDATE buku 
                SET isbn=%s, judul=%s, penulis=%s, penerbit=%s, 
-                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, tanggal_masuk=%s, catatan=%s, updated_at=NOW()
+                   stok=%s, stok_minimum=%s, jumlah_rencana=%s, tanggal_masuk=%s, catatan=%s, lokasi_rak=%s, updated_at=NOW()
                WHERE id=%s""",
-            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan, buku_id)
+            (isbn, judul, penulis, penerbit, stok, stok_minimum, jumlah_rencana, tanggal_masuk, catatan, lokasi_rak, buku_id)
         )
         conn.commit()
         cur.close()
@@ -3778,7 +3780,7 @@ def buku_mapping_area():
 
     # mapping per judul
     query = """
-        SELECT b.id, b.isbn, b.judul, b.penerbit,
+        SELECT b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak,
             COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
             COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
             COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
@@ -3793,7 +3795,7 @@ def buku_mapping_area():
         query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s)"
         params.extend([f'%{search}%', f'%{search}%'])
 
-    query += " GROUP BY b.id, b.isbn, b.judul, b.penerbit ORDER BY b.judul ASC"
+    query += " GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak ORDER BY b.judul ASC"
 
     query_count = f"SELECT COUNT(*) as count FROM ({query}) sub"
     cur.execute(query_count, tuple(params))

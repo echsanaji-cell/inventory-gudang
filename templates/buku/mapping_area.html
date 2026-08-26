@@ -52,16 +52,27 @@
     </div>
 </div>
 
-<form method="GET" class="mb-3">
+<form method="GET" class="mb-3" id="form-cari-mapping">
     <div class="row g-2">
-        <div class="col-md-9">
-            <input type="text" name="search" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        <div class="col-md-8">
+            <input type="text" name="search" id="input-cari-mapping" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariMapping)">📷 Scan</button>
+        </div>
+        <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
         </div>
     </div>
 </form>
+
+<script>
+function handleScanCariMapping(kode) {
+    document.getElementById('input-cari-mapping').value = kode;
+    document.getElementById('form-cari-mapping').submit();
+}
+initPhysicalScanner(document.getElementById('input-cari-mapping'), handleScanCariMapping);
+</script>
 
 <div class="table-responsive">
 <table class="table table-hover align-middle">
@@ -70,6 +81,7 @@
             <th>No</th>
             <th>Judul</th>
             <th>Penerbit</th>
+            <th>Lokasi Rak</th>
             <th class="text-end text-danger">🔴 RED</th>
             <th class="text-end text-warning">🟡 YELLOW</th>
             <th class="text-end text-success">🟢 GREEN</th>
@@ -82,6 +94,7 @@
             <td class="text-muted mono">{{ loop.index + (page - 1) * 50 }}</td>
             <td><a href="{{ url_for('buku_detail_distribusi', buku_id=d.id) }}">{{ d.judul }}</a><br><small class="text-muted mono">{{ d.isbn }}</small></td>
             <td class="small">{{ d.penerbit or '-' }}</td>
+            <td class="small mono">{{ d.lokasi_rak or '-' }}</td>
             <td class="text-end mono">{{ d.red_eks if d.red_eks > 0 else '-' }}</td>
             <td class="text-end mono">{{ d.yellow_eks if d.yellow_eks > 0 else '-' }}</td>
             <td class="text-end mono">{{ d.green_eks if d.green_eks > 0 else '-' }}</td>

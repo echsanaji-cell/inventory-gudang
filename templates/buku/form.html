@@ -62,6 +62,11 @@
             <small class="text-muted">Bisa diisi/diubah manual kalau perlu koreksi.</small>
         </div>
     </div>
+        <div class="mb-3">
+        <label class="form-label">Lokasi Penyimpanan (Rak)</label>
+        <input type="text" name="lokasi_rak" class="form-control" placeholder="Contoh: Rak A-12, Blok 3 Baris 2"
+               value="{{ buku.lokasi_rak if buku else '' }}">
+    </div>
     <div class="mb-3">
         <label class="form-label">Catatan</label>
         <textarea name="catatan" class="form-control" rows="3" placeholder="Catatan bebas, misal kondisi fisik, info khusus, dll.">{{ buku.catatan if buku else '' }}</textarea>

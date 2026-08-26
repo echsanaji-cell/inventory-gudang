@@ -124,7 +124,8 @@
             <th style="width: 30%;">Judul</th>
             <th style="width: 18%;">Penulis / Penerbit</th>
             <th style="width: 14%;">Diterima / Rencana</th>
-            <th style="width: 10%;">Tgl Masuk</th>
+            <th style="width: 8%;">Tgl Masuk</th>
+            <th style="width: 8%;">Lokasi Rak</th>
             <th style="width: 16%;">Catatan</th>
             <th style="width: 8%;">Aksi</th>
         </tr>
@@ -158,6 +159,7 @@
                 {% endif %}
             </td>
             <td class="small mono">{{ buku.tanggal_masuk or '-' }}</td>
+            <td class="small mono">{{ buku.lokasi_rak or '-' }}</td>
             <td class="small">
                 {% if buku.catatan %}
                     <span title="{{ buku.catatan }}">{{ buku.catatan[:40] }}{{ '...' if buku.catatan|length > 40 else '' }}</span>
