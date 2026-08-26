@@ -22,7 +22,7 @@ from reportlab.lib.units import cm
 from openpyxl import load_workbook
 import io
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from db import get_db_connection
@@ -1346,6 +1346,13 @@ def buku_edit(buku_id):
             conn.close()
             return render_template('buku/form.html', buku=request.form, buku_id=buku_id)
 
+        cur.execute("SELECT id FROM buku WHERE isbn = %s AND id != %s", (isbn, buku_id))
+        if cur.fetchone():
+            flash(f'ISBN {isbn} sudah dipakai buku lain.', 'danger')
+            cur.close()
+            conn.close()
+            return render_template('buku/form.html', buku=request.form, buku_id=buku_id)
+
         cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
         buku_lama = cur.fetchone()
 
@@ -1602,6 +1609,84 @@ def transaksi_keluar():
     return render_template('transaksi/keluar.html', daftar_buku=daftar_buku, daftar_tujuan=daftar_tujuan)
 
 
+# ------------------ SCAN MOBILE ------------------
+@app.route('/scan-mobile')
+@login_required
+@viewer_blocked
+def scan_mobile():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tujuan ORDER BY nama ASC")
+    daftar_tujuan = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('scan_mobile.html', daftar_tujuan=daftar_tujuan)
+
+
+@app.route('/api/scan-mobile/transaksi', methods=['POST'])
+@login_required
+@viewer_blocked
+def api_scan_mobile_transaksi():
+    data = request.get_json(silent=True) or {}
+    buku_id = str(data.get('buku_id', '')).strip()
+    tipe = data.get('tipe')
+    jumlah = int(data.get('jumlah') or 0)
+    tujuan_id = data.get('tujuan_id') or None
+
+    if not buku_id or tipe not in ('masuk', 'keluar') or jumlah <= 0:
+        return jsonify({'success': False, 'message': 'Data tidak lengkap.'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
+        buku = cur.fetchone()
+        if not buku:
+            return jsonify({'success': False, 'message': 'Buku tidak ditemukan.'}), 404
+
+        hari_ini = datetime.now().date()
+
+        if tipe == 'keluar' and buku['stok'] < jumlah:
+            return jsonify({'success': False, 'message': f'Stok tidak cukup. Tersedia: {buku["stok"]}.'}), 400
+
+        if tipe == 'masuk':
+            cur.execute(
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, pihak_terkait, user_id, tanggal)
+                   VALUES (%s, 'masuk', %s, %s, %s, %s)""",
+                (buku_id, jumlah, 'Scan Mobile', session['user_id'], hari_ini)
+            )
+            cur.execute(
+                """UPDATE buku SET stok = stok + %s, updated_at = NOW(),
+                       tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s)
+                   WHERE id = %s""",
+                (jumlah, hari_ini, hari_ini, buku_id)
+            )
+        else:
+            cur.execute(
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, keterangan, pihak_terkait, user_id, tanggal, tujuan_id)
+                   VALUES (%s, 'keluar', %s, %s, %s, %s, %s, %s)""",
+                (buku_id, jumlah, 'Scan Mobile', 'Scan Mobile', session['user_id'], hari_ini, tujuan_id)
+            )
+            cur.execute("UPDATE buku SET stok = stok - %s, updated_at = NOW() WHERE id = %s", (jumlah, buku_id))
+
+        conn.commit()
+        catat_aktivitas(
+            f'Transaksi {tipe.capitalize()} (Scan Mobile)',
+            f'Buku "{buku["judul"]}" {"+" if tipe == "masuk" else "-"}{jumlah}',
+            buku_id=buku_id
+        )
+
+        cur.execute("SELECT stok FROM buku WHERE id = %s", (buku_id,))
+        stok_baru = cur.fetchone()['stok']
+        return jsonify({'success': True, 'judul': buku['judul'], 'stok_baru': stok_baru})
+    except Exception:
+        conn.rollback()
+        return jsonify({'success': False, 'message': 'Gagal menyimpan transaksi.'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 # ------------------ RIWAYAT TRANSAKSI ------------------
 @app.route('/transaksi/riwayat')
 @login_required
@@ -1632,6 +1717,44 @@ def transaksi_riwayat():
     conn.close()
 
     return render_template('transaksi/riwayat.html', daftar_transaksi=daftar_transaksi, tipe_filter=tipe_filter)
+@app.route('/api/buku/cek-isbn-duplikat')
+@login_required
+def api_cek_isbn_duplikat():
+    isbn = request.args.get('isbn', '').strip()
+    exclude_id = request.args.get('exclude_id', '').strip()
+    if not isbn:
+        return jsonify({'duplikat': False})
+    conn = get_db_connection()
+    cur = conn.cursor()
+    if exclude_id:
+        cur.execute("SELECT id, judul FROM buku WHERE isbn = %s AND id != %s", (isbn, exclude_id))
+    else:
+        cur.execute("SELECT id, judul FROM buku WHERE isbn = %s", (isbn,))
+    hasil = cur.fetchone()
+    cur.close()
+    conn.close()
+    if hasil:
+        return jsonify({'duplikat': True, 'buku_id': hasil['id'], 'judul': hasil['judul']})
+    return jsonify({'duplikat': False})
+
+@app.route('/api/buku/cari-isbn/<isbn>')
+@login_required
+@viewer_blocked
+def api_cari_buku_isbn(isbn):
+    isbn = isbn.strip()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, isbn, judul, penerbit, stok, lokasi_rak FROM buku WHERE isbn = %s", (isbn,))
+    buku = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not buku:
+        return jsonify({'found': False})
+    return jsonify({
+        'found': True, 'id': buku['id'], 'isbn': buku['isbn'], 'judul': buku['judul'],
+        'penerbit': buku['penerbit'], 'stok': buku['stok'], 'lokasi_rak': buku['lokasi_rak']
+    })
+
 
 # ------------------ API: LOOKUP ISBN (Google Books) ------------------
 @app.route('/api/isbn/<isbn>')

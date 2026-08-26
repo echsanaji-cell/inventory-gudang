@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Scan Cepat{% endblock %}
+{% block content %}
+<div class="mx-auto" style="max-width: 480px;">
+    <h4 class="mb-3 text-center">📱 Scan Cepat</h4>
+
+    <button id="btn-scan" class="btn btn-primary btn-lg w-100 mb-3" onclick="mulaiScan()">
+        📷 Scan Barcode
+    </button>
+
+    <div id="modal-scan-inline" class="d-none border rounded p-2 mb-3">
+        <div id="camera-reader-mobile"></div>
+    </div>
+
+    <div id="kartu-buku" class="card d-none mb-3">
+        <div class="card-body">
+            <h5 class="card-title" id="hasil-judul"></h5>
+            <p class="card-text text-muted mb-1" id="hasil-penerbit"></p>
+            <p class="card-text mb-1">Stok saat ini: <strong id="hasil-stok"></strong></p>
+            <p class="card-text mb-3">📍 Rak: <strong id="hasil-rak"></strong></p>
+
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <button class="btn btn-success w-100" onclick="pilihTipe('masuk')">➕ Masuk</button>
+                </div>
+                <div class="col-6">
+                    <button class="btn btn-danger w-100" onclick="pilihTipe('keluar')">➖ Keluar</button>
+                </div>
+            </div>
+
+            <div id="form-jumlah" class="d-none">
+                <hr>
+                <div class="mb-2">
+                    <label class="form-label" id="label-tipe"></label>
+                    <input type="number" id="input-jumlah" class="form-control form-control-lg" min="1" placeholder="Jumlah" autofocus>
+                </div>
+                <div id="wrap-tujuan" class="mb-2 d-none">
+                    <label class="form-label">Tujuan</label>
+                    <select id="input-tujuan" class="form-select">
+                        <option value="">- Pilih tujuan (opsional) -</option>
+                        {% for t in daftar_tujuan %}
+                        <option value="{{ t.id }}">{{ t.nama }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button class="btn btn-primary w-100" onclick="simpanTransaksi()">💾 Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="kartu-tidak-ketemu" class="alert alert-warning d-none">
+        Buku dengan ISBN <strong id="isbn-tidak-ketemu"></strong> tidak ditemukan.
+        <a id="link-tambah-buku" href="#" class="alert-link">Tambah buku baru?</a>
+    </div>
+
+    <div id="pesan-sukses" class="alert alert-success d-none"></div>
+
+    <div id="riwayat-scan" class="mt-4"></div>
+</div>
+
+<div class="modal" id="cameraModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Arahkan ke Barcode</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="camera-reader"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let bukuAktif = null;
+let tipeAktif = null;
+
+function mulaiScan() {
+    startCameraScanner('cameraModal', 'camera-reader', handleHasilScan);
+}
+
+function handleHasilScan(isbn) {
+    fetch(`/api/buku/cari-isbn/${encodeURIComponent(isbn)}`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('pesan-sukses').classList.add('d-none');
+            if (data.found) {
+                bukuAktif = data;
+                document.getElementById('hasil-judul').textContent = data.judul;
+                document.getElementById('hasil-penerbit').textContent = data.penerbit || '-';
+                document.getElementById('hasil-stok').textContent = data.stok;
+                document.getElementById('hasil-rak').textContent = data.lokasi_rak || 'Belum diisi';
+                document.getElementById('kartu-buku').classList.remove('d-none');
+                document.getElementById('kartu-tidak-ketemu').classList.add('d-none');
+                document.getElementById('form-jumlah').classList.add('d-none');
+            } else {
+                document.getElementById('isbn-tidak-ketemu').textContent = isbn;
+                document.getElementById('link-tambah-buku').href = `/buku/tambah?isbn=${encodeURIComponent(isbn)}`;
+                document.getElementById('kartu-tidak-ketemu').classList.remove('d-none');
+                document.getElementById('kartu-buku').classList.add('d-none');
+            }
+        });
+}
+
+function pilihTipe(tipe) {
+    tipeAktif = tipe;
+    document.getElementById('label-tipe').textContent = tipe === 'masuk' ? 'Jumlah Masuk' : 'Jumlah Keluar';
+    document.getElementById('wrap-tujuan').classList.toggle('d-none', tipe !== 'keluar');
+    document.getElementById('form-jumlah').classList.remove('d-none');
+    document.getElementById('input-jumlah').value = '';
+    document.getElementById('input-jumlah').focus();
+}
+
+function simpanTransaksi() {
+    const jumlah = parseInt(document.getElementById('input-jumlah').value || '0');
+    if (!bukuAktif || jumlah <= 0) return;
+
+    fetch('/api/scan-mobile/transaksi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            buku_id: bukuAktif.id,
+            tipe: tipeAktif,
+            jumlah: jumlah,
+            tujuan_id: document.getElementById('input-tujuan').value || null
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const pesan = document.getElementById('pesan-sukses');
+            pesan.textContent = `✅ ${data.judul}: stok sekarang ${data.stok_baru}`;
+            pesan.classList.remove('d-none');
+            document.getElementById('kartu-buku').classList.add('d-none');
+            bukuAktif = null;
+        } else {
+            alert(data.message || 'Gagal menyimpan.');
+        }
+    })
+    .catch(() => alert('Gagal menyimpan transaksi. Cek koneksi.'));
+}
+</script>
+{% endblock %}

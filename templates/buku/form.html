@@ -18,6 +18,7 @@
             </button>
         </div>
         <small class="text-muted">Punya ISBN, scan pakai scanner fisik/kamera. Belum ada ISBN, klik "Generate Kode".</small>
+        <div id="peringatan-duplikat" class="alert alert-danger mt-2 d-none py-2 px-3"></div>
     </div>
     <div class="mb-3">
         <label class="form-label">Judul *</label>
@@ -77,9 +78,34 @@
 
 <script>
 const inputIsbn = document.getElementById('input-isbn');
+const buttonSimpan = document.querySelector('button[type="submit"]');
+const boxPeringatan = document.getElementById('peringatan-duplikat');
 
 // aktifkan scanner fisik di field ISBN
 initPhysicalScanner(inputIsbn, handleScanIsbn);
+
+let timerCekIsbn = null;
+inputIsbn.addEventListener('input', function () {
+    clearTimeout(timerCekIsbn);
+    boxPeringatan.classList.add('d-none');
+    buttonSimpan.disabled = false;
+    const isbn = inputIsbn.value.trim();
+    if (!isbn) return;
+
+    timerCekIsbn = setTimeout(() => {
+        const excludeId = "{{ buku_id or '' }}";
+        fetch(`/api/buku/cek-isbn-duplikat?isbn=${encodeURIComponent(isbn)}&exclude_id=${excludeId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.duplikat) {
+                    boxPeringatan.textContent = `⚠️ ISBN ini sudah dipakai oleh buku "${data.judul}".`;
+                    boxPeringatan.classList.remove('d-none');
+                    buttonSimpan.disabled = true;
+                }
+            })
+            .catch(() => {});
+    }, 400);
+});
 
 function handleScanIsbn(kode) {
     inputIsbn.value = kode;
