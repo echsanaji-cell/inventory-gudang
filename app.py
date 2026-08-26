@@ -1411,7 +1411,7 @@ def buku_detail(buku_id):
         flash('Buku tidak ditemukan.', 'danger')
         return redirect(url_for('buku_list'))
 
-        cur.execute(
+    cur.execute(
         """SELECT t.*, u.nama_lengkap, u.username
            FROM transaksi t
            LEFT JOIN users u ON t.user_id = u.id
@@ -1510,16 +1510,28 @@ def transaksi_masuk():
                 (buku_id, jumlah, pihak_terkait, session['user_id'], tanggal or None)
             )
 
-            # update stok buku + tanggal masuk terakhir + catatan
+            # update stok buku + catatan
+            # tanggal_masuk HANYA diisi saat stok masih 0 (kedatangan pertama kali).
+            # Kalau buku sudah pernah ada stok sebelumnya (kekurangan yang menyusul),
+            # tanggal_masuk yang lama TIDAK diubah lagi.
             tgl_transaksi = tanggal or datetime.now().date()
-            cur.execute(
-                """UPDATE buku 
-                   SET stok = stok + %s, updated_at = NOW(),
-                       tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s),
-                       catatan = %s
-                   WHERE id = %s""",
-                (jumlah, tgl_transaksi, tgl_transaksi, catatan_buku, buku_id)
-            )
+            if buku['stok'] == 0:
+                cur.execute(
+                    """UPDATE buku 
+                       SET stok = stok + %s, updated_at = NOW(),
+                           tanggal_masuk = %s,
+                           catatan = %s
+                       WHERE id = %s""",
+                    (jumlah, tgl_transaksi, catatan_buku, buku_id)
+                )
+            else:
+                cur.execute(
+                    """UPDATE buku 
+                       SET stok = stok + %s, updated_at = NOW(),
+                           catatan = %s
+                       WHERE id = %s""",
+                    (jumlah, catatan_buku, buku_id)
+                )
 
             conn.commit()
             flash(f'Barang masuk: {buku["judul"]} +{jumlah} berhasil dicatat.', 'success')
@@ -2329,13 +2341,21 @@ def import_masuk_massal():
                        VALUES (%s, 'masuk', %s, %s, %s, %s)""",
                     (buku['id'], jumlah, keterangan or 'Import massal barang masuk', session['user_id'], tgl_masuk)
                 )
-                cur.execute(
-                    """UPDATE buku 
-                       SET stok = stok + %s, updated_at = NOW(),
-                           tanggal_masuk = GREATEST(COALESCE(tanggal_masuk, %s), %s)
-                       WHERE id = %s""",
-                    (jumlah, tgl_masuk, tgl_masuk, buku['id'])
-                )
+                if buku['stok'] == 0:
+                    cur.execute(
+                        """UPDATE buku 
+                           SET stok = stok + %s, updated_at = NOW(),
+                               tanggal_masuk = %s
+                           WHERE id = %s""",
+                        (jumlah, tgl_masuk, buku['id'])
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE buku 
+                           SET stok = stok + %s, updated_at = NOW()
+                           WHERE id = %s""",
+                        (jumlah, buku['id'])
+                    )
                 berhasil.append(f"{buku['judul']} (+{jumlah})")
             except Exception:
                 gagal.append(f"Baris {baris_ke}: gagal memproses ISBN {isbn}")
