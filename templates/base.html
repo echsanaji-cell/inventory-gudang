@@ -31,18 +31,33 @@
                     <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                     <a class="nav-link" href="{{ url_for('buku_list') }}">Data Buku</a>
                     {% if session.role != 'viewer' %}
-                    <a class="nav-link" href="{{ url_for('transaksi_masuk') }}">Buku Masuk</a>
-                    <a class="nav-link" href="{{ url_for('transaksi_keluar') }}">Buku Keluar</a>
-                    <a class="nav-link" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a>
-<a class="nav-link" href="{{ url_for('tujuan_list') }}">Tujuan</a>
-<a class="nav-link" href="{{ url_for('buku_mapping_area') }}">Mapping Area</a>
-<a class="nav-link" href="{{ url_for('tujuan_verifikasi') }}">✅ Verifikasi</a>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Transaksi</a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{{ url_for('transaksi_masuk') }}">Buku Masuk</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('transaksi_keluar') }}">Buku Keluar</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('transaksi_riwayat') }}">Riwayat</a></li>
+                        </ul>
+                    </div>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Distribusi</a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{{ url_for('tujuan_list') }}">Tujuan</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('buku_mapping_area') }}">Mapping Area</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('tujuan_verifikasi') }}">✅ Verifikasi</a></li>
+                        </ul>
+                    </div>
                     {% endif %}
                     {% if session.role == 'admin' %}
-<a class="nav-link" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a>
-<a class="nav-link" href="{{ url_for('user_list') }}">Kelola User</a>
-<a class="nav-link" href="{{ url_for('activity_log') }}">Activity Log</a>
-{% endif %}
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Admin</a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="{{ url_for('kelola_penerbit') }}">Kelola Penerbit</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('user_list') }}">Kelola User</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('activity_log') }}">Activity Log</a></li>
+                        </ul>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="navbar-nav">
                     <span class="nav-link text-light">{{ session.nama_lengkap or session.username }}</span>
