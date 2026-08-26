@@ -14,6 +14,11 @@
         {% endif %}
         <a href="{{ url_for('buku_label', buku_id=buku.id) }}" class="btn btn-outline-dark">🏷️ Cetak Label</a>
         <a href="{{ url_for('buku_list') }}" class="btn btn-secondary">Kembali</a>
+        {% if session.role == 'admin' %}
+        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalHapusPaksa">
+            🗑️ Hapus Paksa
+        </button>
+        {% endif %}
     </div>
 </div>
 
@@ -121,4 +126,28 @@
     </div>
     </div>
 </div>
+{% if session.role == 'admin' %}
+<div class="modal" id="modalHapusPaksa" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">⚠️ Hapus Paksa Buku</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('buku_hapus_paksa', buku_id=buku.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Ini akan menghapus buku <strong>{{ buku.judul }}</strong> <u>beserta seluruh riwayat transaksi masuk/keluar dan mapping distribusinya</u>. Aksi ini <strong>tidak bisa dibatalkan</strong>.</p>
+                    <p>Ketik ulang judul buku persis untuk konfirmasi:</p>
+                    <input type="text" name="konfirmasi_judul" class="form-control" placeholder="{{ buku.judul }}" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger">Ya, Hapus Paksa Permanen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -1395,6 +1395,57 @@ def buku_edit(buku_id):
 
     return render_template('buku/form.html', buku=buku, buku_id=buku_id)
 
+# ------------------ HAPUS PAKSA (termasuk riwayat transaksi) ------------------
+@app.route('/buku/hapus-paksa/<int:buku_id>', methods=['POST'])
+@login_required
+@admin_required
+def buku_hapus_paksa(buku_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT judul, isbn FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+
+    if not buku:
+        flash('Buku tidak ditemukan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('buku_list'))
+
+    konfirmasi = request.form.get('konfirmasi_judul', '').strip()
+    if konfirmasi != buku['judul']:
+        flash('Judul konfirmasi tidak cocok. Hapus paksa dibatalkan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('buku_detail', buku_id=buku_id))
+
+    try:
+        cur.execute("SELECT COUNT(*) as jumlah FROM transaksi WHERE buku_id = %s", (buku_id,))
+        jumlah_transaksi = cur.fetchone()['jumlah']
+
+        cur.execute("DELETE FROM transaksi WHERE buku_id = %s", (buku_id,))
+        cur.execute("DELETE FROM distribusi_rencana WHERE buku_id = %s", (buku_id,))
+        cur.execute("DELETE FROM activity_log WHERE buku_id = %s", (buku_id,))
+        cur.execute("DELETE FROM buku WHERE id = %s", (buku_id,))
+        conn.commit()
+
+        catat_aktivitas(
+            'Hapus Paksa Buku',
+            f'Buku "{buku["judul"]}" (ISBN {buku["isbn"]}) dihapus paksa beserta {jumlah_transaksi} riwayat transaksi terkait'
+        )
+        flash(f'Buku "{buku["judul"]}" berhasil dihapus paksa beserta seluruh riwayat transaksinya.', 'success')
+    except Exception:
+        conn.rollback()
+        flash('Gagal menghapus paksa buku ini.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('buku_detail', buku_id=buku_id))
+
+    cur.close()
+    conn.close()
+    return redirect(url_for('buku_list'))
+
+
 # ------------------ DETAIL BUKU + RIWAYAT MUTASI ------------------
 @app.route('/buku/<int:buku_id>/detail')
 @login_required
@@ -1464,7 +1515,7 @@ def buku_hapus(buku_id):
             flash(f'Buku "{buku["judul"]}" berhasil dihapus.', 'success')
         except Exception as e:
             conn.rollback()
-            flash('Gagal menghapus buku — mungkin masih ada transaksi terkait.', 'danger')
+            flash(f'Gagal menghapus buku — masih ada riwayat transaksi terkait. Buka Detail Buku "{buku["judul"]}" untuk pakai Hapus Paksa kalau memang perlu.', 'danger')
 
     cur.close()
     conn.close()
