@@ -4002,5 +4002,48 @@ def tujuan_rekonsiliasi_judul():
         hasil = [h for h in hasil if h['status'] == filter_status]
 
     return render_template('tujuan/rekonsiliasi_judul.html', daftar=hasil, filter_status=filter_status)
+# ------------------ DETAIL DISTRIBUSI PER JUDUL BUKU ------------------
+@app.route('/buku/<int:buku_id>/detail-distribusi')
+@login_required
+@viewer_blocked
+def buku_detail_distribusi(buku_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+
+    if not buku:
+        cur.close()
+        conn.close()
+        flash('Buku tidak ditemukan.', 'danger')
+        return redirect(url_for('buku_mapping_area'))
+
+    cur.execute(
+        """SELECT t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area,
+                  dr.jumlah_rencana,
+                  COALESCE((
+                      SELECT SUM(tr.jumlah) FROM transaksi tr
+                      WHERE tr.tujuan_id = t.id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'
+                  ), 0) as jumlah_terkirim
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON dr.tujuan_id = t.id
+           WHERE dr.buku_id = %s
+           ORDER BY t.area ASC NULLS LAST, t.nama ASC""",
+        (buku_id,)
+    )
+    daftar_tujuan = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    total_rencana = sum(t['jumlah_rencana'] for t in daftar_tujuan)
+    total_terkirim = sum(t['jumlah_terkirim'] for t in daftar_tujuan)
+
+    return render_template(
+        'buku/detail_distribusi.html',
+        buku=buku, daftar_tujuan=daftar_tujuan,
+        total_rencana=total_rencana, total_terkirim=total_terkirim
+    )
+
 if __name__ == '__main__':
     app.run(debug=True)

@@ -80,7 +80,7 @@
         {% for d in daftar_mapping %}
         <tr>
             <td class="text-muted mono">{{ loop.index + (page - 1) * 50 }}</td>
-            <td>{{ d.judul }}<br><small class="text-muted mono">{{ d.isbn }}</small></td>
+            <td><a href="{{ url_for('buku_detail_distribusi', buku_id=d.id) }}">{{ d.judul }}</a><br><small class="text-muted mono">{{ d.isbn }}</small></td>
             <td class="small">{{ d.penerbit or '-' }}</td>
             <td class="text-end mono">{{ d.red_eks if d.red_eks > 0 else '-' }}</td>
             <td class="text-end mono">{{ d.yellow_eks if d.yellow_eks > 0 else '-' }}</td>

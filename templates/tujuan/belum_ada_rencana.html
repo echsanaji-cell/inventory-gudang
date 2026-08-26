@@ -10,7 +10,7 @@
 <div class="table-responsive">
 <table class="table table-hover table-sm align-middle">
     <thead>
-        <tr><th>No</th><th>Nama Tujuan</th><th>Kecamatan</th><th>Kabupaten/Kota</th><th>Area</th></tr>
+        <tr><th>No</th><th>Nama Tujuan</th><th>Kecamatan</th><th>Kabupaten/Kota</th><th>Provinsi</th><th>Area</th></tr>
     </thead>
     <tbody>
         {% for t in daftar %}
@@ -19,10 +19,11 @@
             <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
             <td class="small">{{ t.kecamatan or '-' }}</td>
             <td class="small">{{ t.kabupaten_kota or '-' }}</td>
+            <td class="small">{{ t.provinsi or '-' }}</td>
             <td class="small">{{ t.area or '-' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-muted">Semua tujuan sudah punya rencana distribusi.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted">Semua tujuan sudah punya rencana distribusi.</td></tr>
         {% endfor %}
     </tbody>
 </table>

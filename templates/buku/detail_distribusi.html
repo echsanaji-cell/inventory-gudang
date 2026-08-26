@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Distribusi - {{ buku.judul }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3>{{ buku.judul }}</h3>
+        <p class="text-muted mb-0"><span class="mono">{{ buku.isbn }}</span> · {{ buku.penerbit or '-' }}</p>
+    </div>
+    <a href="{{ url_for('buku_mapping_area') }}" class="btn btn-secondary">← Kembali</a>
+</div>
+
+<div class="row mb-4 text-center">
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">Total Tujuan</h6>
+            <h3>{{ daftar_tujuan|length }}</h3>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">Total Direncanakan</h6>
+            <h3>{{ total_rencana }} eks</h3>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body">
+            <h6 class="text-muted">Total Terkirim</h6>
+            <h3>{{ total_terkirim }} / {{ total_rencana }}</h3>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Rincian Tujuan Pengiriman</div>
+    <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>No</th><th>Area</th><th>Nama Tujuan</th><th>Kecamatan</th><th>Kabupaten/Kota</th><th>Provinsi</th>
+                    <th class="text-end">Rencana</th><th class="text-end">Terkirim</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in daftar_tujuan %}
+                <tr>
+                    <td class="text-muted mono">{{ loop.index }}</td>
+                    <td>
+                        {% if t.area == 'RED' %}<span class="badge bg-danger">RED</span>
+                        {% elif t.area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                        {% elif t.area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                        {% else %}<span class="badge bg-secondary">-</span>{% endif %}
+                    </td>
+                    <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a></td>
+                    <td class="small">{{ t.kecamatan or '-' }}</td>
+                    <td class="small">{{ t.kabupaten_kota or '-' }}</td>
+                    <td class="small">{{ t.provinsi or '-' }}</td>
+                    <td class="text-end mono">{{ t.jumlah_rencana }}</td>
+                    <td class="text-end mono">{{ t.jumlah_terkirim }}</td>
+                    <td>
+                        {% if t.jumlah_terkirim >= t.jumlah_rencana %}
+                            <span class="badge bg-success">Lengkap</span>
+                        {% elif t.jumlah_terkirim > 0 %}
+                            <span class="badge bg-warning text-dark">Sebagian</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Belum</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center text-muted">Belum ada rencana distribusi untuk buku ini.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
