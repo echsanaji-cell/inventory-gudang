@@ -92,11 +92,12 @@
     <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead>
-                <tr><th>Judul</th><th>ISBN</th><th>Penerbit</th><th>Terkirim / Rencana</th><th>Status</th></tr>
+                <tr><th>No</th><th>Judul</th><th>ISBN</th><th>Penerbit</th><th>Terkirim / Rencana</th><th>Status</th></tr>
             </thead>
             <tbody>
                 {% for r in rencana %}
                 <tr data-buku-id="{{ r.buku_id }}">
+                    <td class="text-muted">{{ loop.index }}</td>
                     <td>{{ r.judul }}</td>
                     <td class="mono small">{{ r.isbn }}</td>
                     <td class="small">{{ r.penerbit or '-' }}</td>
@@ -113,7 +114,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="text-center text-muted">Belum ada rencana distribusi. Import dulu lewat tombol di atas.</td>
+                    <td colspan="6" class="text-center text-muted">Belum ada rencana distribusi. Import dulu lewat tombol di atas.</td>
                 </tr>
                 {% endfor %}
             </tbody>
