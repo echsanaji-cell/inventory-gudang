@@ -775,11 +775,30 @@ def login_verifikasi_2fa():
         kode = request.form.get('kode', '').strip()
         totp = pyotp.TOTP(user['totp_secret'])
 
-        if totp.verify(kode, valid_window=1):
+        kode_valid = totp.verify(kode, valid_window=1)
+        backup_code_terpakai = None
+
+        if not kode_valid:
+            cur.execute(
+                "SELECT id, kode_hash FROM user_backup_codes WHERE user_id = %s AND digunakan = FALSE",
+                (user['id'],)
+            )
+            for bc in cur.fetchall():
+                if check_password_hash(bc['kode_hash'], kode.upper()):
+                    kode_valid = True
+                    backup_code_terpakai = bc['id']
+                    break
+
+        if kode_valid:
             cur.execute(
                 "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = %s",
                 (user['id'],)
             )
+            if backup_code_terpakai:
+                cur.execute(
+                    "UPDATE user_backup_codes SET digunakan = TRUE WHERE id = %s",
+                    (backup_code_terpakai,)
+                )
             conn.commit()
             cur.close()
             conn.close()
@@ -788,6 +807,8 @@ def login_verifikasi_2fa():
             session['username'] = user['username']
             session['role'] = user['role']
             session['nama_lengkap'] = user['nama_lengkap']
+            if backup_code_terpakai:
+                flash('Login berhasil pakai backup code. Segera buat ulang backup code baru kalau sudah mau habis.', 'warning')
             return redirect(url_for('dashboard'))
         else:
             new_attempts = user['failed_attempts'] + 1
@@ -832,10 +853,9 @@ def akun_2fa():
     cur = conn.cursor()
     cur.execute("SELECT totp_enabled FROM users WHERE id = %s", (session['user_id'],))
     user = cur.fetchone()
-    cur.close()
-    conn.close()
 
     qr_base64 = None
+    sisa_backup = 0
     if not user['totp_enabled']:
         secret_baru = pyotp.random_base32()
         session['totp_secret_sementara'] = secret_baru
@@ -846,8 +866,16 @@ def akun_2fa():
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         qr_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    else:
+        cur.execute(
+            "SELECT COUNT(*) as jumlah FROM user_backup_codes WHERE user_id = %s AND digunakan = FALSE",
+            (session['user_id'],)
+        )
+        sisa_backup = cur.fetchone()['jumlah']
 
-    return render_template('akun/2fa.html', totp_enabled=user['totp_enabled'], qr_base64=qr_base64)
+    cur.close()
+    conn.close()
+    return render_template('akun/2fa.html', totp_enabled=user['totp_enabled'], qr_base64=qr_base64, sisa_backup=sisa_backup)
 
 
 @app.route('/akun/2fa/aktifkan', methods=['POST'])
@@ -871,13 +899,55 @@ def akun_2fa_aktifkan():
         "UPDATE users SET totp_secret = %s, totp_enabled = TRUE WHERE id = %s",
         (secret_baru, session['user_id'])
     )
+
+    cur.execute("DELETE FROM user_backup_codes WHERE user_id = %s", (session['user_id'],))
+    kode_kode_baru = []
+    for _ in range(8):
+        kode_baru = f"{secrets_lib.token_hex(2).upper()}-{secrets_lib.token_hex(2).upper()}"
+        kode_kode_baru.append(kode_baru)
+        cur.execute(
+            "INSERT INTO user_backup_codes (user_id, kode_hash) VALUES (%s, %s)",
+            (session['user_id'], generate_password_hash(kode_baru))
+        )
+
     conn.commit()
     cur.close()
     conn.close()
     session.pop('totp_secret_sementara', None)
     catat_aktivitas('Aktifkan 2FA', f'User "{session["username"]}" mengaktifkan two-factor authentication')
     flash('Two-factor authentication berhasil diaktifkan.', 'success')
-    return redirect(url_for('akun_2fa'))
+    return render_template('akun/2fa_backup_codes.html', kode_kode=kode_kode_baru)
+
+
+@app.route('/akun/2fa/regenerate-backup', methods=['POST'])
+@login_required
+def akun_2fa_regenerate_backup():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT totp_enabled FROM users WHERE id = %s", (session['user_id'],))
+    user = cur.fetchone()
+
+    if not user or not user['totp_enabled']:
+        flash('2FA belum aktif di akun ini.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('akun_2fa'))
+
+    cur.execute("DELETE FROM user_backup_codes WHERE user_id = %s", (session['user_id'],))
+    kode_kode_baru = []
+    for _ in range(8):
+        kode_baru = f"{secrets_lib.token_hex(2).upper()}-{secrets_lib.token_hex(2).upper()}"
+        kode_kode_baru.append(kode_baru)
+        cur.execute(
+            "INSERT INTO user_backup_codes (user_id, kode_hash) VALUES (%s, %s)",
+            (session['user_id'], generate_password_hash(kode_baru))
+        )
+    conn.commit()
+    cur.close()
+    conn.close()
+    catat_aktivitas('Generate Ulang Backup Code 2FA', f'User "{session["username"]}" membuat ulang backup code 2FA')
+    flash('Backup code baru berhasil dibuat. Kode lama sudah tidak berlaku.', 'success')
+    return render_template('akun/2fa_backup_codes.html', kode_kode=kode_kode_baru)
 
 
 @app.route('/akun/2fa/nonaktifkan', methods=['POST'])

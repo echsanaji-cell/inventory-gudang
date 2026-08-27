@@ -6,6 +6,20 @@
 
     {% if totp_enabled %}
     <div class="alert alert-success">2FA sedang <strong>aktif</strong> di akun ini.</div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h6>🔑 Backup Code</h6>
+            <p class="mb-2">Sisa backup code yang belum dipakai: <strong>{{ sisa_backup }}</strong> dari 8.</p>
+            <p class="text-muted small">Backup code dipakai untuk masuk kalau HP/aplikasi authenticator kamu hilang. Simpan di tempat aman (dicetak/disimpan offline), jangan di HP yang sama.</p>
+            <form method="POST" action="{{ url_for('akun_2fa_regenerate_backup') }}"
+                  onsubmit="return confirm('Bikin backup code baru? Semua kode lama (termasuk yang belum dipakai) akan langsung tidak berlaku.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-warning w-100">🔄 Buat Ulang Backup Code</button>
+            </form>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-body">
             <p>Untuk menonaktifkan, masukkan password akun kamu:</p>

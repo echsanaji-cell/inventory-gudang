@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Backup Code 2FA{% endblock %}
+{% block content %}
+<div class="mx-auto" style="max-width: 480px;">
+    <h4 class="mb-3">🔑 Simpan Backup Code Ini</h4>
+    <div class="alert alert-warning">
+        Kode ini <strong>hanya ditampilkan sekali</strong>. Simpan/cetak sekarang — kamu tidak bisa melihatnya lagi setelah meninggalkan halaman ini.
+        Tiap kode cuma bisa dipakai <strong>1 kali</strong> untuk login kalau kamu kehilangan akses ke aplikasi authenticator.
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                {% for kode in kode_kode %}
+                <div class="col-6">
+                    <div class="border rounded p-2 text-center mono">{{ kode }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <a href="{{ url_for('akun_2fa') }}" class="btn btn-primary w-100">Sudah Saya Simpan</a>
+</div>
+{% endblock %}
