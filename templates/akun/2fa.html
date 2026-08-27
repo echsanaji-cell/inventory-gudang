@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Keamanan Akun - 2FA{% endblock %}
+{% block content %}
+<div class="mx-auto" style="max-width: 480px;">
+    <h4 class="mb-3">🔐 Two-Factor Authentication</h4>
+
+    {% if totp_enabled %}
+    <div class="alert alert-success">2FA sedang <strong>aktif</strong> di akun ini.</div>
+    <div class="card">
+        <div class="card-body">
+            <p>Untuk menonaktifkan, masukkan password akun kamu:</p>
+            <form method="POST" action="{{ url_for('akun_2fa_nonaktifkan') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <input type="password" name="password" class="form-control" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn btn-outline-danger w-100">Nonaktifkan 2FA</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">2FA <strong>belum aktif</strong> di akun ini.</div>
+    <div class="card mb-3">
+        <div class="card-body text-center">
+            <p>1. Scan QR code ini pakai Google Authenticator / Authy / Microsoft Authenticator:</p>
+            <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR Code 2FA" class="img-fluid mb-3" style="max-width: 220px;">
+            <p>2. Masukkan kode 6 digit yang muncul di aplikasi tersebut:</p>
+            <form method="POST" action="{{ url_for('akun_2fa_aktifkan') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <input type="text" name="kode" class="form-control form-control-lg text-center" style="letter-spacing: .3em;"
+                           inputmode="numeric" pattern="[0-9]*" maxlength="6" required autofocus>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Aktifkan 2FA</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

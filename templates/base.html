@@ -61,8 +61,15 @@
                     {% endif %}
                 </div>
                 <div class="navbar-nav">
-                    <span class="nav-link text-light">{{ session.nama_lengkap or session.username }}</span>
-                    <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-light" href="#" role="button" data-bs-toggle="dropdown">
+                            {{ session.nama_lengkap or session.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('akun_2fa') }}">🔐 Keamanan (2FA)</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>

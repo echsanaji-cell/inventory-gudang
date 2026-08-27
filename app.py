@@ -21,6 +21,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from openpyxl import load_workbook
 import io
+import base64
+import pyotp
+import qrcode
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -694,14 +697,18 @@ def login():
                 (user['id'],)
             )
             conn.commit()
+            cur.close()
+            conn.close()
+
+            if user['totp_enabled']:
+                # jangan buka sesi dulu — tunggu kode 2FA benar
+                session['pending_2fa_user_id'] = user['id']
+                return redirect(url_for('login_verifikasi_2fa'))
 
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
             session['nama_lengkap'] = user['nama_lengkap']
-
-            cur.close()
-            conn.close()
             return redirect(url_for('dashboard'))
         else:
             # login gagal: tambah counter
@@ -729,11 +736,129 @@ def login():
 
     return render_template('login.html')
 
+# ------------------ VERIFIKASI 2FA SAAT LOGIN ------------------
+@app.route('/login/verifikasi-2fa', methods=['GET', 'POST'])
+def login_verifikasi_2fa():
+    pending_id = session.get('pending_2fa_user_id')
+    if not pending_id:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        kode = request.form.get('kode', '').strip()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = %s", (pending_id,))
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not user or not user['totp_enabled']:
+            session.pop('pending_2fa_user_id', None)
+            return redirect(url_for('login'))
+
+        totp = pyotp.TOTP(user['totp_secret'])
+        if totp.verify(kode, valid_window=1):
+            session.pop('pending_2fa_user_id', None)
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            session['nama_lengkap'] = user['nama_lengkap']
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Kode verifikasi salah atau sudah kadaluarsa.', 'danger')
+
+    return render_template('login_verifikasi_2fa.html')
+
+
 # ------------------ LOGOUT ------------------
 @app.route('/logout')
 def logout():
     session.clear()
+    session.pop('pending_2fa_user_id', None)
     return redirect(url_for('login'))
+
+# ------------------ AKUN SAYA: 2FA ------------------
+@app.route('/akun/2fa')
+@login_required
+def akun_2fa():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT totp_enabled FROM users WHERE id = %s", (session['user_id'],))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    qr_base64 = None
+    if not user['totp_enabled']:
+        secret_baru = pyotp.random_base32()
+        session['totp_secret_sementara'] = secret_baru
+        uri = pyotp.totp.TOTP(secret_baru).provisioning_uri(
+            name=session['username'], issuer_name='Inventory Gudang CV. Laras Sejati'
+        )
+        img = qrcode.make(uri)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        qr_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+    return render_template('akun/2fa.html', totp_enabled=user['totp_enabled'], qr_base64=qr_base64)
+
+
+@app.route('/akun/2fa/aktifkan', methods=['POST'])
+@login_required
+def akun_2fa_aktifkan():
+    secret_baru = session.get('totp_secret_sementara')
+    kode = request.form.get('kode', '').strip()
+
+    if not secret_baru:
+        flash('Sesi aktivasi 2FA sudah kadaluarsa, silakan mulai ulang.', 'danger')
+        return redirect(url_for('akun_2fa'))
+
+    totp = pyotp.TOTP(secret_baru)
+    if not totp.verify(kode, valid_window=1):
+        flash('Kode verifikasi salah. Coba scan ulang QR code dan masukkan kode terbaru.', 'danger')
+        return redirect(url_for('akun_2fa'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET totp_secret = %s, totp_enabled = TRUE WHERE id = %s",
+        (secret_baru, session['user_id'])
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    session.pop('totp_secret_sementara', None)
+    catat_aktivitas('Aktifkan 2FA', f'User "{session["username"]}" mengaktifkan two-factor authentication')
+    flash('Two-factor authentication berhasil diaktifkan.', 'success')
+    return redirect(url_for('akun_2fa'))
+
+
+@app.route('/akun/2fa/nonaktifkan', methods=['POST'])
+@login_required
+def akun_2fa_nonaktifkan():
+    password = request.form.get('password', '')
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT password_hash FROM users WHERE id = %s", (session['user_id'],))
+    user = cur.fetchone()
+
+    if not user or not check_password_hash(user['password_hash'], password):
+        flash('Password salah. 2FA tidak dinonaktifkan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('akun_2fa'))
+
+    cur.execute(
+        "UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = %s",
+        (session['user_id'],)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    catat_aktivitas('Nonaktifkan 2FA', f'User "{session["username"]}" menonaktifkan two-factor authentication')
+    flash('Two-factor authentication dinonaktifkan.', 'success')
+    return redirect(url_for('akun_2fa'))
+
 
 # ------------------ DASHBOARD ------------------
 @app.route('/')
