@@ -42,6 +42,14 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
+
+
+@app.after_request
+def tambah_security_headers(response):
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 from flask_wtf import CSRFProtect
 from datetime import timedelta
 
@@ -743,21 +751,38 @@ def login_verifikasi_2fa():
     if not pending_id:
         return redirect(url_for('login'))
 
-    if request.method == 'POST':
-        kode = request.form.get('kode', '').strip()
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id = %s", (pending_id,))
-        user = cur.fetchone()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE id = %s", (pending_id,))
+    user = cur.fetchone()
+
+    if not user or not user['totp_enabled']:
         cur.close()
         conn.close()
+        session.pop('pending_2fa_user_id', None)
+        return redirect(url_for('login'))
 
-        if not user or not user['totp_enabled']:
-            session.pop('pending_2fa_user_id', None)
-            return redirect(url_for('login'))
+    # cek apakah akun sedang terkunci (pakai mekanisme lockout yang sama dengan password)
+    if user['locked_until'] and user['locked_until'] > datetime.now():
+        sisa_menit = int((user['locked_until'] - datetime.now()).total_seconds() / 60) + 1
+        cur.close()
+        conn.close()
+        session.pop('pending_2fa_user_id', None)
+        flash(f'Akun terkunci karena terlalu banyak percobaan gagal. Coba lagi dalam {sisa_menit} menit.', 'danger')
+        return redirect(url_for('login'))
 
+    if request.method == 'POST':
+        kode = request.form.get('kode', '').strip()
         totp = pyotp.TOTP(user['totp_secret'])
+
         if totp.verify(kode, valid_window=1):
+            cur.execute(
+                "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = %s",
+                (user['id'],)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
             session.pop('pending_2fa_user_id', None)
             session['user_id'] = user['id']
             session['username'] = user['username']
@@ -765,8 +790,30 @@ def login_verifikasi_2fa():
             session['nama_lengkap'] = user['nama_lengkap']
             return redirect(url_for('dashboard'))
         else:
-            flash('Kode verifikasi salah atau sudah kadaluarsa.', 'danger')
+            new_attempts = user['failed_attempts'] + 1
+            if new_attempts >= MAX_FAILED_ATTEMPTS:
+                locked_until = datetime.now() + timedelta(minutes=LOCKOUT_MINUTES)
+                cur.execute(
+                    "UPDATE users SET failed_attempts = %s, locked_until = %s WHERE id = %s",
+                    (new_attempts, locked_until, user['id'])
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                session.pop('pending_2fa_user_id', None)
+                flash(f'Terlalu banyak percobaan gagal. Akun dikunci selama {LOCKOUT_MINUTES} menit.', 'danger')
+                return redirect(url_for('login'))
+            else:
+                cur.execute(
+                    "UPDATE users SET failed_attempts = %s WHERE id = %s",
+                    (new_attempts, user['id'])
+                )
+                conn.commit()
+                sisa = MAX_FAILED_ATTEMPTS - new_attempts
+                flash(f'Kode verifikasi salah. Percobaan tersisa: {sisa}.', 'danger')
 
+    cur.close()
+    conn.close()
     return render_template('login_verifikasi_2fa.html')
 
 
