@@ -54,8 +54,9 @@
 
 <form method="GET" class="mb-3" id="form-cari-mapping">
     <div class="row g-2">
-        <div class="col-md-8">
-            <input type="text" name="search" id="input-cari-mapping" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        <div class="col-md-8 position-relative">
+            <input type="text" name="search" id="input-cari-mapping" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}" autocomplete="off">
+            <div id="mapping-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
         </div>
         <div class="col-md-2">
             <button type="button" class="btn btn-outline-secondary w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariMapping)">📷 Scan</button>
@@ -72,6 +73,49 @@ function handleScanCariMapping(kode) {
     document.getElementById('form-cari-mapping').submit();
 }
 initPhysicalScanner(document.getElementById('input-cari-mapping'), handleScanCariMapping);
+
+const inputCariMapping = document.getElementById('input-cari-mapping');
+const mappingSuggestions = document.getElementById('mapping-suggestions');
+let timerCariMapping = null;
+
+inputCariMapping.addEventListener('input', function () {
+    clearTimeout(timerCariMapping);
+    const kata = this.value.trim();
+    if (kata.length < 2) {
+        mappingSuggestions.style.display = 'none';
+        mappingSuggestions.innerHTML = '';
+        return;
+    }
+    timerCariMapping = setTimeout(() => {
+        fetch(`/api/buku/cari-suggest?q=${encodeURIComponent(kata)}`)
+            .then(res => res.json())
+            .then(hasil => {
+                if (hasil.length === 0) {
+                    mappingSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                } else {
+                    mappingSuggestions.innerHTML = hasil.map(b =>
+                        `<button type="button" class="list-group-item list-group-item-action small" data-judul="${b.judul.replace(/"/g, '&quot;')}">${b.label}</button>`
+                    ).join('');
+                }
+                mappingSuggestions.style.display = 'block';
+            });
+    }, 300);
+});
+
+mappingSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-judul]');
+    if (!btn) return;
+    inputCariMapping.value = btn.dataset.judul;
+    mappingSuggestions.style.display = 'none';
+    mappingSuggestions.innerHTML = '';
+    document.getElementById('form-cari-mapping').submit();
+});
+
+document.addEventListener('click', function (e) {
+    if (!inputCariMapping.contains(e.target) && !mappingSuggestions.contains(e.target)) {
+        mappingSuggestions.style.display = 'none';
+    }
+});
 </script>
 
 <div class="table-responsive">

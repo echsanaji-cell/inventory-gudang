@@ -21,8 +21,12 @@ Kalau muncul error "masih ada transaksi terkait", buku itu sudah pernah ada tran
 ## Kontak & Tanggung Jawab
 | Nama | Peran | Kontak |
 |---|---|---|
-| _(isi)_ | Admin utama | _(isi)_ |
-| _(isi)_ | Staf gudang | _(isi)_ |
+| admin | Admin utama | Bayu |
+| krisman | Staf  | krisman |
+| mella | Staf  | mella |
+| kemal | Staf  | kemal |
+| mella2 | Admin  | mella |
+| mella2 | Admin  | Adam |
 
 ## Backup Data
 - Backup manual (Excel/JSON) tersedia di menu Admin — jalankan minimal sebulan sekali, simpan di Google Drive terpisah dari Supabase

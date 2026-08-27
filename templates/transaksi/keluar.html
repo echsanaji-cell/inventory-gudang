@@ -16,10 +16,12 @@
         <small class="text-muted" id="scan-status"></small>
     </div>
 
-    <div class="mb-3">
+    <div class="mb-3 position-relative">
         <label class="form-label">Buku *</label>
-        <select name="buku_id" id="select-buku" class="form-select" required>
-            <option value="">-- Pilih Buku (atau scan di atas) --</option>
+        <input type="text" id="buku-search" class="form-control" placeholder="Ketik judul, ISBN, atau penulis untuk mencari..." autocomplete="off">
+        <div id="buku-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
+        <select name="buku_id" id="select-buku" class="d-none" required>
+            <option value="">-- Pilih Buku --</option>
             {% for buku in daftar_buku %}
             <option value="{{ buku.id }}" data-isbn="{{ buku.isbn }}">{{ buku.judul }} ({{ buku.isbn }}) — stok saat ini: {{ buku.stok }}</option>
             {% endfor %}
@@ -61,6 +63,9 @@
 const inputScan = document.getElementById('input-scan');
 const selectBuku = document.getElementById('select-buku');
 const scanStatus = document.getElementById('scan-status');
+const bukuSearch = document.getElementById('buku-search');
+const bukuSuggestions = document.getElementById('buku-suggestions');
+const allOptions = Array.from(selectBuku.options).filter(o => o.value !== '');
 
 initPhysicalScanner(inputScan, handleScanBuku);
 
@@ -69,6 +74,7 @@ function handleScanBuku(kode) {
     const option = selectBuku.querySelector(`option[data-isbn="${kode}"]`);
     if (option) {
         selectBuku.value = option.value;
+        bukuSearch.value = option.textContent;
         scanStatus.textContent = '✅ Ditemukan: ' + option.textContent;
         scanStatus.className = 'text-success';
     } else {
@@ -77,6 +83,43 @@ function handleScanBuku(kode) {
     }
 }
 
+// pencarian buku manual dengan ketik
+bukuSearch.addEventListener('input', function () {
+    const kata = this.value.trim().toLowerCase();
+    selectBuku.value = ''; // reset pilihan kalau user ngetik ulang
 
+    if (kata.length < 2) {
+        bukuSuggestions.style.display = 'none';
+        bukuSuggestions.innerHTML = '';
+        return;
+    }
+
+    const hasil = allOptions.filter(o => o.textContent.toLowerCase().includes(kata)).slice(0, 20);
+
+    if (hasil.length === 0) {
+        bukuSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+    } else {
+        bukuSuggestions.innerHTML = hasil.map(o =>
+            `<button type="button" class="list-group-item list-group-item-action small" data-value="${o.value}">${o.textContent}</button>`
+        ).join('');
+    }
+    bukuSuggestions.style.display = 'block';
+});
+
+bukuSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-value]');
+    if (!btn) return;
+    selectBuku.value = btn.dataset.value;
+    bukuSearch.value = btn.textContent;
+    bukuSuggestions.style.display = 'none';
+    bukuSuggestions.innerHTML = '';
+});
+
+// tutup daftar saran kalau klik di luar
+document.addEventListener('click', function (e) {
+    if (!bukuSearch.contains(e.target) && !bukuSuggestions.contains(e.target)) {
+        bukuSuggestions.style.display = 'none';
+    }
+});
 </script>
 {% endblock %}

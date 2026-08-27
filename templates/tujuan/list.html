@@ -17,10 +17,11 @@
     </div>
 </div>
 
-<form method="GET" class="mb-2">
+<form method="GET" class="mb-2" id="form-cari-tujuan">
     <div class="row g-2">
-        <div class="col-md-8">
-            <input type="text" name="search" class="form-control" placeholder="Cari nama tujuan, kecamatan, atau kabupaten..." value="{{ search }}">
+        <div class="col-md-8 position-relative">
+            <input type="text" name="search" id="input-cari-tujuan" class="form-control" placeholder="Cari nama tujuan, kecamatan, atau kabupaten..." value="{{ search }}" autocomplete="off">
+            <div id="tujuan-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
         </div>
         <div class="col-md-4">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
@@ -28,6 +29,51 @@
     </div>
     <input type="hidden" name="sort" value="{{ sort }}">
 </form>
+
+<script>
+const inputCariTujuan = document.getElementById('input-cari-tujuan');
+const tujuanSuggestions = document.getElementById('tujuan-suggestions');
+let timerCariTujuan = null;
+
+inputCariTujuan.addEventListener('input', function () {
+    clearTimeout(timerCariTujuan);
+    const kata = this.value.trim();
+    if (kata.length < 2) {
+        tujuanSuggestions.style.display = 'none';
+        tujuanSuggestions.innerHTML = '';
+        return;
+    }
+    timerCariTujuan = setTimeout(() => {
+        fetch(`/api/tujuan/cari-suggest?q=${encodeURIComponent(kata)}`)
+            .then(res => res.json())
+            .then(hasil => {
+                if (hasil.length === 0) {
+                    tujuanSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                } else {
+                    tujuanSuggestions.innerHTML = hasil.map(t =>
+                        `<button type="button" class="list-group-item list-group-item-action small" data-nama="${t.nama.replace(/"/g, '&quot;')}">${t.label}</button>`
+                    ).join('');
+                }
+                tujuanSuggestions.style.display = 'block';
+            });
+    }, 300);
+});
+
+tujuanSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-nama]');
+    if (!btn) return;
+    inputCariTujuan.value = btn.dataset.nama;
+    tujuanSuggestions.style.display = 'none';
+    tujuanSuggestions.innerHTML = '';
+    document.getElementById('form-cari-tujuan').submit();
+});
+
+document.addEventListener('click', function (e) {
+    if (!inputCariTujuan.contains(e.target) && !tujuanSuggestions.contains(e.target)) {
+        tujuanSuggestions.style.display = 'none';
+    }
+});
+</script>
 
 <div class="mb-3 filter-status-group">
     <a href="{{ url_for('tujuan_list', search=search, sort=sort) }}"

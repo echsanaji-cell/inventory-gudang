@@ -2041,7 +2041,46 @@ def api_cek_isbn_duplikat():
     if hasil:
         return jsonify({'duplikat': True, 'buku_id': hasil['id'], 'judul': hasil['judul']})
     return jsonify({'duplikat': False})
+@app.route('/api/buku/cari-suggest')
+@login_required
+def api_cari_suggest_buku():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, judul, isbn FROM buku
+           WHERE judul ILIKE %s OR isbn ILIKE %s
+           ORDER BY judul ASC LIMIT 15""",
+        (f'%{q}%', f'%{q}%')
+    )
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'id': b['id'], 'judul': b['judul'], 'isbn': b['isbn'],
+                      'label': f"{b['judul']} ({b['isbn']})"} for b in hasil])
 
+
+@app.route('/api/tujuan/cari-suggest')
+@login_required
+def api_cari_suggest_tujuan():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, nama, kecamatan, kabupaten_kota FROM tujuan
+           WHERE nama ILIKE %s OR kecamatan ILIKE %s OR kabupaten_kota ILIKE %s
+           ORDER BY nama ASC LIMIT 15""",
+        (f'%{q}%', f'%{q}%', f'%{q}%')
+    )
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'id': t['id'], 'nama': t['nama'],
+                      'label': f"{t['nama']} ({t['kecamatan']}, {t['kabupaten_kota']})"} for t in hasil])
 @app.route('/api/buku/cari-isbn/<isbn>')
 @login_required
 @viewer_blocked
