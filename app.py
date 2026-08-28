@@ -1114,7 +1114,7 @@ def buku_list():
     tgl_sampai = request.args.get('tgl_sampai', '').strip()
     catatan_filter = request.args.get('catatan', '').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
-    per_page = 50
+    per_page_param = request.args.get('per_page', '50').strip()
     catatan_filter = request.args.get('catatan', '').strip()
 
     conn = get_db_connection()
@@ -1157,14 +1157,23 @@ def buku_list():
     query_count = query.replace("SELECT *", "SELECT COUNT(*)", 1)
     cur.execute(query_count, tuple(params))
     total_data = cur.fetchone()['count']
-    total_halaman = max(1, (total_data + per_page - 1) // per_page)
-    page = min(page, total_halaman)
-    offset = (page - 1) * per_page
 
-    query += " ORDER BY judul ASC LIMIT %s OFFSET %s"
-    params_with_limit = params + [per_page, offset]
+    if per_page_param == 'semua':
+        total_halaman = 1
+        page = 1
+        query += " ORDER BY judul ASC"
+        cur.execute(query, tuple(params))
+    else:
+        try:
+            per_page = int(per_page_param)
+        except ValueError:
+            per_page = 50
+        total_halaman = max(1, (total_data + per_page - 1) // per_page)
+        page = min(page, total_halaman)
+        offset = (page - 1) * per_page
+        query += " ORDER BY judul ASC LIMIT %s OFFSET %s"
+        cur.execute(query, tuple(params + [per_page, offset]))
 
-    cur.execute(query, tuple(params_with_limit))
     daftar_buku = cur.fetchall()
 
     # daftar penerbit unik untuk dropdown filter
@@ -1186,7 +1195,8 @@ def buku_list():
         catatan_filter=catatan_filter,
         page=page,
         total_halaman=total_halaman,
-        total_data=total_data
+        total_data=total_data,
+        per_page_param=per_page_param
     )
 
 # ------------------ EXPORT BUKU - EXCEL ------------------
@@ -3064,7 +3074,7 @@ def tujuan_list():
     status_filter = request.args.get('status', '').strip()
     sort = request.args.get('sort', 'nama')
     page = max(1, ambil_int(request.args, 'page', 1))
-    per_page = 50
+    per_page_param = request.args.get('per_page', '50').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -3123,15 +3133,25 @@ def tujuan_list():
     daftar_tujuan.sort(key=sort_map.get(sort, sort_map['nama']))
 
     total_data = len(daftar_tujuan)
-    total_halaman = max(1, (total_data + per_page - 1) // per_page)
-    page = min(page, total_halaman)
-    offset = (page - 1) * per_page
-    daftar_tujuan_halaman = daftar_tujuan[offset:offset + per_page]
+
+    if per_page_param == 'semua':
+        daftar_tujuan_halaman = daftar_tujuan
+        total_halaman = 1
+        page = 1
+    else:
+        try:
+            per_page = int(per_page_param)
+        except ValueError:
+            per_page = 50
+        total_halaman = max(1, (total_data + per_page - 1) // per_page)
+        page = min(page, total_halaman)
+        offset = (page - 1) * per_page
+        daftar_tujuan_halaman = daftar_tujuan[offset:offset + per_page]
 
     return render_template(
         'tujuan/list.html', daftar_tujuan=daftar_tujuan_halaman,
         search=search, status_filter=status_filter, sort=sort,
-        page=page, total_halaman=total_halaman, total_data=total_data
+        page=page, total_halaman=total_halaman, total_data=total_data, per_page_param=per_page_param
     )
 
 # ------------------ ADMIN: TAMBAH TUJUAN ------------------
@@ -3429,6 +3449,76 @@ def tujuan_import_rencana(tujuan_id):
     cur.close()
     conn.close()
     return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+# ------------------ KOSONGKAN RENCANA DISTRIBUSI (PER TUJUAN) ------------------
+@app.route('/tujuan/<int:tujuan_id>/kosongkan-rencana', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_kosongkan_rencana(tujuan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT nama FROM tujuan WHERE id = %s", (tujuan_id,))
+    tujuan = cur.fetchone()
+
+    if not tujuan:
+        flash('Tujuan tidak ditemukan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('tujuan_list'))
+
+    konfirmasi = request.form.get('konfirmasi_nama', '').strip()
+    if konfirmasi != tujuan['nama']:
+        flash('Nama konfirmasi tidak cocok. Pengosongan rencana dibatalkan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    cur.execute("SELECT COUNT(*) as jumlah FROM distribusi_rencana WHERE tujuan_id = %s", (tujuan_id,))
+    jumlah = cur.fetchone()['jumlah']
+
+    cur.execute("DELETE FROM distribusi_rencana WHERE tujuan_id = %s", (tujuan_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Kosongkan Rencana Distribusi', f'Tujuan "{tujuan["nama"]}": {jumlah} baris rencana dihapus')
+    flash(f'{jumlah} baris rencana distribusi untuk "{tujuan["nama"]}" berhasil dikosongkan. Silakan upload ulang file yang benar.', 'success')
+    return redirect(url_for('tujuan_import_rencana', tujuan_id=tujuan_id))
+
+
+# ------------------ KOSONGKAN RENCANA DISTRIBUSI MASSAL (BANYAK TUJUAN SEKALIGUS) ------------------
+@app.route('/tujuan/kosongkan-rencana-massal', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_kosongkan_rencana_massal():
+    try:
+        tujuan_ids = [int(x) for x in request.form.getlist('tujuan_ids')]
+    except ValueError:
+        tujuan_ids = []
+
+    if not tujuan_ids:
+        flash('Tidak ada tujuan yang dipilih.', 'danger')
+        return redirect(url_for('tujuan_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, nama FROM tujuan WHERE id = ANY(%s)", (tujuan_ids,))
+    daftar = cur.fetchall()
+
+    cur.execute("SELECT COUNT(*) as jumlah FROM distribusi_rencana WHERE tujuan_id = ANY(%s)", (tujuan_ids,))
+    jumlah_baris = cur.fetchone()['jumlah']
+
+    cur.execute("DELETE FROM distribusi_rencana WHERE tujuan_id = ANY(%s)", (tujuan_ids,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    nama_daftar = ', '.join(t['nama'] for t in daftar)
+    catat_aktivitas('Kosongkan Rencana Distribusi (Massal)', f'{len(daftar)} tujuan: {nama_daftar} — total {jumlah_baris} baris rencana dihapus')
+    flash(f'Rencana distribusi untuk {len(daftar)} tujuan berhasil dikosongkan ({jumlah_baris} baris).', 'success')
+    return redirect(url_for('tujuan_list'))
+
 
 # ------------------ IMPORT RENCANA DISTRIBUSI MASSAL (BANYAK FILE SEKALIGUS) ------------------
 @app.route('/tujuan/import-rencana-massal', methods=['GET', 'POST'])
@@ -4234,7 +4324,7 @@ def tujuan_import_area():
 def buku_mapping_area():
     search = request.args.get('search', '').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
-    per_page = 50
+    per_page_param = request.args.get('per_page', '50').strip()
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -4275,12 +4365,22 @@ def buku_mapping_area():
     query_count = f"SELECT COUNT(*) as count FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
     total_data = cur.fetchone()['count']
-    total_halaman = max(1, (total_data + per_page - 1) // per_page)
-    page = min(page, total_halaman)
-    offset = (page - 1) * per_page
 
-    query_paged = query + " LIMIT %s OFFSET %s"
-    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    if per_page_param == 'semua':
+        total_halaman = 1
+        page = 1
+        cur.execute(query, tuple(params))
+    else:
+        try:
+            per_page = int(per_page_param)
+        except ValueError:
+            per_page = 50
+        total_halaman = max(1, (total_data + per_page - 1) // per_page)
+        page = min(page, total_halaman)
+        offset = (page - 1) * per_page
+        query_paged = query + " LIMIT %s OFFSET %s"
+        cur.execute(query_paged, tuple(params + [per_page, offset]))
+
     daftar_mapping = cur.fetchall()
 
     cur.close()
@@ -4290,7 +4390,7 @@ def buku_mapping_area():
         'buku/mapping_area.html',
         daftar_mapping=daftar_mapping, search=search,
         ringkasan_area=ringkasan_area, tujuan_tanpa_area=tujuan_tanpa_area,
-        page=page, total_halaman=total_halaman, total_data=total_data
+        page=page, total_halaman=total_halaman, total_data=total_data, per_page_param=per_page_param
     )
 
 

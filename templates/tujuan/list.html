@@ -88,10 +88,15 @@ document.addEventListener('click', function (e) {
        class="btn btn-sm {{ 'btn-success' if status_filter == 'Lengkap' else 'btn-outline-success' }}">Lengkap</a>
 </div>
 
+<form method="POST" action="{{ url_for('tujuan_kosongkan_rencana_massal') }}" id="form-bulk-kosongkan" onsubmit="return validasiBulkKosongkan();">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="table-responsive">
 <table class="table table-hover align-middle">
     <thead>
         <tr>
+            {% if session.role == 'admin' %}
+            <th style="width: 3%;"><input type="checkbox" id="checkAllTujuan" onclick="toggleAllTujuan(this)"></th>
+            {% endif %}
                         <th style="width: 4%;">No</th>
             <th><a href="{{ url_for('tujuan_list', search=search, status=status_filter, sort='nama') }}" class="text-dark text-decoration-none">Nama Tujuan</a></th>
             <th>Kecamatan/Desa</th>
@@ -105,6 +110,9 @@ document.addEventListener('click', function (e) {
     <tbody>
         {% for t in daftar_tujuan %}
         <tr>
+            {% if session.role == 'admin' %}
+            <td><input type="checkbox" name="tujuan_ids" value="{{ t.id }}" class="check-tujuan" onchange="updateJumlahTerpilih()"></td>
+            {% endif %}
             <td class="text-muted mono">{{ loop.index }}</td>
             <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
             <td class="small text-muted">{{ t.desa_kelurahan }}, {{ t.kecamatan }}</td>
@@ -131,6 +139,41 @@ document.addEventListener('click', function (e) {
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% if session.role == 'admin' %}
+<div class="mb-3">
+    <button type="submit" class="btn btn-outline-warning btn-sm" id="btn-bulk-kosongkan" disabled>
+        🧹 Kosongkan Rencana Terpilih (<span id="jumlah-terpilih">0</span>)
+    </button>
+</div>
+{% endif %}
+</form>
+
+<script>
+function toggleAllTujuan(checkbox) {
+    document.querySelectorAll('.check-tujuan').forEach(c => c.checked = checkbox.checked);
+    updateJumlahTerpilih();
+}
+
+function updateJumlahTerpilih() {
+    const jumlah = document.querySelectorAll('.check-tujuan:checked').length;
+    document.getElementById('jumlah-terpilih').textContent = jumlah;
+    document.getElementById('btn-bulk-kosongkan').disabled = jumlah === 0;
+}
+
+function validasiBulkKosongkan() {
+    const jumlah = document.querySelectorAll('.check-tujuan:checked').length;
+    const konfirmasi = prompt(`Ini akan mengosongkan rencana distribusi untuk ${jumlah} tujuan terpilih. Riwayat transaksi yang sudah dikirim TIDAK ikut terhapus. Ketik HAPUS untuk konfirmasi:`);
+    return konfirmasi === 'HAPUS';
+}
+</script>
+<div class="mb-2 small">
+    {% if per_page_param == 'semua' %}
+    <span class="text-muted">Menampilkan semua {{ total_data }} data.</span>
+    <a href="{{ request.path }}?{{ request.query_string.decode().split('&per_page=')[0] }}" class="ms-2">Kembali ke mode halaman</a>
+    {% else %}
+    <a href="?{{ request.query_string.decode() }}&per_page=semua" onclick="return confirm('Menampilkan semua data sekaligus bisa berat kalau datanya banyak. Lanjutkan?');">📄 Tampilkan Semua</a>
+    {% endif %}
 </div>
 {% if total_halaman > 1 %}
 <nav class="mt-3">

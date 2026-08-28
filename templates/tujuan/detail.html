@@ -14,6 +14,9 @@
         <a href="{{ url_for('tujuan_export_pdf', tujuan_id=tujuan.id) }}" class="btn btn-outline-danger">📄 PDF</a>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
+        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalKosongkanRencana">
+            🧹 Kosongkan Rencana
+        </button>
         <a href="{{ url_for('tujuan_edit', tujuan_id=tujuan.id) }}" class="btn btn-outline-secondary">Edit</a>
         <form method="POST" action="{{ url_for('tujuan_hapus', tujuan_id=tujuan.id) }}" class="d-inline"
               onsubmit="return confirm('Yakin hapus tujuan ini? Rencana distribusinya juga akan terhapus.');">
@@ -184,4 +187,28 @@ async function prosesScanKirim(isbn) {
     }
 }
 </script>
+{% if session.role == 'admin' %}
+<div class="modal" id="modalKosongkanRencana" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-warning">🧹 Kosongkan Rencana Distribusi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('tujuan_kosongkan_rencana', tujuan_id=tujuan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Ini akan menghapus <strong>semua baris rencana distribusi</strong> (target per buku) untuk tujuan <strong>{{ tujuan.nama }}</strong>. Riwayat transaksi yang sudah pernah dikirim ke tujuan ini <u>tidak ikut terhapus</u>.</p>
+                    <p>Ketik ulang nama tujuan persis untuk konfirmasi:</p>
+                    <input type="text" name="konfirmasi_nama" class="form-control" placeholder="{{ tujuan.nama }}" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-warning">Ya, Kosongkan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

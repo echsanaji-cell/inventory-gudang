@@ -188,6 +188,14 @@
     </tbody>
 </table>
 </div>
+<div class="mb-2 small">
+    {% if per_page_param == 'semua' %}
+    <span class="text-muted">Menampilkan semua {{ total_data }} data.</span>
+    <a href="{{ request.path }}?{{ request.query_string.decode().split('&per_page=')[0] }}" class="ms-2">Kembali ke mode halaman</a>
+    {% else %}
+    <a href="?{{ request.query_string.decode() }}&per_page=semua" onclick="return confirm('Menampilkan semua data sekaligus bisa berat kalau datanya banyak. Lanjutkan?');">📄 Tampilkan Semua</a>
+    {% endif %}
+</div>
 {% if total_halaman > 1 %}
 <nav class="mt-3">
     <p class="text-muted small">Menampilkan halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} total buku)</p>
