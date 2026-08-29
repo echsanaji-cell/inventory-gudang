@@ -129,6 +129,7 @@ document.addEventListener('click', function (e) {
             <th class="text-end text-danger">🔴 RED</th>
             <th class="text-end text-warning">🟡 YELLOW</th>
             <th class="text-end text-success">🟢 GREEN</th>
+            <th class="text-end text-muted">⚪ Tanpa Area</th>
             <th class="text-end">Total</th>
         </tr>
     </thead>
@@ -142,6 +143,7 @@ document.addEventListener('click', function (e) {
             <td class="text-end mono">{{ d.red_eks if d.red_eks > 0 else '-' }}</td>
             <td class="text-end mono">{{ d.yellow_eks if d.yellow_eks > 0 else '-' }}</td>
             <td class="text-end mono">{{ d.green_eks if d.green_eks > 0 else '-' }}</td>
+            <td class="text-end mono {{ 'text-danger fw-bold' if d.tanpa_area_eks > 0 else 'text-muted' }}">{{ d.tanpa_area_eks if d.tanpa_area_eks > 0 else '-' }}</td>
             <td class="text-end mono fw-bold">{{ d.total_eks }}</td>
         </tr>
         {% else %}

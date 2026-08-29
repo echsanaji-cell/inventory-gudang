@@ -4369,6 +4369,7 @@ def buku_mapping_area():
             COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
             COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
             COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
+            COALESCE(SUM(CASE WHEN t.area IS NULL THEN dr.jumlah_rencana ELSE 0 END), 0) as tanpa_area_eks,
             COALESCE(SUM(dr.jumlah_rencana), 0) as total_eks
         FROM buku b
         LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
@@ -4422,15 +4423,16 @@ def buku_mapping_area_export():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT b.isbn, b.judul, b.penerbit, b.lokasi_rak,
+        """SELECT b.isbn, b.judul, b.penerbit,
             COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
             COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
             COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
+            COALESCE(SUM(CASE WHEN t.area IS NULL THEN dr.jumlah_rencana ELSE 0 END), 0) as tanpa_area_eks,
             COALESCE(SUM(dr.jumlah_rencana), 0) as total_eks
            FROM buku b
            LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
            LEFT JOIN tujuan t ON dr.tujuan_id = t.id
-           GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak
+           GROUP BY b.id, b.isbn, b.judul, b.penerbit
            ORDER BY b.judul ASC"""
     )
     data = cur.fetchall()
