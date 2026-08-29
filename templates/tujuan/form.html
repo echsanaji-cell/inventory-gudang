@@ -35,6 +35,16 @@
         <label class="form-label">Catatan</label>
         <textarea name="catatan" class="form-control" rows="2">{{ tujuan.catatan if tujuan else '' }}</textarea>
     </div>
+    <div class="mb-3">
+        <label class="form-label">Kode Area</label>
+        <select name="area" class="form-select">
+            <option value="">-- Belum diberi kode area --</option>
+            <option value="RED" {{ 'selected' if tujuan and tujuan.area == 'RED' }}>🔴 RED</option>
+            <option value="YELLOW" {{ 'selected' if tujuan and tujuan.area == 'YELLOW' }}>🟡 YELLOW</option>
+            <option value="GREEN" {{ 'selected' if tujuan and tujuan.area == 'GREEN' }}>🟢 GREEN</option>
+        </select>
+        <small class="text-muted">Dipakai untuk laporan Mapping Area. Bisa juga diisi massal lewat Import Area Tujuan.</small>
+    </div>
     <button type="submit" class="btn btn-primary">Simpan</button>
     <a href="{{ url_for('tujuan_list') }}" class="btn btn-secondary">Batal</a>
 </form>

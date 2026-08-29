@@ -3167,6 +3167,7 @@ def tujuan_tambah():
         desa_kelurahan = request.form.get('desa_kelurahan', '').strip()
         alamat = request.form.get('alamat', '').strip()
         catatan = request.form.get('catatan', '').strip()
+        area = request.form.get('area', '').strip().upper() or None
 
         if not nama:
             flash('Nama tujuan wajib diisi.', 'danger')
@@ -3183,9 +3184,9 @@ def tujuan_tambah():
             return render_template('tujuan/form.html')
 
         cur.execute(
-            """INSERT INTO tujuan (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan)
+            """INSERT INTO tujuan (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, area)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, area)
         )
         conn.commit()
         cur.close()
@@ -3214,6 +3215,7 @@ def tujuan_edit(tujuan_id):
         desa_kelurahan = request.form.get('desa_kelurahan', '').strip()
         alamat = request.form.get('alamat', '').strip()
         catatan = request.form.get('catatan', '').strip()
+        area = request.form.get('area', '').strip().upper() or None
 
         if not nama:
             flash('Nama tujuan wajib diisi.', 'danger')
@@ -3222,9 +3224,9 @@ def tujuan_edit(tujuan_id):
             return render_template('tujuan/form.html', tujuan=request.form, tujuan_id=tujuan_id)
 
         cur.execute(
-            """UPDATE tujuan SET nama=%s, provinsi=%s, kabupaten_kota=%s, kecamatan=%s, desa_kelurahan=%s, alamat=%s, catatan=%s
+            """UPDATE tujuan SET nama=%s, provinsi=%s, kabupaten_kota=%s, kecamatan=%s, desa_kelurahan=%s, alamat=%s, catatan=%s, area=%s
                WHERE id=%s""",
-            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, tujuan_id)
+            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, area, tujuan_id)
         )
         conn.commit()
         cur.close()
