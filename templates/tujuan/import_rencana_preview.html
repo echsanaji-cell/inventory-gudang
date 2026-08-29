@@ -78,7 +78,7 @@
     <tr><th>Nama File</th><th>Tujuan Terdeteksi</th><th>Judul</th><th>Eksemplar</th><th>Catatan</th></tr>
 </thead>
 <tbody>
-    {% for nama_file, nama_tujuan, jml_judul, jml_eks, isbn_dobel, isbn_hilang, sudah_ada_lama in ringkasan_per_file %}
+    {% for nama_file, nama_tujuan, jml_judul, jml_eks, isbn_dobel, daftar_isbn_hilang, sudah_ada_lama in ringkasan_per_file %}
     <tr class="{{ 'table-danger' if sudah_ada_lama else '' }}">
         <td class="small">{{ nama_file }}</td>
         <td class="small">
@@ -89,7 +89,12 @@
         <td class="mono small">{{ jml_eks }}</td>
         <td class="small text-muted">
             {% if isbn_dobel %}ISBN dobel: {{ isbn_dobel|join(', ') }}<br>{% endif %}
-            {% if isbn_hilang %}{{ isbn_hilang }} ISBN tidak ditemukan di Data Buku{% endif %}
+            {% if daftar_isbn_hilang %}
+            <div>
+                {{ daftar_isbn_hilang|length }} ISBN tidak ditemukan di Data Buku:
+                <span class="mono">{{ daftar_isbn_hilang|join(', ') }}</span>
+            </div>
+            {% endif %}
         </td>
     </tr>
     {% endfor %}

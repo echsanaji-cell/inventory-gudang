@@ -3614,7 +3614,7 @@ def tujuan_import_rencana_massal():
 
             agregasi_file_ini = {}
             isbn_muncul = {}
-            isbn_tdk_ketemu_file = 0
+            daftar_isbn_tdk_ketemu_file = []
 
             for row in semua_rows[header_row_idx + 1:]:
                 idx_isbn = kolom_index.get('isbn')
@@ -3636,7 +3636,7 @@ def tujuan_import_rencana_massal():
 
                 buku_id = peta_buku.get(isbn)
                 if not buku_id:
-                    isbn_tdk_ketemu_file += 1
+                    daftar_isbn_tdk_ketemu_file.append(isbn)
                     continue
 
                 agregasi_file_ini[buku_id] = agregasi_file_ini.get(buku_id, 0) + eksemplar
@@ -3653,7 +3653,7 @@ def tujuan_import_rencana_massal():
             ringkasan_per_file.append((
                 nama_file, peta_nama_by_id.get(tujuan_id, '?'),
                 len(agregasi_file_ini), sum(agregasi_file_ini.values()),
-                isbn_dobel, isbn_tdk_ketemu_file,
+                isbn_dobel, daftar_isbn_tdk_ketemu_file,
                 tujuan_id in tujuan_sudah_ada_rencana
             ))
 
