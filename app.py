@@ -4197,6 +4197,8 @@ def tujuan_export_pdf(tujuan_id):
 @login_required
 @admin_required
 def tujuan_audit_export():
+    from openpyxl.cell import WriteOnlyCell
+
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
@@ -4210,33 +4212,49 @@ def tujuan_audit_export():
            GROUP BY t.nama, t.kecamatan, t.kabupaten_kota, b.isbn, b.judul, b.penerbit, dr.jumlah_rencana
            ORDER BY t.nama ASC, b.judul ASC"""
     )
-    data = cur.fetchall()
-    cur.close()
-    conn.close()
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Audit Rencana Distribusi"
-
-    headers = ['Tujuan', 'Kecamatan', 'Kabupaten/Kota', 'ISBN', 'Judul', 'Penerbit', 'Rencana', 'Terkirim']
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True, color='FFFFFF')
-        cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
-
-    for d in data:
-        ws.append([
-            d['nama_tujuan'], d['kecamatan'] or '-', d['kabupaten_kota'] or '-',
-            d['isbn'], d['judul'], d['penerbit'] or '-', d['jumlah_rencana'], d['jumlah_terkirim']
-        ])
+    # write_only=True: openpyxl langsung nulis baris ke file tanpa nyimpan semua sel di RAM.
+    # Ini kunci utamanya untuk file besar seperti audit lengkap ini.
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet("Audit Rencana Distribusi")
 
     lebar_kolom = {'A': 30, 'B': 20, 'C': 20, 'D': 16, 'E': 40, 'F': 25, 'G': 10, 'H': 10}
     for kolom, lebar in lebar_kolom.items():
         ws.column_dimensions[kolom].width = lebar
 
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
+    headers = ['Tujuan', 'Kecamatan', 'Kabupaten/Kota', 'ISBN', 'Judul', 'Penerbit', 'Rencana', 'Terkirim']
+    header_cells = []
+    for h in headers:
+        c = WriteOnlyCell(ws, value=h)
+        c.font = header_font
+        c.fill = header_fill
+        header_cells.append(c)
+    ws.append(header_cells)
+
+    # ambil data bertahap (2000 baris per batch), bukan sekaligus semua —
+    # supaya tidak numpuk di RAM kalau datanya sangat banyak
+    while True:
+        batch = cur.fetchmany(2000)
+        if not batch:
+            break
+        for d in batch:
+            ws.append([
+                d['nama_tujuan'], d['kecamatan'] or '-', d['kabupaten_kota'] or '-',
+                d['isbn'], d['judul'], d['penerbit'] or '-', d['jumlah_rencana'], d['jumlah_terkirim']
+            ])
+        del batch
+        gc.collect()
+
+    cur.close()
+    conn.close()
+
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
+    del wb
+    gc.collect()
 
     filename = f"audit-rencana-distribusi-{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx"
     return send_file(
