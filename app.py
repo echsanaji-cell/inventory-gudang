@@ -395,6 +395,22 @@ def ambil_int(form, nama_field, default=0):
     except (ValueError, TypeError):
         return default
     
+def catat_log_referensi(aksi, detail='', referensi_id=None):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO mapping_area_referensi_log (referensi_id, aksi, detail, user_id, nama_user)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (referensi_id, aksi, detail, session.get('user_id'), session.get('nama_lengkap') or session.get('username'))
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+
+
 def catat_aktivitas(aksi, detail='', buku_id=None):
     """Catat aktivitas penting ke activity_log. Gagal diam-diam kalau error, tidak boleh ganggu proses utama."""
     try:
@@ -2830,6 +2846,7 @@ def mapping_area_referensi_edit(referensi_id):
     cur = conn.cursor()
 
     if request.method == 'POST':
+        data_lama = _ambil_data_referensi(referensi_id, cur)
         def ke_int_form(nama):
             val = request.form.get(nama, '').strip()
             try:
@@ -2863,6 +2880,20 @@ def mapping_area_referensi_edit(referensi_id):
         conn.commit()
         cur.close()
         conn.close()
+
+        perubahan = []
+        field_map = {
+            'no_urut': no_urut if 'no_urut' in dir() else ke_int_form('no_urut'),
+            'judul_buku': judul_buku, 'isbn': isbn, 'penerbit': penerbit,
+            'catatan': catatan, 'catatan_pembagian': catatan_pembagian,
+        }
+        for field, nilai_baru in field_map.items():
+            nilai_lama = data_lama[field] if data_lama else None
+            if str(nilai_lama or '') != str(nilai_baru or ''):
+                perubahan.append(field)
+        detail_log = f'Judul: "{judul_buku}" — field diubah: {", ".join(perubahan) if perubahan else "(tidak ada field yang berubah)"}'
+        catat_log_referensi('Edit Manual', detail_log, referensi_id=referensi_id)
+
         flash('Data berhasil diperbarui.', 'success')
         return redirect(url_for('mapping_area_referensi'))
 
@@ -2876,6 +2907,11 @@ def mapping_area_referensi_edit(referensi_id):
         return redirect(url_for('mapping_area_referensi'))
 
     return render_template('admin/mapping_area_referensi_edit.html', d=data)
+
+
+def _ambil_data_referensi(referensi_id, cur):
+    cur.execute("SELECT * FROM mapping_area_referensi WHERE id = %s", (referensi_id,))
+    return cur.fetchone()
 
 
 @app.route('/api/mapping-area-referensi/cari-suggest')
@@ -2927,12 +2963,24 @@ def mapping_area_referensi_update_field():
 
     conn = get_db_connection()
     cur = conn.cursor()
+    cur.execute(f"SELECT judul_buku, {field} FROM mapping_area_referensi WHERE id = %s", (referensi_id,))
+    data_lama = cur.fetchone()
+
     # aman: nama kolom hanya berasal dari whitelist di atas, bukan input bebas
     query = f"UPDATE mapping_area_referensi SET {field} = %s WHERE id = %s"
     cur.execute(query, (value_final, referensi_id))
     conn.commit()
     cur.close()
     conn.close()
+
+    if data_lama:
+        nilai_lama = data_lama[field]
+        judul = data_lama['judul_buku']
+        catat_log_referensi(
+            'Edit Cepat',
+            f'Judul: "{judul}" — {field}: "{nilai_lama or ""}" → "{value_final or ""}"',
+            referensi_id=referensi_id
+        )
 
     return jsonify({'success': True})
 
@@ -3064,7 +3112,7 @@ def mapping_area_referensi_import():
             baris_data
         )
         conn.commit()
-        catat_aktivitas('Import Mapping Area Referensi', f'{len(baris_data)} baris data diimport (menggantikan data lama)')
+        catat_log_referensi('Import', f'{len(baris_data)} baris data diimport (menggantikan seluruh data lama)')
         flash(f'{len(baris_data)} baris data berhasil diimport.', 'success')
     except Exception:
         conn.rollback()
@@ -3074,6 +3122,22 @@ def mapping_area_referensi_import():
         conn.close()
 
     return redirect(url_for('mapping_area_referensi'))
+
+
+@app.route('/admin/mapping-area-referensi/riwayat')
+@login_required
+@admin_required
+def mapping_area_referensi_riwayat():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT * FROM mapping_area_referensi_log
+           ORDER BY created_at DESC LIMIT 300"""
+    )
+    log = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('admin/mapping_area_referensi_riwayat.html', log=log)
 
 
 # ------------------ ADMIN: KELOLA PENERBIT ------------------

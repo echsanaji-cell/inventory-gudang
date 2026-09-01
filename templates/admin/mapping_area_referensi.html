@@ -3,7 +3,10 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-1">
     <h4 class="mb-0">📊 Mapping Judul Buku per Area (Referensi)</h4>
-    <a href="{{ url_for('mapping_area_referensi_bandingkan') }}" class="btn btn-outline-dark btn-sm">🔍 Bandingkan dengan Rencana Distribusi</a>
+    <div>
+        <a href="{{ url_for('mapping_area_referensi_riwayat') }}" class="btn btn-outline-secondary btn-sm">🕘 Riwayat</a>
+        <a href="{{ url_for('mapping_area_referensi_bandingkan') }}" class="btn btn-outline-dark btn-sm">🔍 Bandingkan dengan Rencana Distribusi</a>
+    </div>
 </div>
 <p class="text-muted mb-3">Data berdiri sendiri, diimport langsung dari file Excel — belum terhubung dengan Data Buku atau Tujuan yang ada di aplikasi.</p>
 
