@@ -3131,7 +3131,8 @@ def mapping_area_referensi_riwayat():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT * FROM mapping_area_referensi_log
+        """SELECT *, created_at + interval '7 hours' as created_at_wib
+           FROM mapping_area_referensi_log
            ORDER BY created_at DESC LIMIT 300"""
     )
     log = cur.fetchall()

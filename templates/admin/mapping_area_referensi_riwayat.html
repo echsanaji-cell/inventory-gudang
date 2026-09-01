@@ -20,7 +20,7 @@
         <tbody>
             {% for l in log %}
             <tr>
-                <td class="small mono">{{ l.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                <td class="small mono">{{ l.created_at_wib.strftime('%d-%m-%Y %H:%M') }} WIB</td>
                 <td>
                     <span class="badge {{ 'bg-primary' if l.aksi == 'Import' else ('bg-warning text-dark' if l.aksi == 'Edit Cepat' else 'bg-secondary') }}">{{ l.aksi }}</span>
                 </td>
