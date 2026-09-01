@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Bandingkan Eksemplar - Referensi vs Distribusi{% endblock %}
+{% block content %}
+<h4 class="mb-1">🔍 Bandingkan Jumlah Eksemplar</h4>
+<p class="text-muted mb-3">
+    Membandingkan kolom <strong>Eks</strong> di Mapping Area Referensi dengan total <strong>Rencana Distribusi</strong> yang sudah ada di sistem (dicocokkan lewat ISBN, hanya untuk laporan — kedua data tetap terpisah).
+</p>
+
+<div class="mb-3">
+    <a href="{{ url_for('mapping_area_referensi_bandingkan') }}"
+       class="btn btn-sm {{ 'btn-dark' if not hanya_beda else 'btn-outline-dark' }}">Semua</a>
+    <a href="{{ url_for('mapping_area_referensi_bandingkan', hanya_beda='1') }}"
+       class="btn btn-sm {{ 'btn-dark' if hanya_beda else 'btn-outline-dark' }}">Hanya yang Beda</a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Judul Buku</th>
+                <th>ISBN</th>
+                <th class="text-end">Jumlah Rencana (Data Buku)</th>
+                <th class="text-end">Jumlah (Referensi)</th>
+                <th class="text-end">Total Rencana Distribusi</th>
+                <th class="text-end">Selisih</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in data %}
+            <tr>
+                <td>{{ d.judul_buku }}</td>
+                <td class="mono">{{ d.isbn }}</td>
+                <td class="text-end mono">{{ d.eks_referensi if d.eks_referensi is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.jumlah_referensi if d.jumlah_referensi is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.total_rencana_distribusi }}</td>
+                <td class="text-end mono {{ 'text-danger fw-bold' if d.selisih != 0 else 'text-success' }}">{{ d.selisih }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

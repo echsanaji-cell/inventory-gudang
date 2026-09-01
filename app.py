@@ -2937,6 +2937,41 @@ def mapping_area_referensi_update_field():
     return jsonify({'success': True})
 
 
+@app.route('/admin/mapping-area-referensi/bandingkan')
+@login_required
+@admin_required
+def mapping_area_referensi_bandingkan():
+    hanya_beda = request.args.get('hanya_beda', '').strip() == '1'
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            mar.judul_buku, mar.isbn, b.jumlah_rencana as eks_referensi, mar.jumlah as jumlah_referensi,
+            COALESCE(sub.total_rencana, 0) as total_rencana_distribusi,
+            (COALESCE(b.jumlah_rencana, 0) - COALESCE(sub.total_rencana, 0)) as selisih
+        FROM mapping_area_referensi mar
+        LEFT JOIN buku b ON b.isbn = mar.isbn
+        LEFT JOIN (
+            SELECT b2.isbn, SUM(dr.jumlah_rencana) as total_rencana
+            FROM buku b2
+            JOIN distribusi_rencana dr ON dr.buku_id = b2.id
+            GROUP BY b2.isbn
+        ) sub ON sub.isbn = mar.isbn
+    """
+    if hanya_beda:
+        query += " WHERE (COALESCE(b.jumlah_rencana, 0) - COALESCE(sub.total_rencana, 0)) != 0"
+    query += " ORDER BY mar.judul_buku ASC"
+
+    cur.execute(query)
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return render_template('admin/mapping_area_referensi_bandingkan.html', data=data, hanya_beda=hanya_beda)
+
+
 @app.route('/admin/mapping-area-referensi/import', methods=['POST'])
 @login_required
 @admin_required
