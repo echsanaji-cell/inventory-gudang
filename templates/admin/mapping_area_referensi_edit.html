@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Edit Mapping Area Referensi{% endblock %}
+{% block content %}
+<h4 class="mb-3">✏️ Edit Data Referensi</h4>
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-2">
+        <div class="col-md-2">
+            <label class="form-label">No</label>
+            <input type="number" name="no_urut" class="form-control" value="{{ d.no_urut if d.no_urut is not none else '' }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Judul Buku *</label>
+            <input type="text" name="judul_buku" class="form-control" value="{{ d.judul_buku }}" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">ISBN *</label>
+            <input type="text" name="isbn" class="form-control" value="{{ d.isbn }}" required>
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-6">
+            <label class="form-label">Penerbit</label>
+            <input type="text" name="penerbit" class="form-control" value="{{ d.penerbit or '' }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Eks</label>
+            <input type="number" name="eks" class="form-control" value="{{ d.eks if d.eks is not none else '' }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Jumlah</label>
+            <input type="number" name="jumlah" class="form-control" value="{{ d.jumlah if d.jumlah is not none else '' }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Keterangan</label>
+            <input type="number" name="keterangan" class="form-control" value="{{ d.keterangan if d.keterangan is not none else '' }}">
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-4">
+            <label class="form-label text-danger">Red</label>
+            <input type="number" name="red" class="form-control" value="{{ d.red if d.red is not none else '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-warning">Yellow</label>
+            <input type="number" name="yellow" class="form-control" value="{{ d.yellow if d.yellow is not none else '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-success">Green</label>
+            <input type="number" name="green" class="form-control" value="{{ d.green if d.green is not none else '' }}">
+        </div>
+    </div>
+    <div class="mb-3 mt-2">
+        <label class="form-label">Catatan</label>
+        <textarea name="catatan" class="form-control" rows="2">{{ d.catatan or '' }}</textarea>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Catatan Pembagian</label>
+        <textarea name="catatan_pembagian" class="form-control" rows="2">{{ d.catatan_pembagian or '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('mapping_area_referensi') }}" class="btn btn-secondary">Batal</a>
+</form>
+{% endblock %}

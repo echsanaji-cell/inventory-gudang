@@ -2771,6 +2771,276 @@ def progress_penerbit():
 
     return render_template('buku/progress_penerbit.html', daftar=hasil, sort=sort)
 
+# ------------------ ADMIN: MAPPING AREA REFERENSI (BERDIRI SENDIRI, DARI EXCEL) ------------------
+@app.route('/admin/mapping-area-referensi')
+@login_required
+@admin_required
+def mapping_area_referensi():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    search = request.args.get('search', '').strip()
+    sort = request.args.get('sort', '').strip()
+    penerbit_filter = request.args.get('penerbit', '').strip()
+
+    query = "SELECT * FROM mapping_area_referensi WHERE 1=1"
+    params = []
+    if search:
+        query += " AND (judul_buku ILIKE %s OR isbn ILIKE %s OR penerbit ILIKE %s)"
+        params += [f'%{search}%', f'%{search}%', f'%{search}%']
+
+    if penerbit_filter:
+        query += " AND penerbit = %s"
+        params.append(penerbit_filter)
+
+    catatan_filter = request.args.get('catatan', '').strip()
+    if catatan_filter == 'kosong':
+        query += " AND (catatan IS NULL OR catatan = '')"
+    elif catatan_filter == 'isi':
+        query += " AND catatan IS NOT NULL AND catatan != ''"
+
+    if sort == 'penerbit_asc':
+        query += " ORDER BY penerbit ASC NULLS LAST, judul_buku ASC"
+    elif sort == 'penerbit_desc':
+        query += " ORDER BY penerbit DESC NULLS LAST, judul_buku ASC"
+    else:
+        query += " ORDER BY no_urut ASC NULLS LAST"
+
+    cur.execute(query, tuple(params))
+    data = cur.fetchall()
+
+    cur.execute("SELECT COUNT(*) as jumlah, MAX(created_at) as terakhir_upload FROM mapping_area_referensi")
+    info = cur.fetchone()
+
+    cur.execute("SELECT DISTINCT penerbit FROM mapping_area_referensi WHERE penerbit IS NOT NULL AND penerbit != '' ORDER BY penerbit ASC")
+    daftar_penerbit = [row['penerbit'] for row in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+    return render_template('admin/mapping_area_referensi.html', data=data, search=search, info=info,
+                            sort=sort, penerbit_filter=penerbit_filter, daftar_penerbit=daftar_penerbit,
+                            catatan_filter=catatan_filter)
+
+
+@app.route('/admin/mapping-area-referensi/edit/<int:referensi_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def mapping_area_referensi_edit(referensi_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if request.method == 'POST':
+        def ke_int_form(nama):
+            val = request.form.get(nama, '').strip()
+            try:
+                return int(val)
+            except ValueError:
+                return None
+
+        judul_buku = request.form.get('judul_buku', '').strip()
+        isbn = request.form.get('isbn', '').strip()
+        penerbit = request.form.get('penerbit', '').strip() or None
+        catatan = request.form.get('catatan', '').strip() or None
+        catatan_pembagian = request.form.get('catatan_pembagian', '').strip() or None
+
+        if not judul_buku or not isbn:
+            flash('Judul Buku dan ISBN wajib diisi.', 'danger')
+            cur.close()
+            conn.close()
+            return redirect(url_for('mapping_area_referensi_edit', referensi_id=referensi_id))
+
+        cur.execute(
+            """UPDATE mapping_area_referensi
+               SET no_urut=%s, judul_buku=%s, isbn=%s, penerbit=%s, eks=%s,
+                   red=%s, yellow=%s, green=%s, jumlah=%s, keterangan=%s,
+                   catatan=%s, catatan_pembagian=%s
+               WHERE id=%s""",
+            (ke_int_form('no_urut'), judul_buku, isbn, penerbit, ke_int_form('eks'),
+             ke_int_form('red'), ke_int_form('yellow'), ke_int_form('green'),
+             ke_int_form('jumlah'), ke_int_form('keterangan'),
+             catatan, catatan_pembagian, referensi_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Data berhasil diperbarui.', 'success')
+        return redirect(url_for('mapping_area_referensi'))
+
+    cur.execute("SELECT * FROM mapping_area_referensi WHERE id = %s", (referensi_id,))
+    data = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not data:
+        flash('Data tidak ditemukan.', 'danger')
+        return redirect(url_for('mapping_area_referensi'))
+
+    return render_template('admin/mapping_area_referensi_edit.html', d=data)
+
+
+@app.route('/api/mapping-area-referensi/cari-suggest')
+@login_required
+@admin_required
+def api_cari_suggest_mapping_referensi():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT judul_buku, isbn FROM mapping_area_referensi
+           WHERE judul_buku ILIKE %s OR isbn ILIKE %s
+           ORDER BY judul_buku ASC LIMIT 15""",
+        (f'%{q}%', f'%{q}%')
+    )
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'judul': r['judul_buku'],
+                      'label': f"{r['judul_buku']} ({r['isbn']})"} for r in hasil])
+
+
+@app.route('/admin/mapping-area-referensi/update-field', methods=['POST'])
+@login_required
+@admin_required
+def mapping_area_referensi_update_field():
+    data = request.get_json(silent=True) or {}
+    referensi_id = data.get('id')
+    field = data.get('field')
+    value = data.get('value', '')
+
+    # whitelist ketat — cuma 3 field ini yang boleh diedit langsung dari tabel
+    field_diizinkan = {'keterangan', 'catatan', 'catatan_pembagian'}
+    if field not in field_diizinkan:
+        return jsonify({'success': False, 'message': 'Field tidak diizinkan diedit langsung.'}), 400
+
+    if not referensi_id:
+        return jsonify({'success': False, 'message': 'ID tidak valid.'}), 400
+
+    if field == 'keterangan':
+        try:
+            value_final = int(value) if str(value).strip() != '' else None
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Keterangan harus berupa angka.'}), 400
+    else:
+        value_final = value.strip() or None
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # aman: nama kolom hanya berasal dari whitelist di atas, bukan input bebas
+    query = f"UPDATE mapping_area_referensi SET {field} = %s WHERE id = %s"
+    cur.execute(query, (value_final, referensi_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({'success': True})
+
+
+@app.route('/admin/mapping-area-referensi/import', methods=['POST'])
+@login_required
+@admin_required
+def mapping_area_referensi_import():
+    file = request.files.get('file')
+    if not file or not file.filename:
+        flash('Pilih file Excel terlebih dahulu.', 'danger')
+        return redirect(url_for('mapping_area_referensi'))
+
+    rows = baca_excel_universal(file)
+
+    def cari_index_kolom_exact(header_row, *nama_yang_dicari):
+        nama_set = [n.lower() for n in nama_yang_dicari]
+        for i, val in enumerate(header_row):
+            if val and str(val).strip().lower() in nama_set:
+                return i
+        return None
+
+    def ambil(row, idx):
+        if idx is None or idx >= len(row):
+            return None
+        return row[idx]
+
+    def ke_int(v):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    header_row_idx = None
+    for i, row in enumerate(rows):
+        if any(v and str(v).strip().lower() == 'isbn' for v in row):
+            header_row_idx = i
+            break
+
+    if header_row_idx is None:
+        flash('Format file tidak dikenali — tidak ditemukan kolom header ISBN.', 'danger')
+        return redirect(url_for('mapping_area_referensi'))
+
+    header = rows[header_row_idx]
+    sub_header = rows[header_row_idx + 1] if header_row_idx + 1 < len(rows) else []
+
+    idx_no = cari_index_kolom_exact(header, 'no')
+    idx_judul = cari_index_kolom_exact(header, 'judul buku', 'judul')
+    idx_isbn = cari_index_kolom_exact(header, 'isbn')
+    idx_penerbit = cari_index_kolom_exact(header, 'penerbit')
+    idx_eks = cari_index_kolom_exact(header, 'eks')
+    idx_jumlah = cari_index_kolom_exact(header, 'jumlah')
+    idx_keterangan = cari_index_kolom_exact(header, 'keterangan')
+    idx_catatan_pembagian = cari_index_kolom_exact(header, 'catatan pembagian')
+    idx_catatan = cari_index_kolom_exact(header, 'catatan')
+
+    idx_red = cari_index_kolom_exact(sub_header, 'red')
+    idx_yellow = cari_index_kolom_exact(sub_header, 'yellow')
+    idx_green = cari_index_kolom_exact(sub_header, 'green')
+
+    baris_data = []
+    for row in rows[header_row_idx + 2:]:
+        isbn = ambil(row, idx_isbn)
+        judul = ambil(row, idx_judul)
+        if not isbn or not judul:
+            continue
+        baris_data.append((
+            ke_int(ambil(row, idx_no)),
+            str(judul).strip(),
+            str(isbn).strip(),
+            (str(ambil(row, idx_penerbit)).strip() if ambil(row, idx_penerbit) else None),
+            ke_int(ambil(row, idx_eks)),
+            ke_int(ambil(row, idx_red)),
+            ke_int(ambil(row, idx_yellow)),
+            ke_int(ambil(row, idx_green)),
+            ke_int(ambil(row, idx_jumlah)),
+            ke_int(ambil(row, idx_keterangan)),
+            (str(ambil(row, idx_catatan)).strip() if ambil(row, idx_catatan) else None),
+            (str(ambil(row, idx_catatan_pembagian)).strip() if ambil(row, idx_catatan_pembagian) else None),
+        ))
+
+    if not baris_data:
+        flash('Tidak ada baris data yang valid ditemukan di file ini.', 'danger')
+        return redirect(url_for('mapping_area_referensi'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM mapping_area_referensi")
+        cur.executemany(
+            """INSERT INTO mapping_area_referensi
+               (no_urut, judul_buku, isbn, penerbit, eks, red, yellow, green, jumlah, keterangan, catatan, catatan_pembagian)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            baris_data
+        )
+        conn.commit()
+        catat_aktivitas('Import Mapping Area Referensi', f'{len(baris_data)} baris data diimport (menggantikan data lama)')
+        flash(f'{len(baris_data)} baris data berhasil diimport.', 'success')
+    except Exception:
+        conn.rollback()
+        flash('Gagal mengimport data. Cek format file.', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for('mapping_area_referensi'))
+
+
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
 @login_required
@@ -4645,4 +4915,4 @@ def buku_detail_distribusi(buku_id):
     )
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

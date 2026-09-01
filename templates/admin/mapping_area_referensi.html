@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Mapping Judul per Area (Referensi){% endblock %}
+{% block content %}
+<h4 class="mb-1">📊 Mapping Judul Buku per Area (Referensi)</h4>
+<p class="text-muted mb-3">Data berdiri sendiri, diimport langsung dari file Excel — belum terhubung dengan Data Buku atau Tujuan yang ada di aplikasi.</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h6>Import / Ganti Data</h6>
+        <p class="text-muted small mb-2">
+            {% if info.jumlah %}
+            Saat ini ada <strong>{{ info.jumlah }}</strong> baris data, terakhir diupload {{ info.terakhir_upload.strftime('%d-%m-%Y %H:%M') if info.terakhir_upload else '-' }}.
+            Upload file baru akan <strong>menggantikan seluruh data yang ada</strong>.
+            {% else %}
+            Belum ada data. Upload file Excel untuk mulai.
+            {% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('mapping_area_referensi_import') }}" enctype="multipart/form-data"
+              onsubmit="return confirm('Upload ini akan MENGGANTI seluruh data mapping area referensi yang ada sekarang. Lanjutkan?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2">
+                <div class="col-md-8">
+                    <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">📤 Import / Ganti Data</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<form method="GET" class="mb-3" id="form-cari-referensi">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <div class="row g-2">
+        <div class="col-md-6 position-relative">
+            <input type="text" name="search" id="input-cari-referensi" class="form-control" placeholder="Cari judul, ISBN, atau penerbit..." value="{{ search }}" autocomplete="off">
+            <div id="referensi-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
+        </div>
+        <div class="col-md-3">
+            <input type="hidden" name="catatan" value="{{ catatan_filter }}">
+            <select name="penerbit" class="form-select" onchange="document.getElementById('form-cari-referensi').submit();">
+                <option value="">-- Semua Penerbit --</option>
+                {% for p in daftar_penerbit %}
+                <option value="{{ p }}" {{ 'selected' if p == penerbit_filter else '' }}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="mb-3">
+    <a href="{{ url_for('mapping_area_referensi', search=search, penerbit=penerbit_filter, sort=sort) }}"
+       class="btn btn-sm {{ 'btn-dark' if not catatan_filter else 'btn-outline-dark' }}">Semua</a>
+    <a href="{{ url_for('mapping_area_referensi', search=search, penerbit=penerbit_filter, sort=sort, catatan='kosong') }}"
+       class="btn btn-sm {{ 'btn-dark' if catatan_filter == 'kosong' else 'btn-outline-dark' }}">Catatan Kosong</a>
+    <a href="{{ url_for('mapping_area_referensi', search=search, penerbit=penerbit_filter, sort=sort, catatan='isi') }}"
+       class="btn btn-sm {{ 'btn-dark' if catatan_filter == 'isi' else 'btn-outline-dark' }}">Catatan Terisi</a>
+</div>
+
+<script>
+const inputCariReferensi = document.getElementById('input-cari-referensi');
+const referensiSuggestions = document.getElementById('referensi-suggestions');
+let timerCariReferensi = null;
+
+inputCariReferensi.addEventListener('input', function () {
+    clearTimeout(timerCariReferensi);
+    const kata = this.value.trim();
+    if (kata.length < 2) {
+        referensiSuggestions.style.display = 'none';
+        referensiSuggestions.innerHTML = '';
+        return;
+    }
+    timerCariReferensi = setTimeout(() => {
+        fetch(`/api/mapping-area-referensi/cari-suggest?q=${encodeURIComponent(kata)}`)
+            .then(res => res.json())
+            .then(hasil => {
+                if (hasil.length === 0) {
+                    referensiSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                } else {
+                    referensiSuggestions.innerHTML = hasil.map(r =>
+                        `<button type="button" class="list-group-item list-group-item-action small" data-judul="${r.judul.replace(/"/g, '&quot;')}">${r.label}</button>`
+                    ).join('');
+                }
+                referensiSuggestions.style.display = 'block';
+            });
+    }, 300);
+});
+
+referensiSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-judul]');
+    if (!btn) return;
+    inputCariReferensi.value = btn.dataset.judul;
+    referensiSuggestions.style.display = 'none';
+    referensiSuggestions.innerHTML = '';
+    document.getElementById('form-cari-referensi').submit();
+});
+
+document.addEventListener('click', function (e) {
+    if (!inputCariReferensi.contains(e.target) && !referensiSuggestions.contains(e.target)) {
+        referensiSuggestions.style.display = 'none';
+    }
+});
+</script>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Judul Buku</th>
+                <th>ISBN</th>
+                <th>
+                    <a href="{{ url_for('mapping_area_referensi', search=search, penerbit=penerbit_filter, catatan=catatan_filter, sort='penerbit_asc' if sort != 'penerbit_asc' else 'penerbit_desc') }}" class="text-dark text-decoration-none">
+                        Penerbit {{ '▲' if sort == 'penerbit_asc' else ('▼' if sort == 'penerbit_desc' else '') }}
+                    </a>
+                </th>
+                <th class="text-end">Eks</th>
+                <th class="text-end text-danger">Red</th>
+                <th class="text-end text-warning">Yellow</th>
+                <th class="text-end text-success">Green</th>
+                <th class="text-end">Jumlah</th>
+                <th class="text-end">Keterangan</th>
+                <th>Catatan</th>
+                <th>Catatan Pembagian</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in data %}
+            <tr>
+                <td class="mono">{{ d.no_urut or '-' }}</td>
+                <td>{{ d.judul_buku }}</td>
+                <td class="mono">{{ d.isbn }}</td>
+                <td class="small">{{ d.penerbit or '-' }}</td>
+                <td class="text-end mono">{{ d.eks if d.eks is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.red if d.red is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.yellow if d.yellow is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.green if d.green is not none else '-' }}</td>
+                <td class="text-end mono">{{ d.jumlah if d.jumlah is not none else '-' }}</td>
+                <td class="text-end mono editable-field" data-id="{{ d.id }}" data-field="keterangan" style="cursor: pointer;" title="Klik untuk edit">
+                    <span class="field-display {{ 'text-danger fw-bold' if d.keterangan and d.keterangan != 0 else '' }}">{{ d.keterangan if d.keterangan is not none else '-' }}</span>
+                </td>
+                <td class="small editable-field" data-id="{{ d.id }}" data-field="catatan" style="cursor: pointer;" title="Klik untuk edit">
+                    <span class="field-display">{{ d.catatan or '-' }}</span>
+                </td>
+                <td class="small editable-field" data-id="{{ d.id }}" data-field="catatan_pembagian" style="cursor: pointer;" title="Klik untuk edit">
+                    <span class="field-display">{{ d.catatan_pembagian or '-' }}</span>
+                </td>
+                <td><a href="{{ url_for('mapping_area_referensi_edit', referensi_id=d.id) }}" class="btn btn-sm btn-outline-primary">Edit</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="13" class="text-center text-muted">Belum ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+document.querySelectorAll('.editable-field').forEach(td => {
+    td.addEventListener('click', function () {
+        if (td.querySelector('input, textarea')) return; // sudah dalam mode edit
+
+        const span = td.querySelector('.field-display');
+        const nilaiLama = span.textContent.trim() === '-' ? '' : span.textContent.trim();
+        const field = td.dataset.field;
+        const id = td.dataset.id;
+        const isAngka = field === 'keterangan';
+
+        const input = document.createElement(isAngka ? 'input' : 'textarea');
+        if (isAngka) input.type = 'number';
+        else input.rows = 2;
+        input.className = 'form-control form-control-sm';
+        input.value = nilaiLama;
+
+        td.innerHTML = '';
+        td.appendChild(input);
+        input.focus();
+
+        function simpan() {
+            const nilaiBaru = input.value.trim();
+            fetch('/admin/mapping-area-referensi/update-field', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({ id: id, field: field, value: nilaiBaru })
+            })
+            .then(res => res.json())
+            .then(data => {
+                const teksTampil = nilaiBaru === '' ? '-' : nilaiBaru;
+                if (data.success) {
+                    td.innerHTML = `<span class="field-display">${teksTampil}</span>`;
+                } else {
+                    alert(data.message || 'Gagal menyimpan.');
+                    td.innerHTML = `<span class="field-display">${nilaiLama || '-'}</span>`;
+                }
+            })
+            .catch(() => {
+                alert('Gagal menyimpan, cek koneksi.');
+                td.innerHTML = `<span class="field-display">${nilaiLama || '-'}</span>`;
+            });
+        }
+
+        input.addEventListener('blur', simpan);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && isAngka) {
+                e.preventDefault();
+                input.blur();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
