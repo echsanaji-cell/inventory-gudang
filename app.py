@@ -3747,10 +3747,18 @@ def tujuan_rencana_tambah(tujuan_id):
         (tujuan_id, buku_id, jumlah_rencana)
     )
     conn.commit()
+
+    cur.execute("SELECT nama FROM tujuan WHERE id = %s", (tujuan_id,))
+    nama_tujuan = cur.fetchone()
+    cur.execute("SELECT judul FROM buku WHERE id = %s", (buku_id,))
+    judul_buku = cur.fetchone()
     cur.close()
     conn.close()
 
-    catat_aktivitas('Tambah Rencana Distribusi Manual', f'Tujuan ID {tujuan_id}, buku_id {buku_id}, jumlah {jumlah_rencana}')
+    catat_aktivitas(
+        'Tambah Rencana Distribusi Manual',
+        f'Tujuan: "{nama_tujuan["nama"] if nama_tujuan else "?"}", Buku: "{judul_buku["judul"] if judul_buku else "?"}", Jumlah rencana: {jumlah_rencana}'
+    )
     flash('Rencana distribusi berhasil ditambahkan.', 'success')
     return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
 
@@ -3768,6 +3776,17 @@ def tujuan_rencana_edit(tujuan_id, rencana_id):
 
     conn = get_db_connection()
     cur = conn.cursor()
+
+    cur.execute(
+        """SELECT t.nama as nama_tujuan, b.judul as judul_buku
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON t.id = dr.tujuan_id
+           JOIN buku b ON b.id = dr.buku_id
+           WHERE dr.id = %s""",
+        (rencana_id,)
+    )
+    info = cur.fetchone()
+
     cur.execute(
         "UPDATE distribusi_rencana SET jumlah_rencana = %s WHERE id = %s AND tujuan_id = %s",
         (jumlah_rencana, rencana_id, tujuan_id)
@@ -3776,7 +3795,10 @@ def tujuan_rencana_edit(tujuan_id, rencana_id):
     cur.close()
     conn.close()
 
-    catat_aktivitas('Edit Rencana Distribusi Manual', f'Tujuan ID {tujuan_id}, rencana ID {rencana_id}, jumlah baru {jumlah_rencana}')
+    catat_aktivitas(
+        'Edit Rencana Distribusi Manual',
+        f'Tujuan: "{info["nama_tujuan"] if info else "?"}", Buku: "{info["judul_buku"] if info else "?"}", Jumlah rencana baru: {jumlah_rencana}'
+    )
     flash('Jumlah rencana berhasil diperbarui.', 'success')
     return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
 
