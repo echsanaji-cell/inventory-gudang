@@ -5070,7 +5070,7 @@ def buku_detail_distribusi(buku_id):
                   ), 0) as jumlah_terkirim
            FROM distribusi_rencana dr
            JOIN tujuan t ON dr.tujuan_id = t.id
-           WHERE dr.buku_id = %s
+           WHERE dr.buku_id = %s AND dr.jumlah_rencana > 0
            ORDER BY t.area ASC NULLS LAST, t.nama ASC""",
         (buku_id,)
     )
