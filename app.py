@@ -3710,6 +3710,73 @@ def tujuan_detail(tujuan_id):
     )
 
 
+# ------------------ TAMBAH & EDIT RENCANA DISTRIBUSI MANUAL (SATU PER SATU) ------------------
+@app.route('/tujuan/<int:tujuan_id>/rencana/tambah', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_rencana_tambah(tujuan_id):
+    buku_id = request.form.get('buku_id', '').strip()
+    jumlah_rencana = request.form.get('jumlah_rencana', '').strip()
+
+    if not buku_id or not jumlah_rencana:
+        flash('Pilih buku dan isi jumlah rencana.', 'danger')
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    try:
+        jumlah_rencana = int(jumlah_rencana)
+    except ValueError:
+        flash('Jumlah rencana harus berupa angka.', 'danger')
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM distribusi_rencana WHERE tujuan_id = %s AND buku_id = %s", (tujuan_id, buku_id))
+    if cur.fetchone():
+        flash('Buku ini sudah ada di rencana distribusi tujuan ini. Gunakan tombol Edit untuk mengubah jumlahnya.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    cur.execute(
+        "INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana) VALUES (%s, %s, %s)",
+        (tujuan_id, buku_id, jumlah_rencana)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Tambah Rencana Distribusi Manual', f'Tujuan ID {tujuan_id}, buku_id {buku_id}, jumlah {jumlah_rencana}')
+    flash('Rencana distribusi berhasil ditambahkan.', 'success')
+    return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+
+@app.route('/tujuan/<int:tujuan_id>/rencana/edit/<int:rencana_id>', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_rencana_edit(tujuan_id, rencana_id):
+    jumlah_rencana = request.form.get('jumlah_rencana', '').strip()
+    try:
+        jumlah_rencana = int(jumlah_rencana)
+    except ValueError:
+        flash('Jumlah rencana harus berupa angka.', 'danger')
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE distribusi_rencana SET jumlah_rencana = %s WHERE id = %s AND tujuan_id = %s",
+        (jumlah_rencana, rencana_id, tujuan_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Edit Rencana Distribusi Manual', f'Tujuan ID {tujuan_id}, rencana ID {rencana_id}, jumlah baru {jumlah_rencana}')
+    flash('Jumlah rencana berhasil diperbarui.', 'success')
+    return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+
 # ------------------ IMPORT RENCANA DISTRIBUSI UNTUK 1 TUJUAN ------------------
 @app.route('/tujuan/<int:tujuan_id>/import-rencana', methods=['GET', 'POST'])
 @login_required

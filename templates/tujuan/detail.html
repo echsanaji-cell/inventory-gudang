@@ -14,6 +14,9 @@
         <a href="{{ url_for('tujuan_export_pdf', tujuan_id=tujuan.id) }}" class="btn btn-outline-danger">📄 PDF</a>
         {% if session.role == 'admin' %}
         <a href="{{ url_for('tujuan_import_rencana', tujuan_id=tujuan.id) }}" class="btn btn-outline-primary">📤 Import Rencana</a>
+        <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalTambahRencana">
+            ➕ Tambah Buku
+        </button>
         <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalKosongkanRencana">
             🧹 Kosongkan Rencana
         </button>
@@ -95,7 +98,7 @@
     <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead>
-                <tr><th>No</th><th>Judul</th><th>ISBN</th><th>Penerbit</th><th>Terkirim / Rencana</th><th>Status</th></tr>
+                <tr><th>No</th><th>Judul</th><th>ISBN</th><th>Penerbit</th><th>Terkirim / Rencana</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
                 {% for r in rencana %}
@@ -114,10 +117,16 @@
                             <span class="badge bg-secondary">Belum</span>
                         {% endif %}
                     </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                onclick="bukaModalEditRencana('{{ r.id }}', '{{ r.judul|e }}', {{ r.jumlah_rencana }})">
+                            ✏️ Edit
+                        </button>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="text-center text-muted">Belum ada rencana distribusi. Import dulu lewat tombol di atas.</td>
+                    <td colspan="7" class="text-center text-muted">Belum ada rencana distribusi. Import dulu lewat tombol di atas.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -187,6 +196,117 @@ async function prosesScanKirim(isbn) {
     }
 }
 </script>
+{% if session.role == 'admin' %}
+<div class="modal" id="modalTambahRencana" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">➕ Tambah Buku ke Rencana</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('tujuan_rencana_tambah', tujuan_id=tujuan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3 position-relative">
+                        <label class="form-label">Buku</label>
+                        <input type="text" id="tambah-rencana-search" class="form-control" placeholder="Ketik judul atau ISBN..." autocomplete="off">
+                        <div id="tambah-rencana-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 220px; overflow-y: auto; display: none;"></div>
+                        <input type="hidden" name="buku_id" id="tambah-rencana-buku-id" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Jumlah Rencana</label>
+                        <input type="number" name="jumlah_rencana" class="form-control" min="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success">Tambah</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="modalEditRencana" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">✏️ Edit Jumlah Rencana</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="form-edit-rencana">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Judul: <strong id="edit-rencana-judul"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Jumlah Rencana</label>
+                        <input type="number" name="jumlah_rencana" id="edit-rencana-jumlah" class="form-control" min="0" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function bukaModalEditRencana(rencanaId, judul, jumlahSekarang) {
+    document.getElementById('edit-rencana-judul').textContent = judul;
+    document.getElementById('edit-rencana-jumlah').value = jumlahSekarang;
+    document.getElementById('form-edit-rencana').action = `/tujuan/{{ tujuan.id }}/rencana/edit/${rencanaId}`;
+    new bootstrap.Modal(document.getElementById('modalEditRencana')).show();
+}
+
+const tambahRencanaSearch = document.getElementById('tambah-rencana-search');
+const tambahRencanaSuggestions = document.getElementById('tambah-rencana-suggestions');
+const tambahRencanaBukuId = document.getElementById('tambah-rencana-buku-id');
+let timerTambahRencana = null;
+
+tambahRencanaSearch.addEventListener('input', function () {
+    clearTimeout(timerTambahRencana);
+    tambahRencanaBukuId.value = '';
+    const kata = this.value.trim();
+    if (kata.length < 2) {
+        tambahRencanaSuggestions.style.display = 'none';
+        tambahRencanaSuggestions.innerHTML = '';
+        return;
+    }
+    timerTambahRencana = setTimeout(() => {
+        fetch(`/api/buku/cari-suggest?q=${encodeURIComponent(kata)}`)
+            .then(res => res.json())
+            .then(hasil => {
+                if (hasil.length === 0) {
+                    tambahRencanaSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                } else {
+                    tambahRencanaSuggestions.innerHTML = hasil.map(b =>
+                        `<button type="button" class="list-group-item list-group-item-action small" data-id="${b.id}" data-label="${b.label.replace(/"/g, '&quot;')}">${b.label}</button>`
+                    ).join('');
+                }
+                tambahRencanaSuggestions.style.display = 'block';
+            });
+    }, 300);
+});
+
+tambahRencanaSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-id]');
+    if (!btn) return;
+    tambahRencanaSearch.value = btn.dataset.label;
+    tambahRencanaBukuId.value = btn.dataset.id;
+    tambahRencanaSuggestions.style.display = 'none';
+    tambahRencanaSuggestions.innerHTML = '';
+});
+
+document.addEventListener('click', function (e) {
+    if (!tambahRencanaSearch.contains(e.target) && !tambahRencanaSuggestions.contains(e.target)) {
+        tambahRencanaSuggestions.style.display = 'none';
+    }
+});
+</script>
+{% endif %}
+
 {% if session.role == 'admin' %}
 <div class="modal" id="modalKosongkanRencana" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
