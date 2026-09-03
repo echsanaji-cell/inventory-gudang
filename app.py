@@ -3814,7 +3814,6 @@ def tujuan_import_rencana(tujuan_id):
             conn.close()
             return render_template('tujuan/import_rencana.html', tujuan=tujuan)
 
-        # cari baris header (file "Laporan Per Faktur" ada judul di baris atas sebelum tabel)
         header_row_idx = None
         kolom_index = {}
         alias_kolom = {
@@ -3839,56 +3838,81 @@ def tujuan_import_rencana(tujuan_id):
             conn.close()
             return render_template('tujuan/import_rencana.html', tujuan=tujuan)
 
-        berhasil = 0
-        tidak_ketemu = []
+        cur.execute("SELECT id, isbn FROM buku")
+        peta_buku = {b['isbn'].strip(): b['id'] for b in cur.fetchall()}
+
         agregasi_per_buku = {}
+        isbn_muncul = {}
+        daftar_isbn_tdk_ketemu = []
 
         for row in semua_rows[header_row_idx + 1:]:
-            def ambil(field, default=''):
-                idx = kolom_index.get(field)
-                if idx is None or idx >= len(row) or row[idx] is None:
-                    return default
-                return row[idx]
+            idx_isbn = kolom_index.get('isbn')
+            idx_eks = kolom_index.get('eksemplar')
 
-            isbn = str(ambil('isbn')).strip()
-            if not isbn or isbn.lower() == 'none':
+            if idx_isbn is None or idx_isbn >= len(row) or row[idx_isbn] is None:
+                continue
+
+            isbn = str(row[idx_isbn]).strip()
+            if not isbn:
                 continue
 
             try:
-                nilai_eksemplar = ambil('eksemplar', None)
-                eksemplar = int(float(nilai_eksemplar)) if nilai_eksemplar is not None and str(nilai_eksemplar).strip() != '' else 1
+                nilai_eks_mentah = row[idx_eks] if idx_eks is not None and idx_eks < len(row) else None
+                eksemplar = int(float(nilai_eks_mentah)) if nilai_eks_mentah is not None and str(nilai_eks_mentah).strip() != '' else 1
             except (ValueError, TypeError):
                 eksemplar = 1
 
-            cur.execute("SELECT id FROM buku WHERE isbn = %s", (isbn,))
-            buku = cur.fetchone()
+            isbn_muncul[isbn] = isbn_muncul.get(isbn, 0) + 1
 
-            if not buku:
-                tidak_ketemu.append(isbn)
+            buku_id = peta_buku.get(isbn)
+            if not buku_id:
+                daftar_isbn_tdk_ketemu.append(isbn)
                 continue
 
-            agregasi_per_buku[buku['id']] = agregasi_per_buku.get(buku['id'], 0) + eksemplar
+            agregasi_per_buku[buku_id] = agregasi_per_buku.get(buku_id, 0) + eksemplar
 
-        for buku_id, total_eksemplar in agregasi_per_buku.items():
+        isbn_dobel = [isbn for isbn, jumlah in isbn_muncul.items() if jumlah > 1]
+
+        if not agregasi_per_buku:
+            cur.close()
+            conn.close()
+            flash('Tidak ada baris data yang valid ditemukan di file ini.', 'danger')
+            return render_template('tujuan/import_rencana.html', tujuan=tujuan)
+
+        cur.execute("SELECT 1 FROM distribusi_rencana WHERE tujuan_id = %s LIMIT 1", (tujuan_id,))
+        sudah_ada_rencana = cur.fetchone() is not None
+
+        # simpan ke staging dulu (belum masuk distribusi_rencana) — sama seperti Import Massal
+        batch_id = secrets_lib.token_hex(8)
+        for buku_id, jumlah in agregasi_per_buku.items():
             cur.execute(
-                """INSERT INTO distribusi_rencana (tujuan_id, buku_id, jumlah_rencana)
-                   VALUES (%s, %s, %s)
-                   ON CONFLICT (tujuan_id, buku_id)
-                   DO UPDATE SET jumlah_rencana = EXCLUDED.jumlah_rencana""",
-                (tujuan_id, buku_id, total_eksemplar)
+                """INSERT INTO import_staging (batch_id, tujuan_id, buku_id, jumlah_rencana, nama_file)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (batch_id, tujuan_id, buku_id, jumlah, file.filename)
             )
-            berhasil += 1
-
         conn.commit()
         cur.close()
         conn.close()
 
-        catat_aktivitas('Import Rencana Distribusi', f'{berhasil} judul untuk tujuan "{tujuan["nama"]}"')
-        pesan = f'{berhasil} rencana distribusi berhasil diimpor untuk "{tujuan["nama"]}".'
-        if tidak_ketemu:
-            pesan += f' {len(tidak_ketemu)} ISBN tidak ditemukan di master data buku.'
-        flash(pesan, 'success')
-        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+        ringkasan_per_file = [(
+            file.filename, tujuan['nama'],
+            len(agregasi_per_buku), sum(agregasi_per_buku.values()),
+            isbn_dobel, daftar_isbn_tdk_ketemu,
+            sudah_ada_rencana
+        )]
+
+        return render_template(
+            'tujuan/import_rencana_preview.html',
+            batch_id=batch_id,
+            ringkasan_per_file=ringkasan_per_file,
+            file_tujuan_tidak_ketemu=[],
+            file_nama_bentrok=[],
+            file_gagal_baca=[],
+            detail_tujuan_dobel=[],
+            total_tujuan_terpengaruh=1,
+            total_eksemplar_preview=sum(agregasi_per_buku.values()),
+            daftar_nama_tujuan_overwrite=[tujuan['nama']] if sudah_ada_rencana else []
+        )
 
     cur.close()
     conn.close()
