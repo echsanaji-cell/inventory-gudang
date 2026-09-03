@@ -3685,9 +3685,10 @@ def tujuan_detail(tujuan_id):
     total_rencana = sum(r['jumlah_rencana'] for r in rencana_semua)
     total_terkirim = sum(r['jumlah_terkirim'] for r in rencana_semua)
 
-    jumlah_belum = sum(1 for r in rencana_semua if r['jumlah_terkirim'] == 0)
+    jumlah_belum = sum(1 for r in rencana_semua if r['jumlah_terkirim'] == 0 and r['jumlah_rencana'] > 0)
     jumlah_sebagian = sum(1 for r in rencana_semua if 0 < r['jumlah_terkirim'] < r['jumlah_rencana'])
     jumlah_lengkap = sum(1 for r in rencana_semua if r['jumlah_terkirim'] >= r['jumlah_rencana'] and r['jumlah_rencana'] > 0)
+    jumlah_tanpa_rencana = sum(1 for r in rencana_semua if r['jumlah_rencana'] == 0)
 
     if status_rincian == 'belum':
         rencana = [r for r in rencana_semua if r['jumlah_terkirim'] == 0]
@@ -3695,6 +3696,8 @@ def tujuan_detail(tujuan_id):
         rencana = [r for r in rencana_semua if 0 < r['jumlah_terkirim'] < r['jumlah_rencana']]
     elif status_rincian == 'lengkap':
         rencana = [r for r in rencana_semua if r['jumlah_terkirim'] >= r['jumlah_rencana'] and r['jumlah_rencana'] > 0]
+    elif status_rincian == 'tanpa_rencana':
+        rencana = [r for r in rencana_semua if r['jumlah_rencana'] == 0]
     elif status_rincian == 'belum_lengkap':
         rencana = [r for r in rencana_semua if r['jumlah_terkirim'] < r['jumlah_rencana']]
     else:
@@ -3706,6 +3709,7 @@ def tujuan_detail(tujuan_id):
         status_rincian=status_rincian,
         jumlah_belum=jumlah_belum, jumlah_sebagian=jumlah_sebagian, jumlah_lengkap=jumlah_lengkap,
         jumlah_belum_lengkap=jumlah_belum + jumlah_sebagian,
+        jumlah_tanpa_rencana=jumlah_tanpa_rencana,
         total_judul_semua=len(rencana_semua)
     )
 
@@ -3851,7 +3855,8 @@ def tujuan_import_rencana(tujuan_id):
                 continue
 
             try:
-                eksemplar = int(float(ambil('eksemplar', 1) or 1))
+                nilai_eksemplar = ambil('eksemplar', None)
+                eksemplar = int(float(nilai_eksemplar)) if nilai_eksemplar is not None and str(nilai_eksemplar).strip() != '' else 1
             except (ValueError, TypeError):
                 eksemplar = 1
 
@@ -4065,7 +4070,8 @@ def tujuan_import_rencana_massal():
                     continue
 
                 try:
-                    eksemplar = int(float(row[idx_eks])) if idx_eks is not None and idx_eks < len(row) and row[idx_eks] else 1
+                    nilai_eks_mentah = row[idx_eks] if idx_eks is not None and idx_eks < len(row) else None
+                    eksemplar = int(float(nilai_eks_mentah)) if nilai_eks_mentah is not None and str(nilai_eks_mentah).strip() != '' else 1
                 except (ValueError, TypeError):
                     eksemplar = 1
 

@@ -93,6 +93,8 @@
                class="btn btn-sm {{ 'btn-warning' if status_rincian == 'sebagian' else 'btn-outline-warning' }}">Sebagian ({{ jumlah_sebagian }})</a>
             <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='lengkap') }}"
                class="btn btn-sm {{ 'btn-success' if status_rincian == 'lengkap' else 'btn-outline-success' }}">Lengkap ({{ jumlah_lengkap }})</a>
+            <a href="{{ url_for('tujuan_detail', tujuan_id=tujuan.id, status_rincian='tanpa_rencana') }}"
+               class="btn btn-sm {{ 'btn-dark' if status_rincian == 'tanpa_rencana' else 'btn-outline-dark' }}">Tidak Direncanakan ({{ jumlah_tanpa_rencana }})</a>
         </div>
     </div>
     <div class="table-responsive">
@@ -109,7 +111,9 @@
                     <td class="small">{{ r.penerbit or '-' }}</td>
                     <td class="mono"><span id="jumlah-terkirim-{{ r.buku_id }}">{{ r.jumlah_terkirim }}</span> / {{ r.jumlah_rencana }}</td>
                     <td id="status-badge-{{ r.buku_id }}">
-                        {% if r.jumlah_terkirim >= r.jumlah_rencana %}
+                        {% if r.jumlah_rencana == 0 %}
+                            <span class="badge bg-light text-dark border">Tidak Direncanakan</span>
+                        {% elif r.jumlah_terkirim >= r.jumlah_rencana %}
                             <span class="badge bg-success">Lengkap</span>
                         {% elif r.jumlah_terkirim > 0 %}
                             <span class="badge bg-warning text-dark">Sebagian</span>
@@ -182,7 +186,9 @@ async function prosesScanKirim(isbn) {
         if (elJumlah) {
             elJumlah.textContent = data.jumlah_terkirim;
             const elBadge = document.getElementById(`status-badge-${data.buku_id}`);
-            if (data.jumlah_terkirim >= data.jumlah_rencana && data.jumlah_rencana > 0) {
+            if (data.jumlah_rencana === 0) {
+                elBadge.innerHTML = '<span class="badge bg-light text-dark border">Tidak Direncanakan</span>';
+            } else if (data.jumlah_terkirim >= data.jumlah_rencana) {
                 elBadge.innerHTML = '<span class="badge bg-success">Lengkap</span>';
             } else if (data.jumlah_terkirim > 0) {
                 elBadge.innerHTML = '<span class="badge bg-warning text-dark">Sebagian</span>';
