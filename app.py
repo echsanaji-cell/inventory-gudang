@@ -4866,6 +4866,8 @@ def tujuan_import_area():
 
         alias_kolom = {
             'nama': ['nama perpustakaan desa/kelurahan', 'nama perpustakaan', 'nama'],
+            'kecamatan': ['kecamatan'],
+            'desa_kelurahan': ['desa/kelurahan', 'desa', 'kelurahan'],
             'area': ['notes color', 'area', 'warna', 'kode warna'],
         }
         kolom_index = {}
@@ -4886,23 +4888,35 @@ def tujuan_import_area():
         tidak_ketemu = []
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            idx_nama = kolom_index['nama']
+            def ambil(field):
+                idx = kolom_index.get(field)
+                if idx is None or idx >= len(row) or row[idx] is None:
+                    return ''
+                return str(row[idx]).strip()
+
+            nama = ambil('nama')
+            kecamatan = ambil('kecamatan')
+            desa_kelurahan = ambil('desa_kelurahan')
+
             idx_area = kolom_index['area']
-
-            if idx_nama >= len(row) or row[idx_nama] is None:
-                continue
-
-            nama = str(row[idx_nama]).strip()
             area = str(row[idx_area]).strip().upper() if idx_area < len(row) and row[idx_area] else None
 
             if not nama or not area:
                 continue
 
-            cur.execute("UPDATE tujuan SET area = %s WHERE nama = %s", (area, nama))
+            if kecamatan or desa_kelurahan:
+                cur.execute(
+                    """UPDATE tujuan SET area = %s
+                       WHERE nama = %s AND COALESCE(kecamatan, '') = %s AND COALESCE(desa_kelurahan, '') = %s""",
+                    (area, nama, kecamatan, desa_kelurahan)
+                )
+            else:
+                cur.execute("UPDATE tujuan SET area = %s WHERE nama = %s", (area, nama))
+
             if cur.rowcount > 0:
                 berhasil += 1
             else:
-                tidak_ketemu.append(nama)
+                tidak_ketemu.append(f'{nama} ({kecamatan}, {desa_kelurahan})' if kecamatan else nama)
 
         conn.commit()
         cur.close()
