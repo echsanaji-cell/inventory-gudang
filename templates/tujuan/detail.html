@@ -126,6 +126,11 @@
                                 onclick="bukaModalEditRencana('{{ r.id }}', '{{ r.judul|e }}', {{ r.jumlah_rencana }})">
                             ✏️ Edit
                         </button>
+                        <form method="POST" action="{{ url_for('tujuan_rencana_hapus_satu', tujuan_id=tujuan.id, rencana_id=r.id) }}" class="d-inline"
+                              onsubmit="return confirm('Hapus rencana untuk &quot;{{ r.judul|e }}&quot; dari tujuan ini?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Hapus</button>
+                        </form>
                     </td>
                 </tr>
                 {% else %}

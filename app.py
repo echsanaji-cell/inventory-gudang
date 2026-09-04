@@ -3763,6 +3763,42 @@ def tujuan_rencana_tambah(tujuan_id):
     return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
 
 
+@app.route('/tujuan/<int:tujuan_id>/rencana/hapus/<int:rencana_id>', methods=['POST'])
+@login_required
+@admin_required
+def tujuan_rencana_hapus_satu(tujuan_id, rencana_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """SELECT t.nama as nama_tujuan, b.judul as judul_buku
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON t.id = dr.tujuan_id
+           JOIN buku b ON b.id = dr.buku_id
+           WHERE dr.id = %s AND dr.tujuan_id = %s""",
+        (rencana_id, tujuan_id)
+    )
+    info = cur.fetchone()
+
+    if not info:
+        flash('Data rencana tidak ditemukan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+    cur.execute("DELETE FROM distribusi_rencana WHERE id = %s AND tujuan_id = %s", (rencana_id, tujuan_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas(
+        'Hapus Rencana Distribusi (Satu Judul)',
+        f'Tujuan: "{info["nama_tujuan"]}", Buku: "{info["judul_buku"]}" dihapus dari rencana'
+    )
+    flash('Rencana untuk judul ini berhasil dihapus.', 'success')
+    return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
+
+
 @app.route('/tujuan/<int:tujuan_id>/rencana/edit/<int:rencana_id>', methods=['POST'])
 @login_required
 @admin_required
@@ -4216,12 +4252,31 @@ def tujuan_import_rencana_konfirmasi():
             (row['tujuan_id'], row['buku_id'], row['jumlah_rencana'])
         )
 
+    tujuan_ids_unik = set(row['tujuan_id'] for row in staging_rows)
+
+    if len(tujuan_ids_unik) == 1:
+        satu_tujuan_id = list(tujuan_ids_unik)[0]
+        cur.execute("SELECT nama FROM tujuan WHERE id = %s", (satu_tujuan_id,))
+        info_tujuan = cur.fetchone()
+        nama_tujuan = info_tujuan['nama'] if info_tujuan else f'ID {satu_tujuan_id}'
+    else:
+        nama_tujuan = None
+
     cur.execute("DELETE FROM import_staging WHERE batch_id = %s", (batch_id,))
     conn.commit()
     cur.close()
     conn.close()
 
-    catat_aktivitas('Import Rencana Massal (Konfirmasi)', f'{len(staging_rows)} baris rencana dikonfirmasi dan disimpan')
+    if nama_tujuan:
+        catat_aktivitas(
+            'Import Rencana per Tujuan (Konfirmasi)',
+            f'Tujuan: "{nama_tujuan}" (ID {satu_tujuan_id}) — {len(staging_rows)} judul rencana disimpan'
+        )
+    else:
+        catat_aktivitas(
+            'Import Rencana Massal (Konfirmasi)',
+            f'{len(tujuan_ids_unik)} tujuan, {len(staging_rows)} baris rencana dikonfirmasi dan disimpan'
+        )
     flash(f'{len(staging_rows)} rencana distribusi berhasil disimpan.', 'success')
     return redirect(url_for('tujuan_list'))
 
