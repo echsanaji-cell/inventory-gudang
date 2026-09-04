@@ -3763,6 +3763,42 @@ def tujuan_rencana_tambah(tujuan_id):
     return redirect(url_for('tujuan_detail', tujuan_id=tujuan_id))
 
 
+@app.route('/buku/<int:buku_id>/detail-distribusi/hapus/<int:rencana_id>', methods=['POST'])
+@login_required
+@admin_required
+def buku_detail_distribusi_hapus(buku_id, rencana_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """SELECT t.nama as nama_tujuan, b.judul as judul_buku
+           FROM distribusi_rencana dr
+           JOIN tujuan t ON t.id = dr.tujuan_id
+           JOIN buku b ON b.id = dr.buku_id
+           WHERE dr.id = %s AND dr.buku_id = %s""",
+        (rencana_id, buku_id)
+    )
+    info = cur.fetchone()
+
+    if not info:
+        flash('Data rencana tidak ditemukan.', 'danger')
+        cur.close()
+        conn.close()
+        return redirect(url_for('buku_detail_distribusi', buku_id=buku_id))
+
+    cur.execute("DELETE FROM distribusi_rencana WHERE id = %s AND buku_id = %s", (rencana_id, buku_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas(
+        'Hapus Rencana Distribusi (Satu Judul)',
+        f'Tujuan: "{info["nama_tujuan"]}", Buku: "{info["judul_buku"]}" dihapus dari rencana'
+    )
+    flash('Rencana untuk tujuan ini berhasil dihapus.', 'success')
+    return redirect(url_for('buku_detail_distribusi', buku_id=buku_id))
+
+
 @app.route('/tujuan/<int:tujuan_id>/rencana/hapus/<int:rencana_id>', methods=['POST'])
 @login_required
 @admin_required
@@ -5166,7 +5202,7 @@ def buku_detail_distribusi(buku_id):
         return redirect(url_for('buku_mapping_area'))
 
     cur.execute(
-        """SELECT t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area,
+        """SELECT dr.id as rencana_id, t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area,
                   dr.jumlah_rencana,
                   COALESCE((
                       SELECT SUM(tr.jumlah) FROM transaksi tr

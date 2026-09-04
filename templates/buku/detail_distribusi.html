@@ -38,7 +38,7 @@
             <thead>
                 <tr>
                     <th>No</th><th>Area</th><th>Nama Tujuan</th><th>Kecamatan</th><th>Kabupaten/Kota</th><th>Provinsi</th>
-                    <th class="text-end">Rencana</th><th class="text-end">Terkirim</th><th>Status</th>
+                    <th class="text-end">Rencana</th><th class="text-end">Terkirim</th><th>Status</th><th></th>
                 </tr>
             </thead>
             <tbody>
@@ -66,9 +66,18 @@
                             <span class="badge bg-secondary">Belum</span>
                         {% endif %}
                     </td>
+                    <td>
+                        {% if session.role == 'admin' %}
+                        <form method="POST" action="{{ url_for('buku_detail_distribusi_hapus', buku_id=buku.id, rencana_id=t.rencana_id) }}"
+                              onsubmit="return confirm('Hapus rencana buku ini untuk tujuan &quot;{{ t.nama|e }}&quot;?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Hapus</button>
+                        </form>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="text-center text-muted">Belum ada rencana distribusi untuk buku ini.</td></tr>
+                <tr><td colspan="10" class="text-center text-muted">Belum ada rencana distribusi untuk buku ini.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
