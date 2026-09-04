@@ -4967,7 +4967,7 @@ def buku_mapping_area_export():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT b.isbn, b.judul, b.penerbit,
+        """SELECT b.isbn, b.judul, b.penerbit, b.lokasi_rak,
             COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
             COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
             COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
@@ -4976,7 +4976,7 @@ def buku_mapping_area_export():
            FROM buku b
            LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
            LEFT JOIN tujuan t ON dr.tujuan_id = t.id
-           GROUP BY b.id, b.isbn, b.judul, b.penerbit
+           GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak
            ORDER BY b.judul ASC"""
     )
     data = cur.fetchall()
@@ -4987,16 +4987,19 @@ def buku_mapping_area_export():
     ws = wb.active
     ws.title = "Mapping Area"
 
-    headers = ['No', 'ISBN', 'Judul', 'Penerbit', 'Lokasi Rak', 'RED (Eks)', 'YELLOW (Eks)', 'GREEN (Eks)', 'Total Eks']
+    headers = ['No', 'ISBN', 'Judul', 'Penerbit', 'Lokasi Rak', 'RED (Eks)', 'YELLOW (Eks)', 'GREEN (Eks)', 'Tanpa Area (Eks)', 'Total Eks']
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill(start_color='0D6EFD', end_color='0D6EFD', fill_type='solid')
 
     for i, d in enumerate(data, start=1):
-        ws.append([i, d['isbn'], d['judul'], d['penerbit'] or '-', d['lokasi_rak'] or '-', d['red_eks'], d['yellow_eks'], d['green_eks'], d['total_eks']])
+        ws.append([
+            i, d['isbn'], d['judul'], d['penerbit'] or '-', d['lokasi_rak'] or '-',
+            d['red_eks'], d['yellow_eks'], d['green_eks'], d['tanpa_area_eks'], d['total_eks']
+        ])
 
-    lebar_kolom = {'A': 5, 'B': 16, 'C': 45, 'D': 20, 'E': 18, 'F': 12, 'G': 12, 'H': 12, 'I': 12}
+    lebar_kolom = {'A': 5, 'B': 16, 'C': 45, 'D': 20, 'E': 18, 'F': 12, 'G': 12, 'H': 12, 'I': 14, 'J': 12}
     for kolom, lebar in lebar_kolom.items():
         ws.column_dimensions[kolom].width = lebar
 
