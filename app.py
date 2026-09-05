@@ -5238,7 +5238,7 @@ def buku_detail_distribusi(buku_id):
         return redirect(url_for('buku_mapping_area'))
 
     cur.execute(
-        """SELECT dr.id as rencana_id, t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area,
+        """SELECT dr.id as rencana_id, t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area, t.no_box,
                   dr.jumlah_rencana,
                   COALESCE((
                       SELECT SUM(tr.jumlah) FROM transaksi tr
