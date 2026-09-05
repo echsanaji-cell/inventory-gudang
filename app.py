@@ -5334,10 +5334,20 @@ def buku_detail_distribusi(buku_id):
     total_rencana = sum(t['jumlah_rencana'] for t in daftar_tujuan)
     total_terkirim = sum(t['jumlah_terkirim'] for t in daftar_tujuan)
 
+    ringkasan_area = {}
+    for warna in ['RED', 'YELLOW', 'GREEN', None]:
+        baris_warna = [t for t in daftar_tujuan if t['area'] == warna]
+        if baris_warna:
+            ringkasan_area[warna or 'TANPA_AREA'] = {
+                'jumlah_tujuan': len(baris_warna),
+                'total_eksemplar': sum(t['jumlah_rencana'] for t in baris_warna)
+            }
+
     return render_template(
         'buku/detail_distribusi.html',
         buku=buku, daftar_tujuan=daftar_tujuan,
-        total_rencana=total_rencana, total_terkirim=total_terkirim
+        total_rencana=total_rencana, total_terkirim=total_terkirim,
+        ringkasan_area=ringkasan_area
     )
 
 if __name__ == '__main__':
