@@ -6,6 +6,7 @@
         <h3>{{ buku.judul }}</h3>
         <p class="text-muted mb-0"><span class="mono">{{ buku.isbn }}</span> · {{ buku.penerbit or '-' }}</p>
         <p class="text-muted mb-0">📍 Lokasi Rak: <strong>{{ buku.lokasi_rak or 'Belum diisi' }}</strong></p>
+        <p class="text-muted mb-0">📦 Stok saat ini: <strong id="stok-buku-sekarang">{{ buku.stok }}</strong></p>
     </div>
     <a href="{{ url_for('buku_mapping_area') }}" class="btn btn-secondary">← Kembali</a>
 </div>
@@ -33,7 +34,14 @@
 
 <div class="card">
     <div class="card-header">Rincian Tujuan Pengiriman</div>
-    <div class="table-responsive">
+    <div class="mb-2">
+    <button type="button" class="btn btn-sm btn-outline-dark active" data-filter-area="" onclick="filterArea(this, '')">Semua</button>
+    <button type="button" class="btn btn-sm btn-outline-danger" data-filter-area="RED" onclick="filterArea(this, 'RED')">🔴 RED</button>
+    <button type="button" class="btn btn-sm btn-outline-warning" data-filter-area="YELLOW" onclick="filterArea(this, 'YELLOW')">🟡 YELLOW</button>
+    <button type="button" class="btn btn-sm btn-outline-success" data-filter-area="GREEN" onclick="filterArea(this, 'GREEN')">🟢 GREEN</button>
+</div>
+
+<div class="table-responsive">
         <table class="table table-hover table-sm mb-0">
             <thead>
                 <tr>
@@ -42,8 +50,8 @@
                 </tr>
             </thead>
             <tbody>
-                {% for t in daftar_tujuan %}
-                <tr>
+    {% for t in daftar_tujuan %}
+    <tr data-area="{{ t.area or '' }}">
                     <td class="text-muted mono">{{ loop.index }}</td>
                     <td>
                         {% if t.area == 'RED' %}<span class="badge bg-danger">RED</span>
@@ -52,7 +60,18 @@
                         {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                     </td>
                     <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
-                <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a></td>
+                <td>
+                    <a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a>
+                    {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
+                    <div class="input-group input-group-sm mt-1" style="max-width: 160px;">
+                        <input type="number" min="1" max="{{ t.jumlah_rencana - t.jumlah_terkirim }}"
+                               class="form-control input-kirim" id="input-kirim-{{ t.tujuan_id }}"
+                               placeholder="Jumlah">
+                        <button type="button" class="btn btn-outline-success"
+                                onclick="kirimKeTujuan({{ t.tujuan_id }})">Kirim</button>
+                    </div>
+                    {% endif %}
+                </td>
                     <td class="small">{{ t.kecamatan or '-' }}</td>
                     <td class="small">{{ t.kabupaten_kota or '-' }}</td>
                     <td class="small">{{ t.provinsi or '-' }}</td>
@@ -84,4 +103,48 @@
         </table>
     </div>
 </div>
+<script>
+function filterArea(btn, warna) {
+    document.querySelectorAll('[data-filter-area]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    document.querySelectorAll('tbody tr[data-area]').forEach(tr => {
+        if (warna === '' || tr.dataset.area === warna) {
+            tr.style.display = '';
+        } else {
+            tr.style.display = 'none';
+        }
+    });
+}
+</script>
+<script>
+function kirimKeTujuan(tujuanId) {
+    const input = document.getElementById(`input-kirim-${tujuanId}`);
+    const jumlah = parseInt(input.value || '0');
+    if (jumlah <= 0) {
+        alert('Isi jumlah yang mau dikirim.');
+        return;
+    }
+
+    fetch(`/buku/{{ buku.id }}/detail-distribusi/kirim`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ tujuan_id: tujuanId, jumlah: jumlah })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('stok-buku-sekarang').textContent = data.stok_baru;
+            input.value = '';
+            location.reload(); // reload biar badge status & angka terkirim di baris itu ikut sinkron penuh
+        } else {
+            alert(data.message || 'Gagal mengirim.');
+        }
+    })
+    .catch(() => alert('Gagal mengirim, cek koneksi.'));
+}
+</script>
 {% endblock %}
