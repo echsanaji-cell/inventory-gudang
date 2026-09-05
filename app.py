@@ -414,11 +414,12 @@ def catat_log_referensi(aksi, detail='', referensi_id=None):
 def catat_aktivitas(aksi, detail='', buku_id=None):
     """Catat aktivitas penting ke activity_log. Gagal diam-diam kalau error, tidak boleh ganggu proses utama."""
     try:
+        nama_tampil = session.get('nama_lengkap') or session.get('username')
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO activity_log (user_id, username, aksi, detail, buku_id) VALUES (%s, %s, %s, %s, %s)",
-            (session.get('user_id'), session.get('username'), aksi, detail, buku_id)
+            (session.get('user_id'), nama_tampil, aksi, detail, buku_id)
         )
         conn.commit()
         cur.close()
