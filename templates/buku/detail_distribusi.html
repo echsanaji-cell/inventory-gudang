@@ -63,7 +63,7 @@
         <table class="table table-hover table-sm mb-0">
             <thead>
                 <tr>
-                    <th>No</th><th>Area</th><th>No Box</th><th>Nama Tujuan</th><th>Kecamatan</th><th>Kabupaten/Kota</th><th>Provinsi</th>
+                    <th>No</th><th>Area</th><th>No Box</th><th>Nama Tujuan</th><th>Provinsi</th><th>Kabupaten/Kota</th><th>Kecamatan</th>
                     <th class="text-end">Rencana</th><th class="text-end">Terkirim</th><th>Status</th><th></th>
                 </tr>
             </thead>
@@ -90,9 +90,9 @@
                     </div>
                     {% endif %}
                 </td>
-                    <td class="small">{{ t.kecamatan or '-' }}</td>
-                    <td class="small">{{ t.kabupaten_kota or '-' }}</td>
                     <td class="small">{{ t.provinsi or '-' }}</td>
+                    <td class="small">{{ t.kabupaten_kota or '-' }}</td>
+                    <td class="small">{{ t.kecamatan or '-' }}</td>
                     <td class="text-end mono">{{ t.jumlah_rencana }}</td>
                     <td class="text-end mono">{{ t.jumlah_terkirim }}</td>
                     <td>
