@@ -97,8 +97,9 @@ document.addEventListener('click', function (e) {
             {% if session.role == 'admin' %}
             <th style="width: 3%;"><input type="checkbox" id="checkAllTujuan" onclick="toggleAllTujuan(this)"></th>
             {% endif %}
-                        <th style="width: 4%;">No</th>
-                        <th style="width: 4%;">Area</th>
+            <th style="width: 4%;">No</th>
+            <th style="width: 4%;">Area</th>
+            <th style="width: 4%;">No Box</th>
             <th><a href="{{ url_for('tujuan_list', search=search, status=status_filter, sort='nama') }}" class="text-dark text-decoration-none">Nama Tujuan</a></th>
             <th>Kecamatan/Desa</th>
             <th>Kabupaten/Kota</th>
@@ -121,6 +122,7 @@ document.addEventListener('click', function (e) {
                 {% elif t.area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
                 {% else %}<span class="badge bg-light text-dark border">-</span>{% endif %}
             </td>
+            <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
             <td><a href="{{ url_for('tujuan_detail', tujuan_id=t.id) }}">{{ t.nama }}</a></td>
             <td class="small text-muted">{{ t.desa_kelurahan }}, {{ t.kecamatan }}</td>
             <td class="small text-muted">{{ t.kabupaten_kota or '-' }}</td>

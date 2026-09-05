@@ -3587,6 +3587,11 @@ def tujuan_edit(tujuan_id):
         alamat = request.form.get('alamat', '').strip()
         catatan = request.form.get('catatan', '').strip()
         area = request.form.get('area', '').strip().upper() or None
+        no_box_raw = request.form.get('no_box', '').strip()
+        try:
+            no_box = int(no_box_raw) if no_box_raw else None
+        except ValueError:
+            no_box = None
 
         if not nama:
             flash('Nama tujuan wajib diisi.', 'danger')
@@ -3595,9 +3600,9 @@ def tujuan_edit(tujuan_id):
             return render_template('tujuan/form.html', tujuan=request.form, tujuan_id=tujuan_id)
 
         cur.execute(
-            """UPDATE tujuan SET nama=%s, provinsi=%s, kabupaten_kota=%s, kecamatan=%s, desa_kelurahan=%s, alamat=%s, catatan=%s, area=%s
+            """UPDATE tujuan SET nama=%s, provinsi=%s, kabupaten_kota=%s, kecamatan=%s, desa_kelurahan=%s, alamat=%s, catatan=%s, area=%s, no_box=%s
                WHERE id=%s""",
-            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, area, tujuan_id)
+            (nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, alamat, catatan, area, no_box, tujuan_id)
         )
         conn.commit()
         cur.close()
@@ -4870,6 +4875,7 @@ def tujuan_import_area():
             'kecamatan': ['kecamatan'],
             'desa_kelurahan': ['desa/kelurahan', 'desa', 'kelurahan'],
             'area': ['notes color', 'area', 'warna', 'kode warna'],
+            'no_box': ['no box', 'no. box', 'nomor box', 'box'],
         }
         kolom_index = {}
         for field, kemungkinan_nama in alias_kolom.items():
@@ -4878,8 +4884,8 @@ def tujuan_import_area():
                     kolom_index[field] = header_row.index(nama)
                     break
 
-        if 'nama' not in kolom_index or 'area' not in kolom_index:
-            flash('Kolom "Nama Perpustakaan" dan "Notes Color" tidak ditemukan di baris pertama file.', 'danger')
+        if 'nama' not in kolom_index or ('area' not in kolom_index and 'no_box' not in kolom_index):
+            flash('Kolom "Nama Perpustakaan" dan minimal salah satu dari "Notes Color"/"No BOX" tidak ditemukan di baris pertama file.', 'danger')
             return render_template('tujuan/import_area.html')
 
         conn = get_db_connection()
@@ -4899,20 +4905,35 @@ def tujuan_import_area():
             kecamatan = ambil('kecamatan')
             desa_kelurahan = ambil('desa_kelurahan')
 
-            idx_area = kolom_index['area']
-            area = str(row[idx_area]).strip().upper() if idx_area < len(row) and row[idx_area] else None
+            idx_area = kolom_index.get('area')
+            area = str(row[idx_area]).strip().upper() if idx_area is not None and idx_area < len(row) and row[idx_area] else None
 
-            if not nama or not area:
+            no_box_mentah = ambil('no_box')
+            try:
+                no_box = int(float(no_box_mentah)) if no_box_mentah else None
+            except ValueError:
+                no_box = None
+
+            if not nama or (not area and no_box is None):
                 continue
 
+            set_clauses = []
+            params = []
+            if area:
+                set_clauses.append("area = %s")
+                params.append(area)
+            if no_box is not None:
+                set_clauses.append("no_box = %s")
+                params.append(no_box)
+
             if kecamatan or desa_kelurahan:
-                cur.execute(
-                    """UPDATE tujuan SET area = %s
-                       WHERE nama = %s AND COALESCE(kecamatan, '') = %s AND COALESCE(desa_kelurahan, '') = %s""",
-                    (area, nama, kecamatan, desa_kelurahan)
-                )
+                query = f"UPDATE tujuan SET {', '.join(set_clauses)} WHERE nama = %s AND COALESCE(kecamatan, '') = %s AND COALESCE(desa_kelurahan, '') = %s"
+                params += [nama, kecamatan, desa_kelurahan]
             else:
-                cur.execute("UPDATE tujuan SET area = %s WHERE nama = %s", (area, nama))
+                query = f"UPDATE tujuan SET {', '.join(set_clauses)} WHERE nama = %s"
+                params.append(nama)
+
+            cur.execute(query, tuple(params))
 
             if cur.rowcount > 0:
                 berhasil += 1
@@ -4923,8 +4944,8 @@ def tujuan_import_area():
         cur.close()
         conn.close()
 
-        catat_aktivitas('Import Area Tujuan', f'{berhasil} tujuan berhasil diberi kode area')
-        pesan = f'{berhasil} tujuan berhasil diberi kode area (RED/YELLOW/GREEN).'
+        catat_aktivitas('Import Area & No Box Tujuan', f'{berhasil} tujuan berhasil diperbarui (area/no box)')
+        pesan = f'{berhasil} tujuan berhasil diperbarui (area dan/atau No BOX).'
         if tidak_ketemu:
             pesan += f' {len(tidak_ketemu)} nama tidak ditemukan di Data Tujuan.'
         flash(pesan, 'success')
