@@ -6,6 +6,10 @@
     <div>
         <a href="{{ url_for('mapping_area_referensi_riwayat') }}" class="btn btn-outline-secondary btn-sm">🕘 Riwayat</a>
         <a href="{{ url_for('mapping_area_referensi_bandingkan') }}" class="btn btn-outline-dark btn-sm">🔍 Bandingkan dengan Rencana Distribusi</a>
+        <form method="POST" action="{{ url_for('mapping_area_referensi_sync_sheets') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-success btn-sm">🔄 Sync ke Google Sheets</button>
+        </form>
     </div>
 </div>
 <p class="text-muted mb-3">Data berdiri sendiri, diimport langsung dari file Excel — belum terhubung dengan Data Buku atau Tujuan yang ada di aplikasi.</p>

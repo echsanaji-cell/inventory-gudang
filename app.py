@@ -395,6 +395,60 @@ def ambil_int(form, nama_field, default=0):
     except (ValueError, TypeError):
         return default
     
+def sync_mapping_referensi_ke_sheets():
+    creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
+    sheet_id = os.environ.get('GOOGLE_SHEETS_ID_REFERENSI')
+
+    if not creds_json or not sheet_id:
+        return False, "GOOGLE_SHEETS_ID_REFERENSI belum diisi di environment variables."
+
+    try:
+        creds_dict = json_lib.loads(creds_json)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        service = build('sheets', 'v4', credentials=creds)
+    except Exception as e:
+        return False, f"Gagal autentikasi Google Sheets: {str(e)}"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM mapping_area_referensi ORDER BY no_urut ASC NULLS LAST")
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    header = ['No', 'No Urut', 'Judul Buku', 'ISBN', 'Penerbit', 'Eks', 'Red', 'Yellow', 'Green', 'Jumlah', 'Keterangan', 'Catatan', 'Catatan Pembagian']
+    rows = [header]
+    for i, d in enumerate(data, start=1):
+        rows.append([
+            i, d['no_urut'] or '-', d['judul_buku'], d['isbn'], d['penerbit'] or '-',
+            d['eks'] if d['eks'] is not None else '-',
+            d['red'] if d['red'] is not None else '-',
+            d['yellow'] if d['yellow'] is not None else '-',
+            d['green'] if d['green'] is not None else '-',
+            d['jumlah'] if d['jumlah'] is not None else '-',
+            d['keterangan'] if d['keterangan'] is not None else '-',
+            d['catatan'] or '-', d['catatan_pembagian'] or '-'
+        ])
+
+    try:
+        sheet = service.spreadsheets()
+        sheet.values().batchClear(
+            spreadsheetId=sheet_id,
+            body={'ranges': ['Sheet1']}
+        ).execute()
+        sheet.values().update(
+            spreadsheetId=sheet_id,
+            range='Sheet1!A1',
+            valueInputOption='RAW',
+            body={'values': rows}
+        ).execute()
+        return True, f"{len(data)} baris berhasil disinkronkan ke Google Sheets."
+    except Exception as e:
+        return False, f"Gagal sync ke Google Sheets: {str(e)}"
+
+
 def catat_log_referensi(aksi, detail='', referensi_id=None):
     try:
         conn = get_db_connection()
@@ -3122,6 +3176,19 @@ def mapping_area_referensi_import():
         cur.close()
         conn.close()
 
+    return redirect(url_for('mapping_area_referensi'))
+
+
+@app.route('/admin/mapping-area-referensi/sync-sheets', methods=['POST'])
+@login_required
+@admin_required
+def mapping_area_referensi_sync_sheets():
+    sukses, pesan = sync_mapping_referensi_ke_sheets()
+    if sukses:
+        catat_log_referensi('Sync Google Sheets', pesan)
+        flash(pesan, 'success')
+    else:
+        flash(pesan, 'danger')
     return redirect(url_for('mapping_area_referensi'))
 
 
