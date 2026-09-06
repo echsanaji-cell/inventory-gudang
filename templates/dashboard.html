@@ -92,6 +92,12 @@
         <a href="{{ url_for('tujuan_list') }}" class="btn btn-sm btn-outline-dark">Lihat Semua Tujuan</a>
     </div>
     <div class="card-body">
+        <div class="mb-3">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-sm {{ 'btn-dark' if not area_filter else 'btn-outline-dark' }}">All</a>
+            <a href="{{ url_for('dashboard', area='RED') }}" class="btn btn-sm {{ 'btn-danger' if area_filter == 'RED' else 'btn-outline-danger' }}">🔴 RED</a>
+            <a href="{{ url_for('dashboard', area='YELLOW') }}" class="btn btn-sm {{ 'btn-warning' if area_filter == 'YELLOW' else 'btn-outline-warning' }}">🟡 YELLOW</a>
+            <a href="{{ url_for('dashboard', area='GREEN') }}" class="btn btn-sm {{ 'btn-success' if area_filter == 'GREEN' else 'btn-outline-success' }}">🟢 GREEN</a>
+        </div>
         {% set persen_distribusi = ((total_terkirim_distribusi / ringkasan_distribusi.total_rencana_distribusi) * 100) if ringkasan_distribusi.total_rencana_distribusi > 0 else 0 %}
         <div class="d-flex justify-content-between mb-1">
             <span class="mono">{{ total_terkirim_distribusi }} / {{ ringkasan_distribusi.total_rencana_distribusi }} eksemplar terkirim</span>

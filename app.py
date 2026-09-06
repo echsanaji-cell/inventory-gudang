@@ -1113,23 +1113,34 @@ def dashboard():
            LIMIT 5"""
     )
     aktivitas_terbaru = cur.fetchall()
-    # ringkasan progress distribusi ke tujuan
+    # ringkasan progress distribusi ke tujuan (bisa difilter per area)
+    area_filter = request.args.get('area', '').strip().upper()
+    filter_where = " WHERE t.area = %s" if area_filter in ('RED', 'YELLOW', 'GREEN') else ""
+    filter_params = (area_filter,) if filter_where else ()
+
     cur.execute(
-        """SELECT 
+        f"""SELECT 
              COUNT(DISTINCT t.id) as total_tujuan,
              COALESCE(SUM(dr.jumlah_rencana), 0) as total_rencana_distribusi
            FROM tujuan t
-           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id"""
+           LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
+           {filter_where}""",
+        filter_params
     )
     ringkasan_distribusi = cur.fetchone()
 
     cur.execute(
-        "SELECT COALESCE(SUM(jumlah), 0) as total FROM transaksi WHERE tipe = 'keluar' AND tujuan_id IS NOT NULL"
+        f"""SELECT COALESCE(SUM(tr.jumlah), 0) as total
+           FROM transaksi tr
+           JOIN tujuan t ON t.id = tr.tujuan_id
+           WHERE tr.tipe = 'keluar' AND tr.tujuan_id IS NOT NULL
+           {'AND t.area = %s' if filter_where else ''}""",
+        filter_params
     )
     total_terkirim_distribusi = cur.fetchone()['total']
 
     cur.execute(
-        """SELECT 
+        f"""SELECT 
              t.id,
              COALESCE(SUM(dr.jumlah_rencana), 0) as rencana,
              COALESCE((
@@ -1138,7 +1149,9 @@ def dashboard():
              ), 0) as terkirim
            FROM tujuan t
            LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
-           GROUP BY t.id"""
+           {filter_where}
+           GROUP BY t.id""",
+        filter_params
     )
     semua_tujuan_ringkas = cur.fetchall()
 
@@ -1168,6 +1181,7 @@ def dashboard():
         judul_masuk_hari_ini=judul_masuk_hari_ini,
         ringkasan_distribusi=ringkasan_distribusi,
         total_terkirim_distribusi=total_terkirim_distribusi,
+        area_filter=area_filter,
         tujuan_belum_ada_rencana=tujuan_belum_ada_rencana,
         tujuan_belum_dikirim=tujuan_belum_dikirim,
         tujuan_sebagian=tujuan_sebagian,
