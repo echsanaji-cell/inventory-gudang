@@ -115,8 +115,9 @@ document.addEventListener('click', function (e) {
 <div class="table-responsive">
     <table class="table table-sm table-hover">
         <thead>
-            <tr>
+             <tr>
                 <th>No</th>
+                <th>No Urut</th>
                 <th>Judul Buku</th>
                 <th>ISBN</th>
                 <th>
@@ -137,8 +138,9 @@ document.addEventListener('click', function (e) {
         </thead>
         <tbody>
             {% for d in data %}
-            <tr>
-                <td class="mono">{{ d.no_urut or '-' }}</td>
+    <tr>
+        <td class="text-muted">{{ loop.index }}</td>
+        <td class="mono">{{ d.no_urut or '-' }}</td>
                 <td>{{ d.judul_buku }}</td>
                 <td class="mono">{{ d.isbn }}</td>
                 <td class="small">{{ d.penerbit or '-' }}</td>
