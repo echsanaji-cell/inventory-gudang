@@ -40,12 +40,13 @@
 </div>
 
 <form method="GET" id="form-cari-buku" class="mb-2">
-    <div class="input-group">
-        <input type="text" name="search" id="input-cari-buku" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}">
+    <div class="input-group position-relative">
+        <input type="text" name="search" id="input-cari-buku" class="form-control" placeholder="Cari judul, ISBN, atau penulis..." value="{{ search }}" autocomplete="off">
         <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariBuku)">
             📷 Scan
         </button>
         <button class="btn btn-outline-secondary" type="submit">Cari</button>
+        <div id="databuku-suggestions" class="list-group position-absolute w-100 shadow-sm" style="top: 100%; z-index: 1000; max-height: 280px; overflow-y: auto; display: none;"></div>
     </div>
     <input type="hidden" name="penerbit" value="{{ penerbit_filter }}">
     <input type="hidden" name="status" value="{{ status_filter }}">
@@ -223,6 +224,49 @@ function handleScanCariBuku(kode) {
     document.getElementById('input-cari-buku').value = kode;
     document.getElementById('form-cari-buku').submit();
 }
+
+const inputCariBuku = document.getElementById('input-cari-buku');
+const databukuSuggestions = document.getElementById('databuku-suggestions');
+let timerCariDataBuku = null;
+
+inputCariBuku.addEventListener('input', function () {
+    clearTimeout(timerCariDataBuku);
+    const kata = this.value.trim();
+    if (kata.length < 2) {
+        databukuSuggestions.style.display = 'none';
+        databukuSuggestions.innerHTML = '';
+        return;
+    }
+    timerCariDataBuku = setTimeout(() => {
+        fetch(`/api/buku/cari-suggest?q=${encodeURIComponent(kata)}`)
+            .then(res => res.json())
+            .then(hasil => {
+                if (hasil.length === 0) {
+                    databukuSuggestions.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                } else {
+                    databukuSuggestions.innerHTML = hasil.map(b =>
+                        `<button type="button" class="list-group-item list-group-item-action small" data-judul="${b.judul.replace(/"/g, '&quot;')}">${b.label}</button>`
+                    ).join('');
+                }
+                databukuSuggestions.style.display = 'block';
+            });
+    }, 300);
+});
+
+databukuSuggestions.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-judul]');
+    if (!btn) return;
+    inputCariBuku.value = btn.dataset.judul;
+    databukuSuggestions.style.display = 'none';
+    databukuSuggestions.innerHTML = '';
+    document.getElementById('form-cari-buku').submit();
+});
+
+document.addEventListener('click', function (e) {
+    if (!inputCariBuku.contains(e.target) && !databukuSuggestions.contains(e.target)) {
+        databukuSuggestions.style.display = 'none';
+    }
+});
 
 initPhysicalScanner(document.getElementById('input-cari-buku'), handleScanCariBuku);
 </script>
