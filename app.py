@@ -5405,7 +5405,7 @@ def buku_detail_distribusi(buku_id):
            FROM distribusi_rencana dr
            JOIN tujuan t ON dr.tujuan_id = t.id
            WHERE dr.buku_id = %s AND dr.jumlah_rencana > 0
-           ORDER BY t.area ASC NULLS LAST, t.nama ASC""",
+           ORDER BY t.provinsi ASC NULLS LAST, t.nama ASC""",
         (buku_id,)
     )
     daftar_tujuan = cur.fetchall()
