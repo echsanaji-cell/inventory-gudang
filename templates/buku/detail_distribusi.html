@@ -133,7 +133,26 @@ function filterArea(btn, warna) {
             tr.style.display = 'none';
         }
     });
+
+    // simpan filter yang aktif ke URL, tanpa reload halaman
+    const url = new URL(window.location);
+    if (warna) {
+        url.searchParams.set('area', warna);
+    } else {
+        url.searchParams.delete('area');
+    }
+    window.history.replaceState({}, '', url);
 }
+
+// pas halaman pertama kali dibuka/direload, terapkan lagi filter dari URL kalau ada
+document.addEventListener('DOMContentLoaded', function () {
+    const params = new URLSearchParams(window.location.search);
+    const areaAktif = params.get('area');
+    if (areaAktif) {
+        const btn = document.querySelector(`[data-filter-area="${areaAktif}"]`);
+        if (btn) filterArea(btn, areaAktif);
+    }
+});
 </script>
 <script>
 function kirimKeTujuan(tujuanId) {
