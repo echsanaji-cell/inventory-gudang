@@ -63,7 +63,7 @@
         <table class="table table-hover table-sm mb-0">
             <thead>
                 <tr>
-                    <th>No</th><th>Area</th><th>No Box</th><th>Nama Tujuan</th><th>Provinsi</th><th>Kabupaten/Kota</th><th>Kecamatan</th>
+                    <th>No</th><th>Area</th><th>Nama Tujuan</th><th>Provinsi</th><th>No Box</th><th>Kabupaten/Kota</th><th>Kecamatan</th>
                     <th class="text-end">Rencana</th><th class="text-end">Terkirim</th><th>Status</th><th></th>
                 </tr>
             </thead>
@@ -77,8 +77,7 @@
                         {% elif t.area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
                         {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                     </td>
-                    <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
-                <td>
+                                    <td>
                     <a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a>
                     {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
                     <div class="input-group input-group-sm mt-1" style="max-width: 160px;">
@@ -90,7 +89,8 @@
                     </div>
                     {% endif %}
                 </td>
-                    <td class="small">{{ t.provinsi or '-' }}</td>
+                <td class="small">{{ t.provinsi }}</td>
+                <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
                     <td class="small">{{ t.kabupaten_kota or '-' }}</td>
                     <td class="small">{{ t.kecamatan or '-' }}</td>
                     <td class="text-end mono">{{ t.jumlah_rencana }}</td>
