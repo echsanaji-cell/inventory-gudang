@@ -70,7 +70,7 @@
         <table class="table table-hover table-sm mb-0">
             <thead>
                 <tr>
-                    <th>No</th><th>Area</th><th>Nama Tujuan</th><th>Provinsi</th><th>No Box</th><th class="text-end">Rencana</th><th>Kabupaten/Kota</th><th>Kecamatan</th>
+                    <th>No</th><th>Area</th><th>Nama Tujuan</th><th>Provinsi</th><th></th><th>No Box</th><th class="text-end">Rencana</th><th>Kabupaten/Kota</th><th>Kecamatan</th>
                     <th class="text-end">Terkirim</th><th>Status</th><th></th>
                 </tr>
             </thead>
@@ -85,13 +85,15 @@
                         {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                     </td>
                                     <td>
-                    {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
-                    <input type="checkbox" class="form-check-input me-1 checklist-kirim" value="{{ t.tujuan_id }}" onchange="updateJumlahDicentang()">
-                    {% endif %}
                     <a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a>
                 </td>
-                <td class="small">{{ t.provinsi }}</td>
-                                <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
+                                <td class="small">{{ t.provinsi }}</td>
+                <td>
+                    {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
+                    <input type="checkbox" class="form-check-input checklist-kirim" value="{{ t.tujuan_id }}" onchange="updateJumlahDicentang()">
+                    {% endif %}
+                </td>
+                <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
                 <td class="text-end mono">{{ t.jumlah_rencana }}</td>
                 <td class="small">{{ t.kabupaten_kota }}</td>
                 <td class="small">{{ t.kecamatan }}</td>
