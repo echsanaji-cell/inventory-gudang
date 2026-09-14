@@ -120,6 +120,13 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if session.role != 'viewer' %}
+<div class="mt-3 text-end">
+    <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim-bawah" disabled onclick="submitKirimMassal()">
+        ✅ Submit Pengiriman Terpilih (<span id="jumlah-dicentang-bawah">0</span>)
+    </button>
+</div>
+{% endif %}
     </div>
 </div>
 <script>
@@ -160,6 +167,11 @@ function updateJumlahDicentang() {
     const jumlah = document.querySelectorAll('.checklist-kirim:checked').length;
     document.getElementById('jumlah-dicentang').textContent = jumlah;
     document.getElementById('btn-submit-kirim').disabled = jumlah === 0;
+
+    const spanBawah = document.getElementById('jumlah-dicentang-bawah');
+    const btnBawah = document.getElementById('btn-submit-kirim-bawah');
+    if (spanBawah) spanBawah.textContent = jumlah;
+    if (btnBawah) btnBawah.disabled = jumlah === 0;
 }
 
 function submitKirimMassal() {
