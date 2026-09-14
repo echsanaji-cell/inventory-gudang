@@ -59,9 +59,6 @@
         <button type="button" class="btn btn-sm btn-outline-warning" data-filter-area="YELLOW" onclick="filterArea(this, 'YELLOW')">🟡 YELLOW</button>
         <button type="button" class="btn btn-sm btn-outline-success" data-filter-area="GREEN" onclick="filterArea(this, 'GREEN')">🟢 GREEN</button>
     </div>
-<p class="text-end mono text-muted mb-2">
-    Total Rencana (baris yang tampil): <strong id="total-rencana-tampil">0</strong>
-</p>
 {% if session.role != 'viewer' %}
 <div class="mt-3 text-end">
     <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim-bawah" disabled onclick="submitKirimMassal()">
@@ -127,7 +124,11 @@
                 {% endfor %}
             </tbody>
         </table>
-        {% if session.role != 'viewer' %}
+        </div>
+<p class="text-end mono text-muted mb-2">
+    Total Rencana (baris yang tampil): <strong id="total-rencana-tampil">0</strong>
+</p>
+{% if session.role != 'viewer' %}
 <div class="mt-3 text-end">
     <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim-bawah" disabled onclick="submitKirimMassal()">
         ✅ Submit Pengiriman Terpilih (<span id="jumlah-dicentang-bawah">0</span>)
