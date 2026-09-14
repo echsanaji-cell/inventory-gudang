@@ -59,11 +59,16 @@
         <button type="button" class="btn btn-sm btn-outline-warning" data-filter-area="YELLOW" onclick="filterArea(this, 'YELLOW')">🟡 YELLOW</button>
         <button type="button" class="btn btn-sm btn-outline-success" data-filter-area="GREEN" onclick="filterArea(this, 'GREEN')">🟢 GREEN</button>
     </div>
-    {% if session.role != 'viewer' %}
-    <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim" disabled onclick="submitKirimMassal()">
-        ✅ Submit Pengiriman Terpilih (<span id="jumlah-dicentang">0</span>)
+<p class="text-end mono text-muted mb-2">
+    Total Rencana (baris yang tampil): <strong id="total-rencana-tampil">0</strong>
+</p>
+{% if session.role != 'viewer' %}
+<div class="mt-3 text-end">
+    <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim-bawah" disabled onclick="submitKirimMassal()">
+        ✅ Submit Pengiriman Terpilih (<span id="jumlah-dicentang-bawah">0</span>)
     </button>
-    {% endif %}
+</div>
+{% endif %}
 </div>
 
 <div class="table-responsive">
@@ -75,8 +80,8 @@
                 </tr>
             </thead>
             <tbody>
-    {% for t in daftar_tujuan %}
-    <tr data-area="{{ t.area or '' }}">
+                    {% for t in daftar_tujuan %}
+                <tr data-area="{{ t.area or '' }}" data-rencana="{{ t.jumlah_rencana }}">
                     <td class="text-muted mono">{{ loop.index }}</td>
                     <td>
                         {% if t.area == 'RED' %}<span class="badge bg-danger">RED</span>
@@ -144,6 +149,8 @@ function filterArea(btn, warna) {
         }
     });
 
+    hitungTotalRencana();
+
     // simpan filter yang aktif ke URL, tanpa reload halaman
     const url = new URL(window.location);
     if (warna) {
@@ -154,6 +161,17 @@ function filterArea(btn, warna) {
     window.history.replaceState({}, '', url);
 }
 
+function hitungTotalRencana() {
+    let total = 0;
+    document.querySelectorAll('tbody tr[data-area]').forEach(tr => {
+        if (tr.style.display !== 'none') {
+            total += parseInt(tr.dataset.rencana || '0');
+        }
+    });
+    const el = document.getElementById('total-rencana-tampil');
+    if (el) el.textContent = total;
+}
+
 // pas halaman pertama kali dibuka/direload, terapkan lagi filter dari URL kalau ada
 document.addEventListener('DOMContentLoaded', function () {
     const params = new URLSearchParams(window.location.search);
@@ -161,6 +179,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (areaAktif) {
         const btn = document.querySelector(`[data-filter-area="${areaAktif}"]`);
         if (btn) filterArea(btn, areaAktif);
+    } else {
+        hitungTotalRencana();
     }
 });
 </script>
