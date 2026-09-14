@@ -3963,6 +3963,83 @@ def buku_detail_distribusi_kirim(buku_id):
         conn.close()
 
 
+@app.route('/buku/<int:buku_id>/detail-distribusi/kirim-massal', methods=['POST'])
+@login_required
+@viewer_blocked
+def buku_detail_distribusi_kirim_massal(buku_id):
+    data = request.get_json(silent=True) or {}
+    tujuan_ids = data.get('tujuan_ids', [])
+
+    if not tujuan_ids:
+        return jsonify({'success': False, 'message': 'Pilih minimal 1 tujuan.'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, judul, stok FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+    if not buku:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'message': 'Buku tidak ditemukan.'}), 404
+
+    rincian = []
+    total_kebutuhan = 0
+    for tujuan_id in tujuan_ids:
+        cur.execute(
+            """SELECT dr.jumlah_rencana,
+                      COALESCE((SELECT SUM(tr.jumlah) FROM transaksi tr
+                                WHERE tr.tujuan_id = dr.tujuan_id AND tr.buku_id = dr.buku_id AND tr.tipe = 'keluar'), 0) as jumlah_terkirim
+               FROM distribusi_rencana dr
+               WHERE dr.tujuan_id = %s AND dr.buku_id = %s""",
+            (tujuan_id, buku_id)
+        )
+        info = cur.fetchone()
+        if not info:
+            continue
+        sisa = info['jumlah_rencana'] - info['jumlah_terkirim']
+        if sisa <= 0:
+            continue
+        rincian.append((tujuan_id, sisa))
+        total_kebutuhan += sisa
+
+    if not rincian:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'message': 'Tidak ada tujuan yang perlu dikirim (mungkin sudah lengkap semua).'}), 400
+
+    if buku['stok'] < total_kebutuhan:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'message': f'Stok tidak cukup. Dibutuhkan {total_kebutuhan}, tersedia {buku["stok"]}.'}), 400
+
+    try:
+        for tujuan_id, sisa in rincian:
+            cur.execute(
+                """INSERT INTO transaksi (buku_id, tipe, jumlah, user_id, tanggal, tujuan_id, keterangan)
+                   VALUES (%s, 'keluar', %s, %s, CURRENT_DATE, %s, 'Kirim dari Detail Distribusi (Checklist)')""",
+                (buku_id, sisa, session['user_id'], tujuan_id)
+            )
+        cur.execute("UPDATE buku SET stok = stok - %s, updated_at = NOW() WHERE id = %s", (total_kebutuhan, buku_id))
+        conn.commit()
+
+        catat_aktivitas(
+            'Kirim Massal dari Detail Distribusi',
+            f'Buku "{buku["judul"]}" dikirim ke {len(rincian)} tujuan sekaligus, total {total_kebutuhan} eks'
+        )
+
+        cur.execute("SELECT stok FROM buku WHERE id = %s", (buku_id,))
+        stok_baru = cur.fetchone()['stok']
+
+        return jsonify({'success': True, 'jumlah_tujuan': len(rincian), 'total_dikirim': total_kebutuhan, 'stok_baru': stok_baru})
+    except Exception:
+        conn.rollback()
+        return jsonify({'success': False, 'message': 'Gagal menyimpan pengiriman massal.'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/tujuan/<int:tujuan_id>/rencana/hapus/<int:rencana_id>', methods=['POST'])
 @login_required
 @admin_required

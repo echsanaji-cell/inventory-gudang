@@ -52,11 +52,18 @@
 
 <div class="card">
     <div class="card-header">Rincian Tujuan Pengiriman</div>
-    <div class="mb-2">
-    <button type="button" class="btn btn-sm btn-outline-dark active" data-filter-area="" onclick="filterArea(this, '')">Semua</button>
-    <button type="button" class="btn btn-sm btn-outline-danger" data-filter-area="RED" onclick="filterArea(this, 'RED')">🔴 RED</button>
-    <button type="button" class="btn btn-sm btn-outline-warning" data-filter-area="YELLOW" onclick="filterArea(this, 'YELLOW')">🟡 YELLOW</button>
-    <button type="button" class="btn btn-sm btn-outline-success" data-filter-area="GREEN" onclick="filterArea(this, 'GREEN')">🟢 GREEN</button>
+    <div class="mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <button type="button" class="btn btn-sm btn-outline-dark active" data-filter-area="" onclick="filterArea(this, '')">Semua</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-filter-area="RED" onclick="filterArea(this, 'RED')">🔴 RED</button>
+        <button type="button" class="btn btn-sm btn-outline-warning" data-filter-area="YELLOW" onclick="filterArea(this, 'YELLOW')">🟡 YELLOW</button>
+        <button type="button" class="btn btn-sm btn-outline-success" data-filter-area="GREEN" onclick="filterArea(this, 'GREEN')">🟢 GREEN</button>
+    </div>
+    {% if session.role != 'viewer' %}
+    <button type="button" class="btn btn-sm btn-success" id="btn-submit-kirim" disabled onclick="submitKirimMassal()">
+        ✅ Submit Pengiriman Terpilih (<span id="jumlah-dicentang">0</span>)
+    </button>
+    {% endif %}
 </div>
 
 <div class="table-responsive">
@@ -78,16 +85,10 @@
                         {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                     </td>
                                     <td>
-                    <a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a>
                     {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
-                    <div class="input-group input-group-sm mt-1" style="max-width: 160px;">
-                        <input type="number" min="1" max="{{ t.jumlah_rencana - t.jumlah_terkirim }}"
-                               class="form-control input-kirim" id="input-kirim-{{ t.tujuan_id }}"
-                               placeholder="Jumlah">
-                        <button type="button" class="btn btn-outline-success"
-                                onclick="kirimKeTujuan({{ t.tujuan_id }})">Kirim</button>
-                    </div>
+                    <input type="checkbox" class="form-check-input me-1 checklist-kirim" value="{{ t.tujuan_id }}" onchange="updateJumlahDicentang()">
                     {% endif %}
+                    <a href="{{ url_for('tujuan_detail', tujuan_id=t.tujuan_id) }}">{{ t.nama }}</a>
                 </td>
                 <td class="small">{{ t.provinsi }}</td>
                                 <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
@@ -155,28 +156,32 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <script>
-function kirimKeTujuan(tujuanId) {
-    const input = document.getElementById(`input-kirim-${tujuanId}`);
-    const jumlah = parseInt(input.value || '0');
-    if (jumlah <= 0) {
-        alert('Isi jumlah yang mau dikirim.');
+function updateJumlahDicentang() {
+    const jumlah = document.querySelectorAll('.checklist-kirim:checked').length;
+    document.getElementById('jumlah-dicentang').textContent = jumlah;
+    document.getElementById('btn-submit-kirim').disabled = jumlah === 0;
+}
+
+function submitKirimMassal() {
+    const tujuanIds = Array.from(document.querySelectorAll('.checklist-kirim:checked')).map(c => parseInt(c.value));
+    if (tujuanIds.length === 0) return;
+
+    if (!confirm(`Kirim ke ${tujuanIds.length} tujuan terpilih? Masing-masing akan diisi sesuai sisa kekurangan rencananya.`)) {
         return;
     }
 
-    fetch(`/buku/{{ buku.id }}/detail-distribusi/kirim`, {
+    fetch(`/buku/{{ buku.id }}/detail-distribusi/kirim-massal`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
         },
-        body: JSON.stringify({ tujuan_id: tujuanId, jumlah: jumlah })
+        body: JSON.stringify({ tujuan_ids: tujuanIds })
     })
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            document.getElementById('stok-buku-sekarang').textContent = data.stok_baru;
-            input.value = '';
-            location.reload(); // reload biar badge status & angka terkirim di baris itu ikut sinkron penuh
+            location.reload();
         } else {
             alert(data.message || 'Gagal mengirim.');
         }
