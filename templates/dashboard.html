@@ -93,10 +93,16 @@
     </div>
     <div class="card-body">
         <div class="mb-3">
+            {% if restriksi_user %}
+            <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
+                Area kamu: {{ restriksi_user }}
+            </span>
+            {% else %}
             <a href="{{ url_for('dashboard') }}" class="btn btn-sm {{ 'btn-dark' if not area_filter else 'btn-outline-dark' }}">All</a>
             <a href="{{ url_for('dashboard', area='RED') }}" class="btn btn-sm {{ 'btn-danger' if area_filter == 'RED' else 'btn-outline-danger' }}">🔴 RED</a>
             <a href="{{ url_for('dashboard', area='YELLOW') }}" class="btn btn-sm {{ 'btn-warning' if area_filter == 'YELLOW' else 'btn-outline-warning' }}">🟡 YELLOW</a>
             <a href="{{ url_for('dashboard', area='GREEN') }}" class="btn btn-sm {{ 'btn-success' if area_filter == 'GREEN' else 'btn-outline-success' }}">🟢 GREEN</a>
+            {% endif %}
         </div>
         {% set persen_distribusi = ((total_terkirim_distribusi / ringkasan_distribusi.total_rencana_distribusi) * 100) if ringkasan_distribusi.total_rencana_distribusi > 0 else 0 %}
         <div class="d-flex justify-content-between mb-1">

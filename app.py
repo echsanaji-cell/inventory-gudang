@@ -788,6 +788,7 @@ def login():
             session['username'] = user['username']
             session['role'] = user['role']
             session['nama_lengkap'] = user['nama_lengkap']
+            session['area_restriction'] = user['area_restriction']
             return redirect(url_for('dashboard'))
         else:
             # login gagal: tambah counter
@@ -878,6 +879,7 @@ def login_verifikasi_2fa():
             session['username'] = user['username']
             session['role'] = user['role']
             session['nama_lengkap'] = user['nama_lengkap']
+            session['area_restriction'] = user['area_restriction']
             if backup_code_terpakai:
                 flash('Login berhasil pakai backup code. Segera buat ulang backup code baru kalau sudah mau habis.', 'warning')
             return redirect(url_for('dashboard'))
@@ -1114,7 +1116,12 @@ def dashboard():
     )
     aktivitas_terbaru = cur.fetchall()
     # ringkasan progress distribusi ke tujuan (bisa difilter per area)
-    area_filter = request.args.get('area', '').strip().upper()
+    restriksi_user = session.get('area_restriction')
+    if restriksi_user:
+        # user dengan pembatasan area TIDAK BISA mengganti filter lewat URL — dikunci ke area-nya
+        area_filter = restriksi_user
+    else:
+        area_filter = request.args.get('area', '').strip().upper()
     filter_where = " WHERE t.area = %s" if area_filter in ('RED', 'YELLOW', 'GREEN') else ""
     filter_params = (area_filter,) if filter_where else ()
 
@@ -1182,6 +1189,7 @@ def dashboard():
         ringkasan_distribusi=ringkasan_distribusi,
         total_terkirim_distribusi=total_terkirim_distribusi,
         area_filter=area_filter,
+        restriksi_user=restriksi_user,
         tujuan_belum_ada_rencana=tujuan_belum_ada_rencana,
         tujuan_belum_dikirim=tujuan_belum_dikirim,
         tujuan_sebagian=tujuan_sebagian,
@@ -2396,6 +2404,13 @@ def user_tambah():
         nama_lengkap = request.form.get('nama_lengkap', '').strip()
         role = request.form.get('role', 'staff').strip()
 
+        area_restriction = request.form.get('area_restriction', '').strip().upper() or None
+        if area_restriction not in ('RED', 'YELLOW', 'GREEN'):
+            area_restriction = None
+        if role != 'viewer':
+            # pembatasan area cuma berlaku untuk role viewer, biar konsisten dengan read-only-nya
+            area_restriction = None
+
         if not username or not password:
             flash('Username dan password wajib diisi.', 'danger')
             return render_template('admin/user_form.html')
@@ -2416,14 +2431,15 @@ def user_tambah():
 
         password_hash = generate_password_hash(password)
         cur.execute(
-            """INSERT INTO users (username, password_hash, nama_lengkap, role)
-               VALUES (%s, %s, %s, %s)""",
-            (username, password_hash, nama_lengkap, role)
+            """INSERT INTO users (username, password_hash, nama_lengkap, role, area_restriction)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (username, password_hash, nama_lengkap, role, area_restriction)
         )
         conn.commit()
         cur.close()
         conn.close()
-        catat_aktivitas('Menambah User', f'User baru "{username}" (role: {role}) ditambahkan')
+        keterangan_area = f', dibatasi area {area_restriction}' if area_restriction else ''
+        catat_aktivitas('Menambah User', f'User baru "{username}" (role: {role}{keterangan_area}) ditambahkan')
         flash(f'User "{username}" berhasil ditambahkan.', 'success')
         return redirect(url_for('user_list'))
 
@@ -5197,22 +5213,31 @@ def buku_mapping_area():
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page_param = request.args.get('per_page', '50').strip()
 
+    restriksi_user = session.get('area_restriction')
+
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # ringkasan total per area
-    cur.execute(
-        """SELECT t.area, COUNT(DISTINCT t.id) as total_tujuan, COALESCE(SUM(dr.jumlah_rencana), 0) as total_eksemplar
+    # ringkasan total per area (dibatasi kalau user punya area_restriction)
+    query_ringkasan = """SELECT t.area, COUNT(DISTINCT t.id) as total_tujuan, COALESCE(SUM(dr.jumlah_rencana), 0) as total_eksemplar
            FROM tujuan t
            LEFT JOIN distribusi_rencana dr ON dr.tujuan_id = t.id
-           WHERE t.area IS NOT NULL
-           GROUP BY t.area"""
-    )
+           WHERE t.area IS NOT NULL"""
+    ringkasan_params = []
+    if restriksi_user:
+        query_ringkasan += " AND t.area = %s"
+        ringkasan_params.append(restriksi_user)
+    query_ringkasan += " GROUP BY t.area"
+
+    cur.execute(query_ringkasan, tuple(ringkasan_params))
     ringkasan_area_raw = cur.fetchall()
     ringkasan_area = {r['area']: r for r in ringkasan_area_raw}
 
-    cur.execute("SELECT COUNT(*) as total FROM tujuan WHERE area IS NULL")
-    tujuan_tanpa_area = cur.fetchone()['total']
+    if restriksi_user:
+        tujuan_tanpa_area = 0
+    else:
+        cur.execute("SELECT COUNT(*) as total FROM tujuan WHERE area IS NULL")
+        tujuan_tanpa_area = cur.fetchone()['total']
 
     # mapping per judul
     query = """
@@ -5231,6 +5256,12 @@ def buku_mapping_area():
     if search:
         query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s)"
         params.extend([f'%{search}%', f'%{search}%'])
+
+    if restriksi_user:
+        # kunci ke area user ini — baris buku yang gak ada distribusi ke area ini otomatis gak muncul,
+        # dan kolom warna lain otomatis 0 karena baris tujuan warna lain sudah difilter di sini
+        query += " AND t.area = %s"
+        params.append(restriksi_user)
 
     query += " GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak ORDER BY b.judul ASC"
 

@@ -24,6 +24,16 @@
             <option value="admin">Admin</option>
             <option value="viewer">Viewer (read-only Data Buku)</option>
         </select>
+            <div class="mb-3">
+        <label class="form-label">Batasan Area (khusus role Viewer)</label>
+        <select name="area_restriction" class="form-select">
+            <option value="">-- Tidak dibatasi --</option>
+            <option value="RED">🔴 RED saja</option>
+            <option value="YELLOW">🟡 YELLOW saja</option>
+            <option value="GREEN">🟢 GREEN saja</option>
+        </select>
+        <small class="text-muted">Kalau diisi, user cuma bisa lihat data area itu di Mapping Area & Dashboard. Cuma berlaku kalau role di atas diisi "Viewer".</small>
+    </div>
     </div>
     <button type="submit" class="btn btn-primary">Simpan</button>
     <a href="{{ url_for('user_list') }}" class="btn btn-secondary">Batal</a>
