@@ -5523,8 +5523,9 @@ def buku_detail_distribusi(buku_id):
         flash('Buku tidak ditemukan.', 'danger')
         return redirect(url_for('buku_mapping_area'))
 
-    cur.execute(
-        """SELECT dr.id as rencana_id, t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area, t.no_box,
+    restriksi_user = session.get('area_restriction')
+
+    query_tujuan = """SELECT dr.id as rencana_id, t.id as tujuan_id, t.nama, t.kecamatan, t.kabupaten_kota, t.provinsi, t.area, t.no_box,
                   dr.jumlah_rencana,
                   COALESCE((
                       SELECT SUM(tr.jumlah) FROM transaksi tr
@@ -5532,10 +5533,16 @@ def buku_detail_distribusi(buku_id):
                   ), 0) as jumlah_terkirim
            FROM distribusi_rencana dr
            JOIN tujuan t ON dr.tujuan_id = t.id
-           WHERE dr.buku_id = %s AND dr.jumlah_rencana > 0
-           ORDER BY t.provinsi ASC NULLS LAST, t.nama ASC""",
-        (buku_id,)
-    )
+           WHERE dr.buku_id = %s AND dr.jumlah_rencana > 0"""
+    params_tujuan = [buku_id]
+
+    if restriksi_user:
+        query_tujuan += " AND t.area = %s"
+        params_tujuan.append(restriksi_user)
+
+    query_tujuan += " ORDER BY t.provinsi ASC NULLS LAST, t.nama ASC"
+
+    cur.execute(query_tujuan, tuple(params_tujuan))
     daftar_tujuan = cur.fetchall()
     cur.close()
     conn.close()
@@ -5556,7 +5563,8 @@ def buku_detail_distribusi(buku_id):
         'buku/detail_distribusi.html',
         buku=buku, daftar_tujuan=daftar_tujuan,
         total_rencana=total_rencana, total_terkirim=total_terkirim,
-        ringkasan_area=ringkasan_area
+        ringkasan_area=ringkasan_area,
+        restriksi_user=restriksi_user
     )
 
 if __name__ == '__main__':
