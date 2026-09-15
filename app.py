@@ -2407,8 +2407,8 @@ def user_tambah():
         area_restriction = request.form.get('area_restriction', '').strip().upper() or None
         if area_restriction not in ('RED', 'YELLOW', 'GREEN'):
             area_restriction = None
-        if role != 'viewer':
-            # pembatasan area cuma berlaku untuk role viewer, biar konsisten dengan read-only-nya
+                if role == 'admin':
+            # admin tidak dibatasi area
             area_restriction = None
 
         if not username or not password:
@@ -3931,6 +3931,15 @@ def buku_detail_distribusi_kirim(buku_id):
         conn.close()
         return jsonify({'success': False, 'message': f'Stok tidak cukup. Tersedia: {buku["stok"]}.'}), 400
 
+    restriksi_user = session.get('area_restriction')
+    if restriksi_user:
+        cur.execute("SELECT area FROM tujuan WHERE id = %s", (tujuan_id,))
+        info_area = cur.fetchone()
+        if not info_area or info_area['area'] != restriksi_user:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'message': f'Kamu hanya boleh mengirim ke tujuan area {restriksi_user}.'}), 403
+
     cur.execute(
         "SELECT jumlah_rencana FROM distribusi_rencana WHERE tujuan_id = %s AND buku_id = %s",
         (tujuan_id, buku_id)
@@ -3998,6 +4007,17 @@ def buku_detail_distribusi_kirim_massal(buku_id):
         cur.close()
         conn.close()
         return jsonify({'success': False, 'message': 'Buku tidak ditemukan.'}), 404
+
+    restriksi_user = session.get('area_restriction')
+    if restriksi_user:
+        cur.execute(
+            "SELECT COUNT(*) as jumlah FROM tujuan WHERE id = ANY(%s) AND (area IS DISTINCT FROM %s)",
+            (tujuan_ids, restriksi_user)
+        )
+        if cur.fetchone()['jumlah'] > 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'message': f'Kamu hanya boleh mengirim ke tujuan area {restriksi_user}.'}), 403
 
     rincian = []
     total_kebutuhan = 0
