@@ -97,7 +97,7 @@
                                 <td class="small">{{ t.provinsi }}</td>
                 <td>
                     {% if session.role != 'viewer' and t.jumlah_terkirim < t.jumlah_rencana %}
-                    <input type="checkbox" class="form-check-input checklist-kirim" value="{{ t.tujuan_id }}" onchange="updateJumlahDicentang()">
+                    <input type="checkbox" class="form-check-input checklist-kirim" value="{{ t.tujuan_id }}" data-rencana="{{ t.jumlah_rencana }}" onchange="updateJumlahDicentang()">
                     {% endif %}
                 </td>
                 <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
@@ -155,10 +155,13 @@ function filterArea(btn, warna) {
             tr.style.display = 'none';
         }
     });
+    totalRencanaAwal = totalRencana;
+    document.querySelectorAll('.checklist-kirim:checked').forEach(cb => { cb.checked = false; });
     const totalAtas = document.getElementById('total-rencana-tampil');
     const totalBawah = document.getElementById('total-rencana-tampil-bawah');
     if (totalAtas) totalAtas.textContent = totalRencana;
     if (totalBawah) totalBawah.textContent = totalRencana;
+    updateJumlahDicentang();
 
     // simpan filter yang aktif ke URL, tanpa reload halaman
     const url = new URL(window.location);
@@ -193,6 +196,7 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('tbody tr[data-rencana]').forEach(tr => {
             total += parseInt(tr.dataset.rencana || '0');
         });
+        totalRencanaAwal = total;
         document.getElementById('total-rencana-tampil').textContent = total;
         return;
     }
@@ -206,8 +210,17 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <script>
+let totalRencanaAwal = 0;
+
 function updateJumlahDicentang() {
-    const jumlah = document.querySelectorAll('.checklist-kirim:checked').length;
+    const dicentang = document.querySelectorAll('.checklist-kirim:checked');
+    const jumlah = dicentang.length;
+
+    let totalDicentang = 0;
+    dicentang.forEach(cb => {
+        totalDicentang += parseInt(cb.dataset.rencana || '0');
+    });
+    const sisaRencana = totalRencanaAwal - totalDicentang;
 
     const spanAtas = document.getElementById('jumlah-dicentang');
     const btnAtas = document.getElementById('btn-submit-kirim');
@@ -218,6 +231,11 @@ function updateJumlahDicentang() {
     const btnBawah = document.getElementById('btn-submit-kirim-bawah');
     if (spanBawah) spanBawah.textContent = jumlah;
     if (btnBawah) btnBawah.disabled = jumlah === 0;
+
+    const totalAtas = document.getElementById('total-rencana-tampil');
+    const totalBawah = document.getElementById('total-rencana-tampil-bawah');
+    if (totalAtas) totalAtas.textContent = sisaRencana;
+    if (totalBawah) totalBawah.textContent = sisaRencana;
 }
 
 function submitKirimMassal() {
