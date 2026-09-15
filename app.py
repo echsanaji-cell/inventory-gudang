@@ -2407,7 +2407,7 @@ def user_tambah():
         area_restriction = request.form.get('area_restriction', '').strip().upper() or None
         if area_restriction not in ('RED', 'YELLOW', 'GREEN'):
             area_restriction = None
-                if role == 'admin':
+        if role == 'admin':
             # admin tidak dibatasi area
             area_restriction = None
 
