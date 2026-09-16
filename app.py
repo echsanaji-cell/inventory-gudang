@@ -3506,7 +3506,7 @@ def pembagian_buku_detail():
     page = min(page, total_halaman)
     offset = (page - 1) * per_page
 
-    query_paged = query + " ORDER BY warna_area NULLS LAST, nama_perpustakaan ASC LIMIT %s OFFSET %s"
+    query_paged = query + " ORDER BY provinsi ASC NULLS LAST, kabupaten_kota ASC, nama_perpustakaan ASC LIMIT %s OFFSET %s"
     cur.execute(query_paged, tuple(params + [per_page, offset]))
     daftar_penyebaran = cur.fetchall()
 

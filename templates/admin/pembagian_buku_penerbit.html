@@ -26,9 +26,12 @@
 <form method="GET" class="mb-2" id="form-cari-judul" autocomplete="off">
     <input type="hidden" name="penerbit" value="{{ penerbit }}">
     <div class="row g-2">
-        <div class="col-md-10 position-relative">
+        <div class="col-md-8 position-relative">
             <input type="text" name="search" id="input-cari-judul" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
             <div id="judul-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariJudul)">📷 Scan</button>
         </div>
         <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
@@ -37,6 +40,12 @@
 </form>
 
 <script>
+function handleScanCariJudul(kode) {
+    document.getElementById('input-cari-judul').value = kode;
+    document.getElementById('form-cari-judul').submit();
+}
+initPhysicalScanner(document.getElementById('input-cari-judul'), handleScanCariJudul);
+
 (function () {
     const input = document.getElementById('input-cari-judul');
     const kotak = document.getElementById('judul-suggestions');
