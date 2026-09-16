@@ -156,32 +156,25 @@
 {% if daftar_penyebaran %}
 <div class="card border-primary shadow-sm mb-3 sticky-bottom" id="panel-countdown"
      data-sisa-awal="{{ sisa_eksemplar_keseluruhan }}">
-    <div class="card-body py-2">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex gap-4 flex-wrap">
-                <div>
-                    <div class="small text-muted">Sisa belum dichecklist (halaman ini)</div>
-                    <div class="mono fs-4 fw-bold" id="sisa-halaman">0</div>
-                    <div class="small text-muted"><span id="sisa-tujuan-halaman">0</span> tujuan tersisa</div>
-                </div>
-                <div>
-                    <div class="small text-muted">Sudah dichecklist (halaman ini)</div>
-                    <div class="mono fs-4 fw-bold text-success" id="terchecklist-halaman">0</div>
-                    <div class="small text-muted"><span id="belum-disimpan">0</span> perubahan belum disimpan</div>
-                </div>
-                <div>
-                    <div class="small text-muted">Sisa total judul ini</div>
-                    <div class="mono fs-4 fw-bold text-primary" id="sisa-total">0</div>
-                    <div class="small text-muted">dari {{ total_eksemplar_keseluruhan }} eksemplar</div>
-                </div>
+    <div class="progress" style="height: 4px; border-radius: 0;">
+        <div class="progress-bar bg-success" id="bar-progres" role="progressbar" style="width: 0%;"></div>
+    </div>
+    <div class="card-body py-2 px-2">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div class="small">
+                Sisa: <span class="mono fw-bold" id="sisa-halaman">0</span>
+                <span class="text-muted">(<span id="sisa-tujuan-halaman">0</span> tujuan)</span>
+                <span class="text-muted d-none d-sm-inline"> · Tercentang: </span>
+                <span class="mono fw-bold text-success d-none d-sm-inline" id="terchecklist-halaman">0</span>
+                <span class="text-muted d-none d-md-inline"> · Sisa total judul: </span>
+                <span class="mono fw-bold text-primary d-none d-md-inline" id="sisa-total">0</span>
+                <span class="text-warning fw-bold ms-1" id="belum-disimpan-wrap" style="display: none;">
+                    (<span id="belum-disimpan">0</span> belum disimpan)
+                </span>
             </div>
-            <button type="submit" class="btn btn-primary" id="tombol-simpan"
-                    onclick="return confirm('Simpan checklist untuk halaman ini?');">💾 Simpan Checklist</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="tombol-simpan"
+                    onclick="return confirm('Simpan checklist untuk halaman ini?');">💾 Simpan</button>
         </div>
-        <div class="progress mt-2" style="height: 6px;">
-            <div class="progress-bar bg-success" id="bar-progres" role="progressbar" style="width: 0%;"></div>
-        </div>
-        <small class="text-muted">Angka di atas cuma tampilan bantu — baru tersimpan setelah klik Simpan Checklist. Tidak memengaruhi stok utama.</small>
     </div>
 </div>
 {% endif %}
@@ -235,8 +228,8 @@
         elSisaTotal.textContent = Math.max(0, sisaAwalTotal + selisihTotal).toLocaleString('id-ID');
         elBar.style.width = persen + '%';
 
-        elSisaHalaman.className = 'mono fs-4 fw-bold ' + (sisaHalaman === 0 ? 'text-success' : 'text-danger');
-        elBelumDisimpan.parentElement.className = 'small ' + (berubah > 0 ? 'text-warning fw-bold' : 'text-muted');
+        elSisaHalaman.className = 'mono fw-bold ' + (sisaHalaman === 0 ? 'text-success' : '');
+        document.getElementById('belum-disimpan-wrap').style.display = berubah > 0 ? 'inline' : 'none';
         tombolSimpan.classList.toggle('btn-warning', berubah > 0);
         tombolSimpan.classList.toggle('btn-primary', berubah === 0);
 
