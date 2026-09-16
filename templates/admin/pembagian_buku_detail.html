@@ -165,12 +165,9 @@
     <div class="card-body py-2 px-2">
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
             <div class="small">
-                Sisa: <span class="mono fw-bold" id="sisa-halaman">0</span>
-                <span class="text-muted">(<span id="sisa-tujuan-halaman">0</span> tujuan)</span>
+                Sisa Eksemplar: <span class="mono fw-bold" id="sisa-halaman">0</span>
                 <span class="text-muted d-none d-sm-inline"> · Tercentang: </span>
                 <span class="mono fw-bold text-success d-none d-sm-inline" id="terchecklist-halaman">0</span>
-                <span class="text-muted d-none d-md-inline"> · Sisa total judul: </span>
-                <span class="mono fw-bold text-primary d-none d-md-inline" id="sisa-total">0</span>
                 <span class="text-warning fw-bold ms-1" id="belum-disimpan-wrap" style="display: none;">
                     (<span id="belum-disimpan">0</span> belum disimpan)
                 </span>
@@ -190,13 +187,11 @@
 
     const kotakBaris = Array.from(document.querySelectorAll('.centang-baris'));
     const centangSemua = document.getElementById('centang-semua');
-    const sisaAwalTotal = parseInt(panel.dataset.sisaAwal || '0', 10);
+
 
     const elSisaHalaman = document.getElementById('sisa-halaman');
-    const elSisaTujuan = document.getElementById('sisa-tujuan-halaman');
     const elTerchecklist = document.getElementById('terchecklist-halaman');
     const elBelumDisimpan = document.getElementById('belum-disimpan');
-    const elSisaTotal = document.getElementById('sisa-total');
     const elBar = document.getElementById('bar-progres');
     const tombolSimpan = document.getElementById('tombol-simpan');
 
@@ -204,7 +199,7 @@
     const totalHalaman = parseInt(panel.dataset.totalHalaman || '0', 10);
 
     function hitung() {
-        let sisaHalaman = 0, sudahBaru = 0, sisaTujuan = 0, berubah = 0;
+        let sisaHalaman = 0, sudahBaru = 0, berubah = 0;
 
         kotakBaris.forEach(cb => {
             const eks = parseInt(cb.dataset.eksemplar || '0', 10);
@@ -213,7 +208,6 @@
                 berubah += 1;
             } else {
                 sisaHalaman += eks;
-                sisaTujuan += 1;
             }
         });
 
@@ -221,10 +215,8 @@
         const persen = totalHalaman > 0 ? Math.round((sudahHalaman / totalHalaman) * 100) : 0;
 
         elSisaHalaman.textContent = sisaHalaman.toLocaleString('id-ID');
-        elSisaTujuan.textContent = sisaTujuan;
         elTerchecklist.textContent = sudahHalaman.toLocaleString('id-ID');
         elBelumDisimpan.textContent = berubah;
-        elSisaTotal.textContent = Math.max(0, sisaAwalTotal - sudahBaru).toLocaleString('id-ID');
         elBar.style.width = persen + '%';
 
         elSisaHalaman.className = 'mono fw-bold ' + (sisaHalaman === 0 ? 'text-success' : '');
