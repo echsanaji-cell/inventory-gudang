@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Pembagian Buku (Master){% endblock %}
+{% block content %}
+<h4 class="mb-1">📚 Pembagian Buku (Data Master)</h4>
+<p class="text-muted mb-3">Data referensi berdiri sendiri, hasil import satu kali — {{ total_tujuan_keseluruhan }} tujuan perpustakaan.</p>
+
+<form method="GET" class="mb-2">
+    <div class="row g-2">
+        <div class="col-md-6">
+            <input type="text" name="search" class="form-control" placeholder="Cari nama perpustakaan, kabupaten, atau provinsi..." value="{{ search }}">
+        </div>
+        <div class="col-md-4">
+            <select name="area" class="form-select">
+                <option value="">-- Semua Area --</option>
+                <option value="RED" {{ 'selected' if area_filter == 'RED' }}>🔴 RED</option>
+                <option value="YELLOW" {{ 'selected' if area_filter == 'YELLOW' }}>🟡 YELLOW</option>
+                <option value="GREEN" {{ 'selected' if area_filter == 'GREEN' }}>🟢 GREEN</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Nama Perpustakaan</th><th>Kabupaten/Kota</th><th>Provinsi</th><th>Area</th><th>No Box</th>
+                <th class="text-end">Jumlah Judul</th><th class="text-end">Total Eksemplar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in daftar_tujuan_master %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('pembagian_buku_detail', nama=t.nama_perpustakaan, kabupaten=t.kabupaten_kota, no_box=t.no_box) }}">
+                        {{ t.nama_perpustakaan }}
+                    </a>
+                </td>
+                <td class="small">{{ t.kabupaten_kota }}</td>
+                <td class="small">{{ t.provinsi }}</td>
+                <td>
+                    {% if t.warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
+                    {% elif t.warna_area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                    {% elif t.warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                    {% else %}<span class="badge bg-secondary">-</span>{% endif %}
+                </td>
+                <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
+                <td class="text-end mono">{{ t.total_judul }}</td>
+                <td class="text-end mono fw-bold">{{ t.total_eksemplar }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_halaman > 1 %}
+<nav class="mt-3">
+    <ul class="pagination">
+        {% for p in range(1, total_halaman + 1) %}
+        <li class="page-item {{ 'active' if p == page }}">
+            <a class="page-link" href="{{ url_for('pembagian_buku_list', search=search, area=area_filter, page=p) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

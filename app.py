@@ -3239,6 +3239,94 @@ def mapping_area_referensi_riwayat():
     return render_template('admin/mapping_area_referensi_riwayat.html', log=log)
 
 
+# ------------------ PEMBAGIAN BUKU MASTER (BERDIRI SENDIRI) ------------------
+@app.route('/admin/pembagian-buku')
+@login_required
+@admin_required
+def pembagian_buku_list():
+    search = request.args.get('search', '').strip()
+    area_filter = request.args.get('area', '').strip().upper()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT nama_perpustakaan, provinsi, kabupaten_kota, warna_area, no_box,
+               COUNT(*) as total_judul, COALESCE(SUM(eksemplar), 0) as total_eksemplar
+        FROM pembagian_buku_master
+        WHERE 1=1
+    """
+    params = []
+    if search:
+        query += " AND (nama_perpustakaan ILIKE %s OR kabupaten_kota ILIKE %s OR provinsi ILIKE %s)"
+        params += [f'%{search}%', f'%{search}%', f'%{search}%']
+    if area_filter in ('RED', 'YELLOW', 'GREEN'):
+        query += " AND warna_area = %s"
+        params.append(area_filter)
+
+    query += " GROUP BY nama_perpustakaan, provinsi, kabupaten_kota, warna_area, no_box ORDER BY nama_perpustakaan ASC"
+
+    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['jumlah']
+
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+
+    query_paged = query + " LIMIT %s OFFSET %s"
+    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    daftar_tujuan_master = cur.fetchall()
+
+    cur.execute("SELECT COUNT(DISTINCT nama_perpustakaan) as total FROM pembagian_buku_master")
+    total_tujuan_keseluruhan = cur.fetchone()['total']
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'admin/pembagian_buku_list.html',
+        daftar_tujuan_master=daftar_tujuan_master, search=search, area_filter=area_filter,
+        page=page, total_halaman=total_halaman, total_data=total_data,
+        total_tujuan_keseluruhan=total_tujuan_keseluruhan
+    )
+
+
+@app.route('/admin/pembagian-buku/detail')
+@login_required
+@admin_required
+def pembagian_buku_detail():
+    nama = request.args.get('nama', '')
+    kabupaten = request.args.get('kabupaten', '')
+    no_box_param = request.args.get('no_box', '')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT * FROM pembagian_buku_master
+           WHERE nama_perpustakaan = %s AND kabupaten_kota = %s AND COALESCE(no_box::text, '') = %s
+           ORDER BY judul ASC""",
+        (nama, kabupaten, no_box_param)
+    )
+    daftar_buku = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not daftar_buku:
+        flash('Data tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_list'))
+
+    info = daftar_buku[0]
+    total_eksemplar = sum(b['eksemplar'] or 0 for b in daftar_buku)
+
+    return render_template(
+        'admin/pembagian_buku_detail.html',
+        info=info, daftar_buku=daftar_buku, total_eksemplar=total_eksemplar
+    )
+
+
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
 @login_required
