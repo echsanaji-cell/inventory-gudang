@@ -23,17 +23,66 @@
     <a href="{{ url_for('pembagian_buku_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
 </div>
 
-<form method="GET" class="mb-2">
+<form method="GET" class="mb-2" id="form-cari-judul" autocomplete="off">
     <input type="hidden" name="penerbit" value="{{ penerbit }}">
     <div class="row g-2">
-        <div class="col-md-10">
-            <input type="text" name="search" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        <div class="col-md-10 position-relative">
+            <input type="text" name="search" id="input-cari-judul" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+            <div id="judul-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
         </div>
         <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
         </div>
     </div>
 </form>
+
+<script>
+(function () {
+    const input = document.getElementById('input-cari-judul');
+    const kotak = document.getElementById('judul-suggestions');
+    const penerbit = {{ penerbit|tojson }};
+    let waktu = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(waktu);
+        const kata = this.value.trim();
+        if (kata.length < 2) {
+            kotak.style.display = 'none';
+            kotak.innerHTML = '';
+            return;
+        }
+        waktu = setTimeout(() => {
+            fetch(`/api/pembagian-buku/cari-judul-suggest?q=${encodeURIComponent(kata)}&penerbit=${encodeURIComponent(penerbit)}`)
+                .then(r => r.json())
+                .then(hasil => {
+                    if (hasil.length === 0) {
+                        kotak.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                    } else {
+                        kotak.innerHTML = hasil.map(j =>
+                            `<button type="button" class="list-group-item list-group-item-action small" data-judul="${j.judul.replace(/"/g, '&quot;')}">${j.label}</button>`
+                        ).join('');
+                    }
+                    kotak.style.display = 'block';
+                });
+        }, 300);
+    });
+
+    kotak.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-judul]');
+        if (!btn) return;
+        input.value = btn.dataset.judul;
+        kotak.style.display = 'none';
+        kotak.innerHTML = '';
+        document.getElementById('form-cari-judul').submit();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !kotak.contains(e.target)) {
+            kotak.style.display = 'none';
+        }
+    });
+})();
+</script>
 
 <div class="table-responsive">
     <table class="table table-sm table-hover">

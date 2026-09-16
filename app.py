@@ -2998,7 +2998,61 @@ def _ambil_data_referensi(referensi_id, cur):
     cur.execute("SELECT * FROM mapping_area_referensi WHERE id = %s", (referensi_id,))
     return cur.fetchone()
 
+@app.route('/api/pembagian-buku/cari-penerbit-suggest')
+@login_required
+@viewer_blocked
+def api_cari_suggest_pembagian_penerbit():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    restriksi_user = session.get('area_restriction')
 
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = """SELECT penerbit, COUNT(DISTINCT isbn) as total_judul
+               FROM pembagian_buku_master
+               WHERE penerbit ILIKE %s"""
+    params = [f'%{q}%']
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    query += " GROUP BY penerbit ORDER BY penerbit ASC LIMIT 15"
+
+    cur.execute(query, tuple(params))
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'penerbit': r['penerbit'],
+                      'label': f"{r['penerbit'] or '(Tanpa Penerbit)'} ({r['total_judul']} judul)"} for r in hasil])
+
+
+@app.route('/api/pembagian-buku/cari-judul-suggest')
+@login_required
+@viewer_blocked
+def api_cari_suggest_pembagian_judul():
+    q = request.args.get('q', '').strip()
+    penerbit = request.args.get('penerbit', '').strip()
+    if len(q) < 2 or not penerbit:
+        return jsonify([])
+    restriksi_user = session.get('area_restriction')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = """SELECT isbn, MAX(judul) as judul
+               FROM pembagian_buku_master
+               WHERE penerbit = %s AND (judul ILIKE %s OR isbn ILIKE %s)"""
+    params = [penerbit, f'%{q}%', f'%{q}%']
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    query += " GROUP BY isbn ORDER BY MAX(judul) ASC LIMIT 15"
+
+    cur.execute(query, tuple(params))
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'isbn': r['isbn'], 'judul': r['judul'],
+                      'label': f"{r['judul']} ({r['isbn']})"} for r in hasil])
 @app.route('/api/mapping-area-referensi/cari-suggest')
 @login_required
 @admin_required

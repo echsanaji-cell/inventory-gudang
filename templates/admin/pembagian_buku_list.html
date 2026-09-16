@@ -11,16 +11,64 @@
     {% endif %}
 </p>
 
-<form method="GET" class="mb-2">
+<form method="GET" class="mb-2" id="form-cari-penerbit" autocomplete="off">
     <div class="row g-2">
-        <div class="col-md-10">
-            <input type="text" name="search" class="form-control" placeholder="Cari nama penerbit..." value="{{ search }}">
+        <div class="col-md-10 position-relative">
+            <input type="text" name="search" id="input-cari-penerbit" class="form-control" placeholder="Cari nama penerbit..." value="{{ search }}">
+            <div id="penerbit-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
         </div>
         <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
         </div>
     </div>
 </form>
+
+<script>
+(function () {
+    const input = document.getElementById('input-cari-penerbit');
+    const kotak = document.getElementById('penerbit-suggestions');
+    let waktu = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(waktu);
+        const kata = this.value.trim();
+        if (kata.length < 2) {
+            kotak.style.display = 'none';
+            kotak.innerHTML = '';
+            return;
+        }
+        waktu = setTimeout(() => {
+            fetch(`/api/pembagian-buku/cari-penerbit-suggest?q=${encodeURIComponent(kata)}`)
+                .then(r => r.json())
+                .then(hasil => {
+                    if (hasil.length === 0) {
+                        kotak.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                    } else {
+                        kotak.innerHTML = hasil.map(p =>
+                            `<button type="button" class="list-group-item list-group-item-action small" data-penerbit="${(p.penerbit || '').replace(/"/g, '&quot;')}">${p.label}</button>`
+                        ).join('');
+                    }
+                    kotak.style.display = 'block';
+                });
+        }, 300);
+    });
+
+    kotak.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-penerbit]');
+        if (!btn) return;
+        input.value = btn.dataset.penerbit;
+        kotak.style.display = 'none';
+        kotak.innerHTML = '';
+        document.getElementById('form-cari-penerbit').submit();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !kotak.contains(e.target)) {
+            kotak.style.display = 'none';
+        }
+    });
+})();
+</script>
 
 <div class="table-responsive">
     <table class="table table-sm table-hover">
