@@ -128,13 +128,15 @@
                     {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                 </td>
                 <td class="text-center">
+                    {% if t.sudah_diambil %}
+                    <span class="text-success fs-5" title="Sudah tersimpan, tidak bisa diubah lagi di sini">✅</span>
+                    {% if t.diambil_oleh %}
+                    <br><small class="text-muted" style="font-size: 10px;">{{ t.diambil_oleh }}</small>
+                    {% endif %}
+                    {% else %}
                     <input type="hidden" name="id_tampil" value="{{ t.id }}">
                     <input type="checkbox" class="form-check-input centang-baris" name="id_dicentang" value="{{ t.id }}"
-                           data-eksemplar="{{ t.eksemplar or 0 }}"
-                           data-awal="{{ '1' if t.sudah_diambil else '0' }}"
-                           {{ 'checked' if t.sudah_diambil }}>
-                    {% if t.sudah_diambil and t.diambil_oleh %}
-                    <br><small class="text-muted" style="font-size: 10px;">{{ t.diambil_oleh }}</small>
+                           data-eksemplar="{{ t.eksemplar or 0 }}">
                     {% endif %}
                 </td>
                 <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
@@ -155,7 +157,9 @@
 
 {% if daftar_penyebaran %}
 <div class="card border-primary shadow-sm mb-3 sticky-bottom" id="panel-countdown"
-     data-sisa-awal="{{ sisa_eksemplar_keseluruhan }}">
+     data-sisa-awal="{{ sisa_eksemplar_keseluruhan }}"
+     data-sudah-halaman-awal="{{ sudah_eksemplar_halaman }}"
+     data-total-halaman="{{ total_eksemplar_halaman }}">
     <div class="progress" style="height: 4px; border-radius: 0;">
         <div class="progress-bar bg-success" id="bar-progres" role="progressbar" style="width: 0%;"></div>
     </div>
@@ -197,35 +201,31 @@
     const elBar = document.getElementById('bar-progres');
     const tombolSimpan = document.getElementById('tombol-simpan');
 
+    const sudahHalamanAwal = parseInt(panel.dataset.sudahHalamanAwal || '0', 10);
+    const totalHalaman = parseInt(panel.dataset.totalHalaman || '0', 10);
+
     function hitung() {
-        let sisaHalaman = 0, sudahHalaman = 0, sisaTujuan = 0, berubah = 0, selisihTotal = 0;
+        let sisaHalaman = 0, sudahBaru = 0, sisaTujuan = 0, berubah = 0;
 
         kotakBaris.forEach(cb => {
             const eks = parseInt(cb.dataset.eksemplar || '0', 10);
-            const awal = cb.dataset.awal === '1';
-
             if (cb.checked) {
-                sudahHalaman += eks;
+                sudahBaru += eks;
+                berubah += 1;
             } else {
                 sisaHalaman += eks;
                 sisaTujuan += 1;
             }
-
-            if (cb.checked !== awal) {
-                berubah += 1;
-                // dicentang baru -> sisa total turun; batal centang -> sisa total naik
-                selisihTotal += cb.checked ? -eks : eks;
-            }
         });
 
-        const totalHalaman = sisaHalaman + sudahHalaman;
+        const sudahHalaman = sudahHalamanAwal + sudahBaru;
         const persen = totalHalaman > 0 ? Math.round((sudahHalaman / totalHalaman) * 100) : 0;
 
         elSisaHalaman.textContent = sisaHalaman.toLocaleString('id-ID');
         elSisaTujuan.textContent = sisaTujuan;
         elTerchecklist.textContent = sudahHalaman.toLocaleString('id-ID');
         elBelumDisimpan.textContent = berubah;
-        elSisaTotal.textContent = Math.max(0, sisaAwalTotal + selisihTotal).toLocaleString('id-ID');
+        elSisaTotal.textContent = Math.max(0, sisaAwalTotal - sudahBaru).toLocaleString('id-ID');
         elBar.style.width = persen + '%';
 
         elSisaHalaman.className = 'mono fw-bold ' + (sisaHalaman === 0 ? 'text-success' : '');
@@ -252,7 +252,7 @@
     document.getElementById('form-checklist')?.addEventListener('submit', () => { sedangSubmit = true; });
     window.addEventListener('beforeunload', function (e) {
         if (sedangSubmit) return;
-        if (kotakBaris.some(cb => cb.checked !== (cb.dataset.awal === '1'))) {
+        if (kotakBaris.some(cb => cb.checked)) {
             e.preventDefault();
             e.returnValue = '';
         }

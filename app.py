@@ -3513,6 +3513,9 @@ def pembagian_buku_detail():
     cur.close()
     conn.close()
 
+    sudah_eksemplar_halaman = sum((t['eksemplar'] or 0) for t in daftar_penyebaran if t['sudah_diambil'])
+    total_eksemplar_halaman = sum((t['eksemplar'] or 0) for t in daftar_penyebaran)
+
     return render_template(
         'admin/pembagian_buku_detail.html',
         penerbit=penerbit, isbn=isbn, info=info_row,
@@ -3522,7 +3525,9 @@ def pembagian_buku_detail():
         sisa_eksemplar_keseluruhan=sisa_eksemplar_keseluruhan,
         daftar_penyebaran=daftar_penyebaran, area_filter=area_filter,
         page=page, total_halaman=total_halaman, total_data=total_data,
-        restriksi_user=restriksi_user
+        restriksi_user=restriksi_user,
+        sudah_eksemplar_halaman=sudah_eksemplar_halaman,
+        total_eksemplar_halaman=total_eksemplar_halaman
     )
 
 
