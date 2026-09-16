@@ -2,7 +2,14 @@
 {% block title %}Pembagian Buku (Master){% endblock %}
 {% block content %}
 <h4 class="mb-1">📚 Pembagian Buku (Data Master)</h4>
-<p class="text-muted mb-3">Data referensi berdiri sendiri, hasil import satu kali — {{ total_penerbit_keseluruhan }} penerbit.</p>
+<p class="text-muted mb-3">
+    Data referensi berdiri sendiri, hasil import satu kali — {{ total_penerbit_keseluruhan }} penerbit.
+    {% if restriksi_user %}
+    <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
+        Area kamu: {{ restriksi_user }}
+    </span>
+    {% endif %}
+</p>
 
 <form method="GET" class="mb-2">
     <div class="row g-2">

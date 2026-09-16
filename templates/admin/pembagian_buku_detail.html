@@ -12,11 +12,31 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
         <h4 class="mb-1">{{ info.judul }}</h4>
-        <p class="text-muted mb-0">{{ info.pengarang or '-' }} · {{ penerbit or '(Tanpa Penerbit)' }} · ISBN: <span class="mono">{{ isbn }}</span></p>
+        <p class="text-muted mb-0">
+            {{ info.pengarang or '-' }} · {{ penerbit or '(Tanpa Penerbit)' }} · ISBN: <span class="mono">{{ isbn }}</span>
+            {% if restriksi_user %}
+            <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
+                Area kamu: {{ restriksi_user }}
+            </span>
+            {% endif %}
+        </p>
     </div>
     <a href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit) }}" class="btn btn-secondary btn-sm">Kembali</a>
 </div>
 
+{% if restriksi_user %}
+<div class="row mb-3 text-center">
+    <div class="col-md-4">
+        <div class="card {{ 'border-danger' if restriksi_user == 'RED' else ('border-warning' if restriksi_user == 'YELLOW' else 'border-success') }}">
+            <div class="card-body">
+                <h6 class="mb-1">{{ '🔴' if restriksi_user == 'RED' else ('🟡' if restriksi_user == 'YELLOW' else '🟢') }} Area Kamu: {{ restriksi_user }}</h6>
+                <div class="mono">{{ total_tujuan_keseluruhan }} tujuan</div>
+                <div class="mono small text-muted">{{ total_eksemplar_keseluruhan }} eksemplar</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
 <div class="row mb-3 text-center">
     <div class="col-md-3">
         <a href="{{ url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn, area='RED') }}" class="text-decoration-none">
@@ -69,6 +89,7 @@
     Filter aktif: <strong>{{ area_filter if area_filter != 'TANPA_AREA' else 'Tanpa Area' }}</strong>
     · <a href="{{ url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn) }}">Hapus filter</a>
 </p>
+{% endif %}
 {% endif %}
 
 <div class="table-responsive">

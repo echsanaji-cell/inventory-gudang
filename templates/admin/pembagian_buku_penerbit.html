@@ -11,7 +11,14 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
         <h4 class="mb-1">🏢 {{ penerbit or '(Tanpa Penerbit)' }}</h4>
-        <p class="text-muted mb-0">{{ total_data }} judul buku</p>
+        <p class="text-muted mb-0">
+            {{ total_data }} judul buku
+            {% if restriksi_user %}
+            <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
+                Area kamu: {{ restriksi_user }}
+            </span>
+            {% endif %}
+        </p>
     </div>
     <a href="{{ url_for('pembagian_buku_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
 </div>
@@ -35,9 +42,11 @@
                 <th>Judul</th>
                 <th>ISBN</th>
                 <th>Pengarang</th>
+                {% if not restriksi_user %}
                 <th class="text-end text-danger">🔴 RED</th>
                 <th class="text-end text-warning">🟡 YELLOW</th>
                 <th class="text-end text-success">🟢 GREEN</th>
+                {% endif %}
                 <th class="text-end">Jumlah Tujuan</th>
                 <th class="text-end">Total Eksemplar</th>
             </tr>
@@ -52,14 +61,16 @@
                 </td>
                 <td class="mono small">{{ j.isbn }}</td>
                 <td class="small">{{ j.pengarang or '-' }}</td>
+                {% if not restriksi_user %}
                 <td class="text-end mono">{{ j.red_tujuan if j.red_tujuan > 0 else '-' }}</td>
                 <td class="text-end mono">{{ j.yellow_tujuan if j.yellow_tujuan > 0 else '-' }}</td>
                 <td class="text-end mono">{{ j.green_tujuan if j.green_tujuan > 0 else '-' }}</td>
+                {% endif %}
                 <td class="text-end mono">{{ j.total_tujuan }}</td>
                 <td class="text-end mono fw-bold">{{ j.total_eksemplar }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="{{ 5 if restriksi_user else 8 }}" class="text-center text-muted">Tidak ada data.</td></tr>
             {% endfor %}
         </tbody>
     </table>

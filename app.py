@@ -3244,11 +3244,12 @@ def mapping_area_referensi_riwayat():
 
 @app.route('/admin/pembagian-buku')
 @login_required
-@admin_required
+@viewer_blocked
 def pembagian_buku_list():
     search = request.args.get('search', '').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 50
+    restriksi_user = session.get('area_restriction')
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -3262,6 +3263,9 @@ def pembagian_buku_list():
         WHERE 1=1
     """
     params = []
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
     if search:
         query += " AND penerbit ILIKE %s"
         params.append(f'%{search}%')
@@ -3280,7 +3284,12 @@ def pembagian_buku_list():
     cur.execute(query_paged, tuple(params + [per_page, offset]))
     daftar_penerbit = cur.fetchall()
 
-    cur.execute("SELECT COUNT(DISTINCT penerbit) as total FROM pembagian_buku_master")
+    count_penerbit_query = "SELECT COUNT(DISTINCT penerbit) as total FROM pembagian_buku_master WHERE 1=1"
+    count_penerbit_params = []
+    if restriksi_user:
+        count_penerbit_query += " AND warna_area = %s"
+        count_penerbit_params.append(restriksi_user)
+    cur.execute(count_penerbit_query, tuple(count_penerbit_params))
     total_penerbit_keseluruhan = cur.fetchone()['total']
 
     cur.close()
@@ -3290,18 +3299,20 @@ def pembagian_buku_list():
         'admin/pembagian_buku_list.html',
         daftar_penerbit=daftar_penerbit, search=search,
         page=page, total_halaman=total_halaman, total_data=total_data,
-        total_penerbit_keseluruhan=total_penerbit_keseluruhan
+        total_penerbit_keseluruhan=total_penerbit_keseluruhan,
+        restriksi_user=restriksi_user
     )
 
 
 @app.route('/admin/pembagian-buku/penerbit')
 @login_required
-@admin_required
+@viewer_blocked
 def pembagian_buku_penerbit():
     penerbit = request.args.get('penerbit', '')
     search = request.args.get('search', '').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 50
+    restriksi_user = session.get('area_restriction')
 
     if not penerbit:
         flash('Penerbit tidak ditemukan.', 'danger')
@@ -3321,6 +3332,9 @@ def pembagian_buku_penerbit():
         WHERE penerbit = %s
     """
     params = [penerbit]
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
     if search:
         query += " AND (judul ILIKE %s OR isbn ILIKE %s)"
         params += [f'%{search}%', f'%{search}%']
@@ -3351,17 +3365,23 @@ def pembagian_buku_penerbit():
     return render_template(
         'admin/pembagian_buku_penerbit.html',
         penerbit=penerbit, daftar_judul=daftar_judul, search=search,
-        page=page, total_halaman=total_halaman, total_data=total_data
+        page=page, total_halaman=total_halaman, total_data=total_data,
+        restriksi_user=restriksi_user
     )
 
 
 @app.route('/admin/pembagian-buku/detail')
 @login_required
-@admin_required
+@viewer_blocked
 def pembagian_buku_detail():
     penerbit = request.args.get('penerbit', '')
     isbn = request.args.get('isbn', '')
-    area_filter = request.args.get('area', '').strip().upper()
+    restriksi_user = session.get('area_restriction')
+    if restriksi_user:
+        # staff dengan pembatasan area TIDAK BISA mengganti filter lewat URL — dikunci ke area-nya
+        area_filter = restriksi_user
+    else:
+        area_filter = request.args.get('area', '').strip().upper()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 100
 
@@ -3372,11 +3392,13 @@ def pembagian_buku_detail():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """SELECT MAX(judul) as judul, MAX(pengarang) as pengarang
-           FROM pembagian_buku_master WHERE penerbit = %s AND isbn = %s""",
-        (penerbit, isbn)
-    )
+    info_query = """SELECT MAX(judul) as judul, MAX(pengarang) as pengarang
+                     FROM pembagian_buku_master WHERE penerbit = %s AND isbn = %s"""
+    info_params = [penerbit, isbn]
+    if restriksi_user:
+        info_query += " AND warna_area = %s"
+        info_params.append(restriksi_user)
+    cur.execute(info_query, tuple(info_params))
     info_row = cur.fetchone()
     if not info_row or not info_row['judul']:
         cur.close()
@@ -3384,15 +3406,17 @@ def pembagian_buku_detail():
         flash('Data tidak ditemukan.', 'danger')
         return redirect(url_for('pembagian_buku_penerbit', penerbit=penerbit))
 
-    cur.execute(
-        """SELECT warna_area,
-                  COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-                  COALESCE(SUM(eksemplar), 0) as total_eksemplar
-           FROM pembagian_buku_master
-           WHERE penerbit = %s AND isbn = %s
-           GROUP BY warna_area""",
-        (penerbit, isbn)
-    )
+    ringkasan_query = """SELECT warna_area,
+                                 COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
+                                 COALESCE(SUM(eksemplar), 0) as total_eksemplar
+                          FROM pembagian_buku_master
+                          WHERE penerbit = %s AND isbn = %s"""
+    ringkasan_params = [penerbit, isbn]
+    if restriksi_user:
+        ringkasan_query += " AND warna_area = %s"
+        ringkasan_params.append(restriksi_user)
+    ringkasan_query += " GROUP BY warna_area"
+    cur.execute(ringkasan_query, tuple(ringkasan_params))
     ringkasan_area = {}
     total_tujuan_keseluruhan = 0
     total_eksemplar_keseluruhan = 0
@@ -3434,7 +3458,8 @@ def pembagian_buku_detail():
         total_tujuan_keseluruhan=total_tujuan_keseluruhan,
         total_eksemplar_keseluruhan=total_eksemplar_keseluruhan,
         daftar_penyebaran=daftar_penyebaran, area_filter=area_filter,
-        page=page, total_halaman=total_halaman, total_data=total_data
+        page=page, total_halaman=total_halaman, total_data=total_data,
+        restriksi_user=restriksi_user
     )
 
 
