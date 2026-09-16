@@ -31,7 +31,7 @@
             <div class="card-body">
                 <h6 class="mb-1">{{ '🔴' if restriksi_user == 'RED' else ('🟡' if restriksi_user == 'YELLOW' else '🟢') }} Area Kamu: {{ restriksi_user }}</h6>
                 <div class="mono">{{ total_tujuan_keseluruhan }} tujuan</div>
-                <div class="mono small text-muted">{{ total_eksemplar_keseluruhan }} eksemplar</div>
+                <div class="mono small text-muted">sisa {{ sisa_eksemplar_keseluruhan }} / {{ total_eksemplar_keseluruhan }} eks</div>
             </div>
         </div>
     </div>
@@ -44,7 +44,7 @@
                 <div class="card-body">
                     <h6 class="text-danger mb-1">🔴 RED</h6>
                     <div class="mono">{{ ringkasan_area.get('RED', {}).get('total_tujuan', 0) }} tujuan</div>
-                    <div class="mono small text-muted">{{ ringkasan_area.get('RED', {}).get('total_eksemplar', 0) }} eksemplar</div>
+                    <div class="mono small text-muted">sisa {{ ringkasan_area.get('RED', {}).get('sisa_eksemplar', 0) }} / {{ ringkasan_area.get('RED', {}).get('total_eksemplar', 0) }} eks</div>
                 </div>
             </div>
         </a>
@@ -77,7 +77,7 @@
                 <div class="card-body">
                     <h6 class="text-muted mb-1">📚 Semua Area</h6>
                     <div class="mono">{{ total_tujuan_keseluruhan }} tujuan</div>
-                    <div class="mono small text-muted">{{ total_eksemplar_keseluruhan }} eksemplar</div>
+                    <div class="mono small text-muted">sisa {{ sisa_eksemplar_keseluruhan }} / {{ total_eksemplar_keseluruhan }} eks</div>
                 </div>
             </div>
         </a>
@@ -92,21 +92,32 @@
 {% endif %}
 {% endif %}
 
+<form method="POST" action="{{ url_for('pembagian_buku_checklist') }}" id="form-checklist">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="penerbit" value="{{ penerbit }}">
+    <input type="hidden" name="isbn" value="{{ isbn }}">
+    <input type="hidden" name="area" value="{{ area_filter }}">
+    <input type="hidden" name="page" value="{{ page }}">
+
 <div class="table-responsive">
-    <table class="table table-sm table-hover">
+    <table class="table table-sm table-hover align-middle">
         <thead>
             <tr>
                 <th>Nama Perpustakaan</th>
                 <th>Kabupaten/Kota</th>
                 <th>Provinsi</th>
                 <th>Area</th>
+                <th class="text-center" style="width: 90px;">
+                    ✅ Selesai
+                    <br><input type="checkbox" id="centang-semua" class="form-check-input mt-1" title="Centang semua di halaman ini">
+                </th>
                 <th>No Box</th>
                 <th class="text-end">Eksemplar</th>
             </tr>
         </thead>
         <tbody>
             {% for t in daftar_penyebaran %}
-            <tr>
+            <tr class="{{ 'table-success' if t.sudah_diambil }}">
                 <td>{{ t.nama_perpustakaan }}</td>
                 <td class="small">{{ t.kabupaten_kota }}</td>
                 <td class="small">{{ t.provinsi }}</td>
@@ -116,15 +127,147 @@
                     {% elif t.warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
                     {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                 </td>
+                <td class="text-center">
+                    <input type="hidden" name="id_tampil" value="{{ t.id }}">
+                    <input type="checkbox" class="form-check-input centang-baris" name="id_dicentang" value="{{ t.id }}"
+                           data-eksemplar="{{ t.eksemplar or 0 }}"
+                           data-awal="{{ '1' if t.sudah_diambil else '0' }}"
+                           {{ 'checked' if t.sudah_diambil }}>
+                    {% if t.sudah_diambil and t.diambil_oleh %}
+                    <br><small class="text-muted" style="font-size: 10px;">{{ t.diambil_oleh }}</small>
+                    {% endif %}
+                </td>
                 <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
-                <td class="text-end mono">{{ t.eksemplar if t.eksemplar is not none else '-' }}</td>
+                <td class="text-end mono">
+                    {% if t.sudah_diambil %}
+                    <span class="text-muted text-decoration-line-through">{{ t.eksemplar if t.eksemplar is not none else '-' }}</span>
+                    {% else %}
+                    {{ t.eksemplar if t.eksemplar is not none else '-' }}
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="7" class="text-center text-muted">Tidak ada data.</td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+{% if daftar_penyebaran %}
+<div class="card border-primary shadow-sm mb-3 sticky-bottom" id="panel-countdown"
+     data-sisa-awal="{{ sisa_eksemplar_keseluruhan }}">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex gap-4 flex-wrap">
+                <div>
+                    <div class="small text-muted">Sisa belum dichecklist (halaman ini)</div>
+                    <div class="mono fs-4 fw-bold" id="sisa-halaman">0</div>
+                    <div class="small text-muted"><span id="sisa-tujuan-halaman">0</span> tujuan tersisa</div>
+                </div>
+                <div>
+                    <div class="small text-muted">Sudah dichecklist (halaman ini)</div>
+                    <div class="mono fs-4 fw-bold text-success" id="terchecklist-halaman">0</div>
+                    <div class="small text-muted"><span id="belum-disimpan">0</span> perubahan belum disimpan</div>
+                </div>
+                <div>
+                    <div class="small text-muted">Sisa total judul ini</div>
+                    <div class="mono fs-4 fw-bold text-primary" id="sisa-total">0</div>
+                    <div class="small text-muted">dari {{ total_eksemplar_keseluruhan }} eksemplar</div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="tombol-simpan"
+                    onclick="return confirm('Simpan checklist untuk halaman ini?');">💾 Simpan Checklist</button>
+        </div>
+        <div class="progress mt-2" style="height: 6px;">
+            <div class="progress-bar bg-success" id="bar-progres" role="progressbar" style="width: 0%;"></div>
+        </div>
+        <small class="text-muted">Angka di atas cuma tampilan bantu — baru tersimpan setelah klik Simpan Checklist. Tidak memengaruhi stok utama.</small>
+    </div>
+</div>
+{% endif %}
+</form>
+
+<script>
+(function () {
+    const panel = document.getElementById('panel-countdown');
+    if (!panel) return;
+
+    const kotakBaris = Array.from(document.querySelectorAll('.centang-baris'));
+    const centangSemua = document.getElementById('centang-semua');
+    const sisaAwalTotal = parseInt(panel.dataset.sisaAwal || '0', 10);
+
+    const elSisaHalaman = document.getElementById('sisa-halaman');
+    const elSisaTujuan = document.getElementById('sisa-tujuan-halaman');
+    const elTerchecklist = document.getElementById('terchecklist-halaman');
+    const elBelumDisimpan = document.getElementById('belum-disimpan');
+    const elSisaTotal = document.getElementById('sisa-total');
+    const elBar = document.getElementById('bar-progres');
+    const tombolSimpan = document.getElementById('tombol-simpan');
+
+    function hitung() {
+        let sisaHalaman = 0, sudahHalaman = 0, sisaTujuan = 0, berubah = 0, selisihTotal = 0;
+
+        kotakBaris.forEach(cb => {
+            const eks = parseInt(cb.dataset.eksemplar || '0', 10);
+            const awal = cb.dataset.awal === '1';
+
+            if (cb.checked) {
+                sudahHalaman += eks;
+            } else {
+                sisaHalaman += eks;
+                sisaTujuan += 1;
+            }
+
+            if (cb.checked !== awal) {
+                berubah += 1;
+                // dicentang baru -> sisa total turun; batal centang -> sisa total naik
+                selisihTotal += cb.checked ? -eks : eks;
+            }
+        });
+
+        const totalHalaman = sisaHalaman + sudahHalaman;
+        const persen = totalHalaman > 0 ? Math.round((sudahHalaman / totalHalaman) * 100) : 0;
+
+        elSisaHalaman.textContent = sisaHalaman.toLocaleString('id-ID');
+        elSisaTujuan.textContent = sisaTujuan;
+        elTerchecklist.textContent = sudahHalaman.toLocaleString('id-ID');
+        elBelumDisimpan.textContent = berubah;
+        elSisaTotal.textContent = Math.max(0, sisaAwalTotal + selisihTotal).toLocaleString('id-ID');
+        elBar.style.width = persen + '%';
+
+        elSisaHalaman.className = 'mono fs-4 fw-bold ' + (sisaHalaman === 0 ? 'text-success' : 'text-danger');
+        elBelumDisimpan.parentElement.className = 'small ' + (berubah > 0 ? 'text-warning fw-bold' : 'text-muted');
+        tombolSimpan.classList.toggle('btn-warning', berubah > 0);
+        tombolSimpan.classList.toggle('btn-primary', berubah === 0);
+
+        if (centangSemua) {
+            const semuaCentang = kotakBaris.length > 0 && kotakBaris.every(cb => cb.checked);
+            centangSemua.checked = semuaCentang;
+            centangSemua.indeterminate = !semuaCentang && kotakBaris.some(cb => cb.checked);
+        }
+    }
+
+    centangSemua?.addEventListener('change', function () {
+        kotakBaris.forEach(cb => { cb.checked = this.checked; });
+        hitung();
+    });
+
+    kotakBaris.forEach(cb => cb.addEventListener('change', hitung));
+
+    // peringatan kalau ada centang yang belum disimpan lalu pindah halaman/menu
+    let sedangSubmit = false;
+    document.getElementById('form-checklist')?.addEventListener('submit', () => { sedangSubmit = true; });
+    window.addEventListener('beforeunload', function (e) {
+        if (sedangSubmit) return;
+        if (kotakBaris.some(cb => cb.checked !== (cb.dataset.awal === '1'))) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    hitung();
+})();
+</script>
 
 {% if total_halaman > 1 %}
 <nav class="mt-3">

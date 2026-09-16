@@ -3258,7 +3258,7 @@ def pembagian_buku_list():
         SELECT penerbit,
                COUNT(DISTINCT isbn) as total_judul,
                COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-               COALESCE(SUM(eksemplar), 0) as total_eksemplar
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as total_eksemplar
         FROM pembagian_buku_master
         WHERE 1=1
     """
@@ -3324,7 +3324,7 @@ def pembagian_buku_penerbit():
     query = """
         SELECT isbn, MAX(judul) as judul, MAX(pengarang) as pengarang,
                COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as total_eksemplar,
                COUNT(DISTINCT CASE WHEN warna_area = 'RED' THEN nama_perpustakaan END) as red_tujuan,
                COUNT(DISTINCT CASE WHEN warna_area = 'YELLOW' THEN nama_perpustakaan END) as yellow_tujuan,
                COUNT(DISTINCT CASE WHEN warna_area = 'GREEN' THEN nama_perpustakaan END) as green_tujuan
@@ -3408,7 +3408,8 @@ def pembagian_buku_detail():
 
     ringkasan_query = """SELECT warna_area,
                                  COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-                                 COALESCE(SUM(eksemplar), 0) as total_eksemplar
+                                 COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+                                 COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as sisa_eksemplar
                           FROM pembagian_buku_master
                           WHERE penerbit = %s AND isbn = %s"""
     ringkasan_params = [penerbit, isbn]
@@ -3420,13 +3421,20 @@ def pembagian_buku_detail():
     ringkasan_area = {}
     total_tujuan_keseluruhan = 0
     total_eksemplar_keseluruhan = 0
+    sisa_eksemplar_keseluruhan = 0
     for r in cur.fetchall():
         warna = (r['warna_area'] or '').strip().upper() or 'TANPA_AREA'
-        ringkasan_area[warna] = {'total_tujuan': r['total_tujuan'], 'total_eksemplar': r['total_eksemplar']}
+        ringkasan_area[warna] = {
+            'total_tujuan': r['total_tujuan'],
+            'total_eksemplar': r['total_eksemplar'],
+            'sisa_eksemplar': r['sisa_eksemplar'],
+        }
         total_tujuan_keseluruhan += r['total_tujuan']
         total_eksemplar_keseluruhan += r['total_eksemplar']
+        sisa_eksemplar_keseluruhan += r['sisa_eksemplar']
 
-    query = """SELECT nama_perpustakaan, kabupaten_kota, provinsi, no_box, warna_area, eksemplar
+    query = """SELECT id, nama_perpustakaan, kabupaten_kota, provinsi, no_box, warna_area, eksemplar,
+                      sudah_diambil, diambil_at, diambil_oleh
                FROM pembagian_buku_master
                WHERE penerbit = %s AND isbn = %s"""
     params = [penerbit, isbn]
@@ -3457,10 +3465,88 @@ def pembagian_buku_detail():
         ringkasan_area=ringkasan_area,
         total_tujuan_keseluruhan=total_tujuan_keseluruhan,
         total_eksemplar_keseluruhan=total_eksemplar_keseluruhan,
+        sisa_eksemplar_keseluruhan=sisa_eksemplar_keseluruhan,
         daftar_penyebaran=daftar_penyebaran, area_filter=area_filter,
         page=page, total_halaman=total_halaman, total_data=total_data,
         restriksi_user=restriksi_user
     )
+
+
+@app.route('/admin/pembagian-buku/checklist', methods=['POST'])
+@login_required
+@viewer_blocked
+def pembagian_buku_checklist():
+    penerbit = request.form.get('penerbit', '')
+    isbn = request.form.get('isbn', '')
+    area_filter = request.form.get('area', '').strip().upper()
+    page = max(1, ambil_int(request.form, 'page', 1))
+    restriksi_user = session.get('area_restriction')
+
+    if not penerbit or not isbn:
+        flash('Data tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_list'))
+
+    # baris yang tampil di halaman ini (jadi baris di halaman lain tidak ikut terpengaruh)
+    try:
+        id_tampil = [int(x) for x in request.form.getlist('id_tampil')]
+        id_dicentang = [int(x) for x in request.form.getlist('id_dicentang')]
+    except ValueError:
+        flash('Data checklist tidak valid.', 'danger')
+        return redirect(url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn, area=area_filter, page=page))
+
+    id_dicentang = [i for i in id_dicentang if i in id_tampil]
+    id_dilepas = [i for i in id_tampil if i not in id_dicentang]
+
+    if not id_tampil:
+        flash('Tidak ada data untuk disimpan.', 'warning')
+        return redirect(url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn, area=area_filter, page=page))
+
+    nama_tampil = session.get('nama_lengkap') or session.get('username')
+
+    # pengaman: staff yang dibatasi area hanya boleh mengubah baris di areanya sendiri
+    filter_area = ""
+    param_area = []
+    if restriksi_user:
+        filter_area = " AND warna_area = %s"
+        param_area = [restriksi_user]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    jumlah_dicentang = 0
+    if id_dicentang:
+        cur.execute(
+            """UPDATE pembagian_buku_master
+               SET sudah_diambil = TRUE, diambil_at = NOW(), diambil_oleh = %s
+               WHERE id = ANY(%s) AND penerbit = %s AND isbn = %s AND sudah_diambil = FALSE""" + filter_area,
+            tuple([nama_tampil, id_dicentang, penerbit, isbn] + param_area)
+        )
+        jumlah_dicentang = cur.rowcount
+
+    jumlah_dilepas = 0
+    if id_dilepas:
+        cur.execute(
+            """UPDATE pembagian_buku_master
+               SET sudah_diambil = FALSE, diambil_at = NULL, diambil_oleh = NULL
+               WHERE id = ANY(%s) AND penerbit = %s AND isbn = %s AND sudah_diambil = TRUE""" + filter_area,
+            tuple([id_dilepas, penerbit, isbn] + param_area)
+        )
+        jumlah_dilepas = cur.rowcount
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if jumlah_dicentang or jumlah_dilepas:
+        catat_aktivitas(
+            'Checklist Pembagian Buku Master',
+            f'ISBN {isbn} ({penerbit}): {jumlah_dicentang} tujuan ditandai selesai, {jumlah_dilepas} dibatalkan'
+        )
+        flash(f'Checklist tersimpan — {jumlah_dicentang} tujuan ditandai selesai, {jumlah_dilepas} dibatalkan.', 'success')
+    else:
+        flash('Tidak ada perubahan checklist.', 'info')
+
+    return redirect(url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn, area=area_filter, page=page))
 
 
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
