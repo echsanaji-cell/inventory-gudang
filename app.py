@@ -3240,12 +3240,13 @@ def mapping_area_referensi_riwayat():
 
 
 # ------------------ PEMBAGIAN BUKU MASTER (BERDIRI SENDIRI) ------------------
+# Flow: Penerbit -> Judul Buku (dari penerbit itu) -> Penyebaran ke perpustakaan (filter warna area)
+
 @app.route('/admin/pembagian-buku')
 @login_required
 @admin_required
 def pembagian_buku_list():
     search = request.args.get('search', '').strip()
-    area_filter = request.args.get('area', '').strip().upper()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 50
 
@@ -3253,20 +3254,19 @@ def pembagian_buku_list():
     cur = conn.cursor()
 
     query = """
-        SELECT nama_perpustakaan, provinsi, kabupaten_kota, warna_area, no_box,
-               COUNT(*) as total_judul, COALESCE(SUM(eksemplar), 0) as total_eksemplar
+        SELECT penerbit,
+               COUNT(DISTINCT isbn) as total_judul,
+               COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar
         FROM pembagian_buku_master
         WHERE 1=1
     """
     params = []
     if search:
-        query += " AND (nama_perpustakaan ILIKE %s OR kabupaten_kota ILIKE %s OR provinsi ILIKE %s)"
-        params += [f'%{search}%', f'%{search}%', f'%{search}%']
-    if area_filter in ('RED', 'YELLOW', 'GREEN'):
-        query += " AND warna_area = %s"
-        params.append(area_filter)
+        query += " AND penerbit ILIKE %s"
+        params.append(f'%{search}%')
 
-    query += " GROUP BY nama_perpustakaan, provinsi, kabupaten_kota, warna_area, no_box ORDER BY nama_perpustakaan ASC"
+    query += " GROUP BY penerbit ORDER BY penerbit ASC"
 
     query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
@@ -3278,19 +3278,80 @@ def pembagian_buku_list():
 
     query_paged = query + " LIMIT %s OFFSET %s"
     cur.execute(query_paged, tuple(params + [per_page, offset]))
-    daftar_tujuan_master = cur.fetchall()
+    daftar_penerbit = cur.fetchall()
 
-    cur.execute("SELECT COUNT(DISTINCT nama_perpustakaan) as total FROM pembagian_buku_master")
-    total_tujuan_keseluruhan = cur.fetchone()['total']
+    cur.execute("SELECT COUNT(DISTINCT penerbit) as total FROM pembagian_buku_master")
+    total_penerbit_keseluruhan = cur.fetchone()['total']
 
     cur.close()
     conn.close()
 
     return render_template(
         'admin/pembagian_buku_list.html',
-        daftar_tujuan_master=daftar_tujuan_master, search=search, area_filter=area_filter,
+        daftar_penerbit=daftar_penerbit, search=search,
         page=page, total_halaman=total_halaman, total_data=total_data,
-        total_tujuan_keseluruhan=total_tujuan_keseluruhan
+        total_penerbit_keseluruhan=total_penerbit_keseluruhan
+    )
+
+
+@app.route('/admin/pembagian-buku/penerbit')
+@login_required
+@admin_required
+def pembagian_buku_penerbit():
+    penerbit = request.args.get('penerbit', '')
+    search = request.args.get('search', '').strip()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
+
+    if not penerbit:
+        flash('Penerbit tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT isbn, MAX(judul) as judul, MAX(pengarang) as pengarang,
+               COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COUNT(DISTINCT CASE WHEN warna_area = 'RED' THEN nama_perpustakaan END) as red_tujuan,
+               COUNT(DISTINCT CASE WHEN warna_area = 'YELLOW' THEN nama_perpustakaan END) as yellow_tujuan,
+               COUNT(DISTINCT CASE WHEN warna_area = 'GREEN' THEN nama_perpustakaan END) as green_tujuan
+        FROM pembagian_buku_master
+        WHERE penerbit = %s
+    """
+    params = [penerbit]
+    if search:
+        query += " AND (judul ILIKE %s OR isbn ILIKE %s)"
+        params += [f'%{search}%', f'%{search}%']
+
+    query += " GROUP BY isbn ORDER BY MAX(judul) ASC"
+
+    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['jumlah']
+
+    if total_data == 0 and not search:
+        cur.close()
+        conn.close()
+        flash('Penerbit tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_list'))
+
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+
+    query_paged = query + " LIMIT %s OFFSET %s"
+    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    daftar_judul = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'admin/pembagian_buku_penerbit.html',
+        penerbit=penerbit, daftar_judul=daftar_judul, search=search,
+        page=page, total_halaman=total_halaman, total_data=total_data
     )
 
 
@@ -3298,32 +3359,82 @@ def pembagian_buku_list():
 @login_required
 @admin_required
 def pembagian_buku_detail():
-    nama = request.args.get('nama', '')
-    kabupaten = request.args.get('kabupaten', '')
-    no_box_param = request.args.get('no_box', '')
+    penerbit = request.args.get('penerbit', '')
+    isbn = request.args.get('isbn', '')
+    area_filter = request.args.get('area', '').strip().upper()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 100
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """SELECT * FROM pembagian_buku_master
-           WHERE nama_perpustakaan = %s AND kabupaten_kota = %s AND COALESCE(no_box::text, '') = %s
-           ORDER BY judul ASC""",
-        (nama, kabupaten, no_box_param)
-    )
-    daftar_buku = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    if not daftar_buku:
+    if not penerbit or not isbn:
         flash('Data tidak ditemukan.', 'danger')
         return redirect(url_for('pembagian_buku_list'))
 
-    info = daftar_buku[0]
-    total_eksemplar = sum(b['eksemplar'] or 0 for b in daftar_buku)
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """SELECT MAX(judul) as judul, MAX(pengarang) as pengarang
+           FROM pembagian_buku_master WHERE penerbit = %s AND isbn = %s""",
+        (penerbit, isbn)
+    )
+    info_row = cur.fetchone()
+    if not info_row or not info_row['judul']:
+        cur.close()
+        conn.close()
+        flash('Data tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_penerbit', penerbit=penerbit))
+
+    cur.execute(
+        """SELECT warna_area,
+                  COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
+                  COALESCE(SUM(eksemplar), 0) as total_eksemplar
+           FROM pembagian_buku_master
+           WHERE penerbit = %s AND isbn = %s
+           GROUP BY warna_area""",
+        (penerbit, isbn)
+    )
+    ringkasan_area = {}
+    total_tujuan_keseluruhan = 0
+    total_eksemplar_keseluruhan = 0
+    for r in cur.fetchall():
+        warna = (r['warna_area'] or '').strip().upper() or 'TANPA_AREA'
+        ringkasan_area[warna] = {'total_tujuan': r['total_tujuan'], 'total_eksemplar': r['total_eksemplar']}
+        total_tujuan_keseluruhan += r['total_tujuan']
+        total_eksemplar_keseluruhan += r['total_eksemplar']
+
+    query = """SELECT nama_perpustakaan, kabupaten_kota, provinsi, no_box, warna_area, eksemplar
+               FROM pembagian_buku_master
+               WHERE penerbit = %s AND isbn = %s"""
+    params = [penerbit, isbn]
+    if area_filter in ('RED', 'YELLOW', 'GREEN'):
+        query += " AND warna_area = %s"
+        params.append(area_filter)
+    elif area_filter == 'TANPA_AREA':
+        query += " AND (warna_area IS NULL OR warna_area = '')"
+
+    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['jumlah']
+
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+
+    query_paged = query + " ORDER BY warna_area NULLS LAST, nama_perpustakaan ASC LIMIT %s OFFSET %s"
+    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    daftar_penyebaran = cur.fetchall()
+
+    cur.close()
+    conn.close()
 
     return render_template(
         'admin/pembagian_buku_detail.html',
-        info=info, daftar_buku=daftar_buku, total_eksemplar=total_eksemplar
+        penerbit=penerbit, isbn=isbn, info=info_row,
+        ringkasan_area=ringkasan_area,
+        total_tujuan_keseluruhan=total_tujuan_keseluruhan,
+        total_eksemplar_keseluruhan=total_eksemplar_keseluruhan,
+        daftar_penyebaran=daftar_penyebaran, area_filter=area_filter,
+        page=page, total_halaman=total_halaman, total_data=total_data
     )
 
 

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ penerbit }} - Pembagian Buku{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('pembagian_buku_list') }}">Pembagian Buku</a></li>
+        <li class="breadcrumb-item active">{{ penerbit or '(Tanpa Penerbit)' }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h4 class="mb-1">🏢 {{ penerbit or '(Tanpa Penerbit)' }}</h4>
+        <p class="text-muted mb-0">{{ total_data }} judul buku</p>
+    </div>
+    <a href="{{ url_for('pembagian_buku_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
+</div>
+
+<form method="GET" class="mb-2">
+    <input type="hidden" name="penerbit" value="{{ penerbit }}">
+    <div class="row g-2">
+        <div class="col-md-10">
+            <input type="text" name="search" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Judul</th>
+                <th>ISBN</th>
+                <th>Pengarang</th>
+                <th class="text-end text-danger">🔴 RED</th>
+                <th class="text-end text-warning">🟡 YELLOW</th>
+                <th class="text-end text-success">🟢 GREEN</th>
+                <th class="text-end">Jumlah Tujuan</th>
+                <th class="text-end">Total Eksemplar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for j in daftar_judul %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('pembagian_buku_detail', penerbit=penerbit, isbn=j.isbn) }}">
+                        {{ j.judul }}
+                    </a>
+                </td>
+                <td class="mono small">{{ j.isbn }}</td>
+                <td class="small">{{ j.pengarang or '-' }}</td>
+                <td class="text-end mono">{{ j.red_tujuan if j.red_tujuan > 0 else '-' }}</td>
+                <td class="text-end mono">{{ j.yellow_tujuan if j.yellow_tujuan > 0 else '-' }}</td>
+                <td class="text-end mono">{{ j.green_tujuan if j.green_tujuan > 0 else '-' }}</td>
+                <td class="text-end mono">{{ j.total_tujuan }}</td>
+                <td class="text-end mono fw-bold">{{ j.total_eksemplar }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_halaman > 1 %}
+<nav class="mt-3">
+    <p class="text-muted small">Halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} judul)</p>
+    <ul class="pagination pagination-sm flex-wrap">
+        <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+            <a class="page-link" href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit, search=search, page=page-1) }}">← Sebelumnya</a>
+        </li>
+        {% for p in range(1, total_halaman + 1) %}
+            {% if p == 1 or p == total_halaman or (p >= page - 2 and p <= page + 2) %}
+            <li class="page-item {{ 'active' if p == page else '' }}">
+                <a class="page-link" href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit, search=search, page=p) }}">{{ p }}</a>
+            </li>
+            {% elif p == page - 3 or p == page + 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page >= total_halaman else '' }}">
+            <a class="page-link" href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit, search=search, page=page+1) }}">Selanjutnya →</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
