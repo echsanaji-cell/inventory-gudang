@@ -5546,10 +5546,12 @@ def buku_mapping_area():
 @login_required
 @viewer_blocked
 def buku_mapping_area_export():
+    restriksi_user = session.get('area_restriction')
+
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT b.isbn, b.judul, b.penerbit, b.lokasi_rak,
+
+    query = """SELECT b.isbn, b.judul, b.penerbit, b.lokasi_rak,
             COALESCE(SUM(CASE WHEN t.area = 'RED' THEN dr.jumlah_rencana ELSE 0 END), 0) as red_eks,
             COALESCE(SUM(CASE WHEN t.area = 'YELLOW' THEN dr.jumlah_rencana ELSE 0 END), 0) as yellow_eks,
             COALESCE(SUM(CASE WHEN t.area = 'GREEN' THEN dr.jumlah_rencana ELSE 0 END), 0) as green_eks,
@@ -5558,9 +5560,16 @@ def buku_mapping_area_export():
            FROM buku b
            LEFT JOIN distribusi_rencana dr ON dr.buku_id = b.id
            LEFT JOIN tujuan t ON dr.tujuan_id = t.id
-           GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak
-           ORDER BY b.judul ASC"""
-    )
+           WHERE 1=1"""
+    params = []
+    if restriksi_user:
+        query += " AND t.area = %s"
+        params.append(restriksi_user)
+
+    query += """ GROUP BY b.id, b.isbn, b.judul, b.penerbit, b.lokasi_rak
+                 ORDER BY b.judul ASC"""
+
+    cur.execute(query, tuple(params))
     data = cur.fetchall()
     cur.close()
     conn.close()
@@ -5589,7 +5598,8 @@ def buku_mapping_area_export():
     wb.save(output)
     output.seek(0)
 
-    filename = f"mapping-area-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    suffix_area = f"-{restriksi_user.lower()}" if restriksi_user else ""
+    filename = f"mapping-area{suffix_area}-{datetime.now().strftime('%Y%m%d')}.xlsx"
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
