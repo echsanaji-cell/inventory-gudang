@@ -2998,10 +2998,10 @@ def _ambil_data_referensi(referensi_id, cur):
     cur.execute("SELECT * FROM mapping_area_referensi WHERE id = %s", (referensi_id,))
     return cur.fetchone()
 
-@app.route('/api/pembagian-buku/cari-penerbit-suggest')
+@app.route('/api/pembagian-buku/cari-suggest')
 @login_required
 @viewer_blocked
-def api_cari_suggest_pembagian_penerbit():
+def api_cari_suggest_pembagian():
     q = request.args.get('q', '').strip()
     if len(q) < 2:
         return jsonify([])
@@ -3009,50 +3009,21 @@ def api_cari_suggest_pembagian_penerbit():
 
     conn = get_db_connection()
     cur = conn.cursor()
-    query = """SELECT penerbit, COUNT(DISTINCT isbn) as total_judul
+    query = """SELECT penerbit, isbn, MAX(judul) as judul
                FROM pembagian_buku_master
-               WHERE penerbit ILIKE %s"""
-    params = [f'%{q}%']
+               WHERE (judul ILIKE %s OR isbn ILIKE %s OR penerbit ILIKE %s)"""
+    params = [f'%{q}%', f'%{q}%', f'%{q}%']
     if restriksi_user:
         query += " AND warna_area = %s"
         params.append(restriksi_user)
-    query += " GROUP BY penerbit ORDER BY penerbit ASC LIMIT 15"
+    query += " GROUP BY penerbit, isbn ORDER BY MAX(judul) ASC LIMIT 15"
 
     cur.execute(query, tuple(params))
     hasil = cur.fetchall()
     cur.close()
     conn.close()
-    return jsonify([{'penerbit': r['penerbit'],
-                      'label': f"{r['penerbit'] or '(Tanpa Penerbit)'} ({r['total_judul']} judul)"} for r in hasil])
-
-
-@app.route('/api/pembagian-buku/cari-judul-suggest')
-@login_required
-@viewer_blocked
-def api_cari_suggest_pembagian_judul():
-    q = request.args.get('q', '').strip()
-    penerbit = request.args.get('penerbit', '').strip()
-    if len(q) < 2 or not penerbit:
-        return jsonify([])
-    restriksi_user = session.get('area_restriction')
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    query = """SELECT isbn, MAX(judul) as judul
-               FROM pembagian_buku_master
-               WHERE penerbit = %s AND (judul ILIKE %s OR isbn ILIKE %s)"""
-    params = [penerbit, f'%{q}%', f'%{q}%']
-    if restriksi_user:
-        query += " AND warna_area = %s"
-        params.append(restriksi_user)
-    query += " GROUP BY isbn ORDER BY MAX(judul) ASC LIMIT 15"
-
-    cur.execute(query, tuple(params))
-    hasil = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify([{'isbn': r['isbn'], 'judul': r['judul'],
-                      'label': f"{r['judul']} ({r['isbn']})"} for r in hasil])
+    return jsonify([{'penerbit': r['penerbit'], 'isbn': r['isbn'], 'judul': r['judul'],
+                      'label': f"{r['judul']} ({r['isbn']}) — {r['penerbit'] or '(Tanpa Penerbit)'}"} for r in hasil])
 @app.route('/api/mapping-area-referensi/cari-suggest')
 @login_required
 @admin_required
@@ -3309,10 +3280,13 @@ def pembagian_buku_list():
     cur = conn.cursor()
 
     query = """
-        SELECT penerbit,
-               COUNT(DISTINCT isbn) as total_judul,
+        SELECT penerbit, isbn, MAX(judul) as judul, MAX(pengarang) as pengarang,
                COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as total_eksemplar
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as sisa_eksemplar,
+               COUNT(DISTINCT CASE WHEN warna_area = 'RED' THEN nama_perpustakaan END) as red_tujuan,
+               COUNT(DISTINCT CASE WHEN warna_area = 'YELLOW' THEN nama_perpustakaan END) as yellow_tujuan,
+               COUNT(DISTINCT CASE WHEN warna_area = 'GREEN' THEN nama_perpustakaan END) as green_tujuan
         FROM pembagian_buku_master
         WHERE 1=1
     """
@@ -3321,89 +3295,14 @@ def pembagian_buku_list():
         query += " AND warna_area = %s"
         params.append(restriksi_user)
     if search:
-        query += " AND penerbit ILIKE %s"
-        params.append(f'%{search}%')
+        query += " AND (judul ILIKE %s OR isbn ILIKE %s OR penerbit ILIKE %s)"
+        params += [f'%{search}%', f'%{search}%', f'%{search}%']
 
-    query += " GROUP BY penerbit ORDER BY penerbit ASC"
-
-    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
-    cur.execute(query_count, tuple(params))
-    total_data = cur.fetchone()['jumlah']
-
-    total_halaman = max(1, (total_data + per_page - 1) // per_page)
-    page = min(page, total_halaman)
-    offset = (page - 1) * per_page
-
-    query_paged = query + " LIMIT %s OFFSET %s"
-    cur.execute(query_paged, tuple(params + [per_page, offset]))
-    daftar_penerbit = cur.fetchall()
-
-    count_penerbit_query = "SELECT COUNT(DISTINCT penerbit) as total FROM pembagian_buku_master WHERE 1=1"
-    count_penerbit_params = []
-    if restriksi_user:
-        count_penerbit_query += " AND warna_area = %s"
-        count_penerbit_params.append(restriksi_user)
-    cur.execute(count_penerbit_query, tuple(count_penerbit_params))
-    total_penerbit_keseluruhan = cur.fetchone()['total']
-
-    cur.close()
-    conn.close()
-
-    return render_template(
-        'admin/pembagian_buku_list.html',
-        daftar_penerbit=daftar_penerbit, search=search,
-        page=page, total_halaman=total_halaman, total_data=total_data,
-        total_penerbit_keseluruhan=total_penerbit_keseluruhan,
-        restriksi_user=restriksi_user
-    )
-
-
-@app.route('/admin/pembagian-buku/penerbit')
-@login_required
-@viewer_blocked
-def pembagian_buku_penerbit():
-    penerbit = request.args.get('penerbit', '')
-    search = request.args.get('search', '').strip()
-    page = max(1, ambil_int(request.args, 'page', 1))
-    per_page = 50
-    restriksi_user = session.get('area_restriction')
-
-    if not penerbit:
-        flash('Penerbit tidak ditemukan.', 'danger')
-        return redirect(url_for('pembagian_buku_list'))
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    query = """
-        SELECT isbn, MAX(judul) as judul, MAX(pengarang) as pengarang,
-               COUNT(DISTINCT nama_perpustakaan) as total_tujuan,
-               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as total_eksemplar,
-               COUNT(DISTINCT CASE WHEN warna_area = 'RED' THEN nama_perpustakaan END) as red_tujuan,
-               COUNT(DISTINCT CASE WHEN warna_area = 'YELLOW' THEN nama_perpustakaan END) as yellow_tujuan,
-               COUNT(DISTINCT CASE WHEN warna_area = 'GREEN' THEN nama_perpustakaan END) as green_tujuan
-        FROM pembagian_buku_master
-        WHERE penerbit = %s
-    """
-    params = [penerbit]
-    if restriksi_user:
-        query += " AND warna_area = %s"
-        params.append(restriksi_user)
-    if search:
-        query += " AND (judul ILIKE %s OR isbn ILIKE %s)"
-        params += [f'%{search}%', f'%{search}%']
-
-    query += " GROUP BY isbn ORDER BY MAX(judul) ASC"
+    query += " GROUP BY penerbit, isbn ORDER BY MAX(judul) ASC"
 
     query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
     total_data = cur.fetchone()['jumlah']
-
-    if total_data == 0 and not search:
-        cur.close()
-        conn.close()
-        flash('Penerbit tidak ditemukan.', 'danger')
-        return redirect(url_for('pembagian_buku_list'))
 
     total_halaman = max(1, (total_data + per_page - 1) // per_page)
     page = min(page, total_halaman)
@@ -3413,15 +3312,27 @@ def pembagian_buku_penerbit():
     cur.execute(query_paged, tuple(params + [per_page, offset]))
     daftar_judul = cur.fetchall()
 
+    count_query = "SELECT COUNT(DISTINCT isbn) as total FROM pembagian_buku_master WHERE 1=1"
+    count_params = []
+    if restriksi_user:
+        count_query += " AND warna_area = %s"
+        count_params.append(restriksi_user)
+    cur.execute(count_query, tuple(count_params))
+    total_judul_keseluruhan = cur.fetchone()['total']
+
     cur.close()
     conn.close()
 
     return render_template(
-        'admin/pembagian_buku_penerbit.html',
-        penerbit=penerbit, daftar_judul=daftar_judul, search=search,
+        'admin/pembagian_buku_list.html',
+        daftar_judul=daftar_judul, search=search,
         page=page, total_halaman=total_halaman, total_data=total_data,
+        total_judul_keseluruhan=total_judul_keseluruhan,
         restriksi_user=restriksi_user
     )
+
+
+
 
 
 @app.route('/admin/pembagian-buku/detail')

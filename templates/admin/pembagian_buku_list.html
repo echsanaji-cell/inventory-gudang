@@ -3,7 +3,7 @@
 {% block content %}
 <h4 class="mb-1">📚 Pembagian Buku (Data Master)</h4>
 <p class="text-muted mb-3">
-    Data referensi berdiri sendiri, hasil import satu kali — {{ total_penerbit_keseluruhan }} penerbit.
+    Data referensi berdiri sendiri, hasil import satu kali — {{ total_judul_keseluruhan }} judul.
     {% if restriksi_user %}
     <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
         Area kamu: {{ restriksi_user }}
@@ -11,11 +11,14 @@
     {% endif %}
 </p>
 
-<form method="GET" class="mb-2" id="form-cari-penerbit" autocomplete="off">
+<form method="GET" class="mb-2" id="form-cari-pembagian" autocomplete="off">
     <div class="row g-2">
-        <div class="col-md-10 position-relative">
-            <input type="text" name="search" id="input-cari-penerbit" class="form-control" placeholder="Cari nama penerbit..." value="{{ search }}">
-            <div id="penerbit-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
+        <div class="col-md-8 position-relative">
+            <input type="text" name="search" id="input-cari-pembagian" class="form-control" placeholder="Cari judul, ISBN, atau penerbit..." value="{{ search }}">
+            <div id="pembagian-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanCariPembagian)">📷 Scan</button>
         </div>
         <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
@@ -23,77 +26,44 @@
     </div>
 </form>
 
-<script>
-(function () {
-    const input = document.getElementById('input-cari-penerbit');
-    const kotak = document.getElementById('penerbit-suggestions');
-    let waktu = null;
-
-    input.addEventListener('input', function () {
-        clearTimeout(waktu);
-        const kata = this.value.trim();
-        if (kata.length < 2) {
-            kotak.style.display = 'none';
-            kotak.innerHTML = '';
-            return;
-        }
-        waktu = setTimeout(() => {
-            fetch(`/api/pembagian-buku/cari-penerbit-suggest?q=${encodeURIComponent(kata)}`)
-                .then(r => r.json())
-                .then(hasil => {
-                    if (hasil.length === 0) {
-                        kotak.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
-                    } else {
-                        kotak.innerHTML = hasil.map(p =>
-                            `<button type="button" class="list-group-item list-group-item-action small" data-penerbit="${(p.penerbit || '').replace(/"/g, '&quot;')}">${p.label}</button>`
-                        ).join('');
-                    }
-                    kotak.style.display = 'block';
-                });
-        }, 300);
-    });
-
-    kotak.addEventListener('click', function (e) {
-        const btn = e.target.closest('button[data-penerbit]');
-        if (!btn) return;
-        input.value = btn.dataset.penerbit;
-        kotak.style.display = 'none';
-        kotak.innerHTML = '';
-        document.getElementById('form-cari-penerbit').submit();
-    });
-
-    document.addEventListener('click', function (e) {
-        if (!input.contains(e.target) && !kotak.contains(e.target)) {
-            kotak.style.display = 'none';
-        }
-    });
-})();
-</script>
-
 <div class="table-responsive">
     <table class="table table-sm table-hover">
         <thead>
             <tr>
+                <th>Judul</th>
+                <th>ISBN</th>
+                <th>Pengarang</th>
                 <th>Penerbit</th>
-                <th class="text-end">Jumlah Judul</th>
+                {% if not restriksi_user %}
+                <th class="text-end text-danger">🔴 RED</th>
+                <th class="text-end text-warning">🟡 YELLOW</th>
+                <th class="text-end text-success">🟢 GREEN</th>
+                {% endif %}
                 <th class="text-end">Jumlah Tujuan</th>
-                <th class="text-end">Total Eksemplar</th>
+                <th class="text-end">Sisa Eksemplar</th>
             </tr>
         </thead>
         <tbody>
-            {% for p in daftar_penerbit %}
+            {% for j in daftar_judul %}
             <tr>
                 <td>
-                    <a href="{{ url_for('pembagian_buku_penerbit', penerbit=p.penerbit) }}">
-                        {{ p.penerbit or '(Tanpa Penerbit)' }}
+                    <a href="{{ url_for('pembagian_buku_detail', penerbit=j.penerbit, isbn=j.isbn) }}">
+                        {{ j.judul }}
                     </a>
                 </td>
-                <td class="text-end mono">{{ p.total_judul }}</td>
-                <td class="text-end mono">{{ p.total_tujuan }}</td>
-                <td class="text-end mono fw-bold">{{ p.total_eksemplar }}</td>
+                <td class="mono small">{{ j.isbn }}</td>
+                <td class="small">{{ j.pengarang or '-' }}</td>
+                <td class="small">{{ j.penerbit or '(Tanpa Penerbit)' }}</td>
+                {% if not restriksi_user %}
+                <td class="text-end mono">{{ j.red_tujuan if j.red_tujuan > 0 else '-' }}</td>
+                <td class="text-end mono">{{ j.yellow_tujuan if j.yellow_tujuan > 0 else '-' }}</td>
+                <td class="text-end mono">{{ j.green_tujuan if j.green_tujuan > 0 else '-' }}</td>
+                {% endif %}
+                <td class="text-end mono">{{ j.total_tujuan }}</td>
+                <td class="text-end mono fw-bold">{{ j.sisa_eksemplar }} / {{ j.total_eksemplar }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="4" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="{{ 6 if restriksi_user else 9 }}" class="text-center text-muted">Tidak ada data.</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -101,7 +71,7 @@
 
 {% if total_halaman > 1 %}
 <nav class="mt-3">
-    <p class="text-muted small">Halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} penerbit)</p>
+    <p class="text-muted small">Halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} judul)</p>
     <ul class="pagination pagination-sm flex-wrap">
         <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
             <a class="page-link" href="{{ url_for('pembagian_buku_list', search=search, page=page-1) }}">← Sebelumnya</a>
@@ -121,4 +91,57 @@
     </ul>
 </nav>
 {% endif %}
+
+<script>
+function handleScanCariPembagian(kode) {
+    document.getElementById('input-cari-pembagian').value = kode;
+    document.getElementById('form-cari-pembagian').submit();
+}
+initPhysicalScanner(document.getElementById('input-cari-pembagian'), handleScanCariPembagian);
+
+(function () {
+    const input = document.getElementById('input-cari-pembagian');
+    const kotak = document.getElementById('pembagian-suggestions');
+    let waktu = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(waktu);
+        const kata = this.value.trim();
+        if (kata.length < 2) {
+            kotak.style.display = 'none';
+            kotak.innerHTML = '';
+            return;
+        }
+        waktu = setTimeout(() => {
+            fetch(`/api/pembagian-buku/cari-suggest?q=${encodeURIComponent(kata)}`)
+                .then(r => r.json())
+                .then(hasil => {
+                    if (hasil.length === 0) {
+                        kotak.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                    } else {
+                        kotak.innerHTML = hasil.map(j =>
+                            `<button type="button" class="list-group-item list-group-item-action small" data-nilai="${j.judul.replace(/"/g, '&quot;')}">${j.label}</button>`
+                        ).join('');
+                    }
+                    kotak.style.display = 'block';
+                });
+        }, 300);
+    });
+
+    kotak.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-nilai]');
+        if (!btn) return;
+        input.value = btn.dataset.nilai;
+        kotak.style.display = 'none';
+        kotak.innerHTML = '';
+        document.getElementById('form-cari-pembagian').submit();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !kotak.contains(e.target)) {
+            kotak.style.display = 'none';
+        }
+    });
+})();
+</script>
 {% endblock %}

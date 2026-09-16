@@ -4,7 +4,6 @@
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb small">
         <li class="breadcrumb-item"><a href="{{ url_for('pembagian_buku_list') }}">Pembagian Buku</a></li>
-        <li class="breadcrumb-item"><a href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit) }}">{{ penerbit or '(Tanpa Penerbit)' }}</a></li>
         <li class="breadcrumb-item active">{{ info.judul }}</li>
     </ol>
 </nav>
@@ -21,7 +20,7 @@
             {% endif %}
         </p>
     </div>
-    <a href="{{ url_for('pembagian_buku_penerbit', penerbit=penerbit) }}" class="btn btn-secondary btn-sm">Kembali</a>
+    <a href="{{ url_for('pembagian_buku_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
 </div>
 
 {% if restriksi_user %}
