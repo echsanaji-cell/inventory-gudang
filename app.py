@@ -4035,6 +4035,7 @@ def tujuan_hapus(tujuan_id):
 @viewer_blocked
 def tujuan_detail(tujuan_id):
     status_rincian = request.args.get('status_rincian', '').strip()
+    restriksi_user = session.get('area_restriction')
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -4042,7 +4043,7 @@ def tujuan_detail(tujuan_id):
     cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
     tujuan = cur.fetchone()
 
-    if not tujuan:
+    if not tujuan or (restriksi_user and tujuan['area'] != restriksi_user):
         cur.close()
         conn.close()
         flash('Tujuan tidak ditemukan.', 'danger')
@@ -5073,12 +5074,21 @@ def tujuan_import_pengiriman_massal():
 @viewer_blocked
 def tujuan_scan_kirim(tujuan_id):
     isbn = request.json.get('isbn', '').strip() if request.is_json else request.form.get('isbn', '').strip()
+    restriksi_user = session.get('area_restriction')
 
     if not isbn:
         return {'success': False, 'message': 'ISBN kosong.'}, 400
 
     conn = get_db_connection()
     cur = conn.cursor()
+
+    if restriksi_user:
+        cur.execute("SELECT area FROM tujuan WHERE id = %s", (tujuan_id,))
+        cek_tujuan = cur.fetchone()
+        if not cek_tujuan or cek_tujuan['area'] != restriksi_user:
+            cur.close()
+            conn.close()
+            return {'success': False, 'message': 'Tujuan tidak ditemukan atau di luar akses area kamu.'}, 403
 
     cur.execute("SELECT id, judul, stok FROM buku WHERE isbn = %s", (isbn,))
     buku = cur.fetchone()
@@ -5156,13 +5166,14 @@ def tujuan_scan_kirim(tujuan_id):
 @login_required
 @viewer_blocked
 def tujuan_export_excel(tujuan_id):
+    restriksi_user = session.get('area_restriction')
     conn = get_db_connection()
     cur = conn.cursor()
 
     cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
     tujuan = cur.fetchone()
 
-    if not tujuan:
+    if not tujuan or (restriksi_user and tujuan['area'] != restriksi_user):
         cur.close()
         conn.close()
         flash('Tujuan tidak ditemukan.', 'danger')
@@ -5241,13 +5252,14 @@ def tujuan_export_excel(tujuan_id):
 @login_required
 @viewer_blocked
 def tujuan_export_pdf(tujuan_id):
+    restriksi_user = session.get('area_restriction')
     conn = get_db_connection()
     cur = conn.cursor()
 
     cur.execute("SELECT * FROM tujuan WHERE id = %s", (tujuan_id,))
     tujuan = cur.fetchone()
 
-    if not tujuan:
+    if not tujuan or (restriksi_user and tujuan['area'] != restriksi_user):
         cur.close()
         conn.close()
         flash('Tujuan tidak ditemukan.', 'danger')
