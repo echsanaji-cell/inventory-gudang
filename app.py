@@ -1,5 +1,6 @@
 import requests
 import os
+import hmac
 import barcode
 import smtplib
 import xlrd
@@ -732,6 +733,8 @@ def viewer_blocked(f):
     """Blokir role viewer dari akses fitur selain Dashboard & Data Buku"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
         if session.get('role') == 'viewer':
             flash('Akun ini hanya memiliki akses lihat Data Buku.', 'danger')
             return redirect(url_for('buku_list'))
@@ -2515,7 +2518,7 @@ def kirim_notifikasi_stok_manual():
 @app.route('/cron/cek-stok-kritis')
 def cron_cek_stok_kritis():
     secret = request.args.get('secret', '')
-    if secret != os.environ.get('CRON_SECRET'):
+    if not hmac.compare_digest(secret, os.environ.get('CRON_SECRET', '')):
         return {'error': 'unauthorized'}, 401
 
     sukses, pesan = kirim_email_stok_kritis()
@@ -3624,7 +3627,7 @@ def backup_json():
 @app.route('/cron/backup-otomatis')
 def cron_backup_otomatis():
     secret = request.args.get('secret', '')
-    if secret != os.environ.get('CRON_SECRET'):
+    if not hmac.compare_digest(secret, os.environ.get('CRON_SECRET', '')):
         return {'error': 'unauthorized'}, 401
 
     sukses, pesan = kirim_backup_email()
