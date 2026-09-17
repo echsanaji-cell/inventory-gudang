@@ -3420,7 +3420,48 @@ def pembagian_buku_detail():
     page = min(page, total_halaman)
     offset = (page - 1) * per_page
 
-    query_paged = query + " ORDER BY provinsi ASC NULLS LAST, no_box ASC NULLS LAST, nama_perpustakaan ASC LIMIT %s OFFSET %s"
+    urutan_provinsi = """
+        CASE provinsi
+            WHEN 'Aceh' THEN 1
+            WHEN 'Sumatera Utara' THEN 2
+            WHEN 'Sumatera Barat' THEN 3
+            WHEN 'Riau' THEN 4
+            WHEN 'Kepulauan Riau' THEN 5
+            WHEN 'Jambi' THEN 6
+            WHEN 'Sumatera Selatan' THEN 7
+            WHEN 'Kepulauan Bangka Belitung' THEN 8
+            WHEN 'Bengkulu' THEN 9
+            WHEN 'Lampung' THEN 10
+            WHEN 'Banten' THEN 11
+            WHEN 'Jawa Barat' THEN 12
+            WHEN 'Jawa Tengah' THEN 13
+            WHEN 'D.I.Yogyakarta' THEN 14
+            WHEN 'Jawa Timur' THEN 15
+            WHEN 'Bali' THEN 16
+            WHEN 'Nusa Tenggara Barat' THEN 17
+            WHEN 'Nusa Tenggara Timur' THEN 18
+            WHEN 'Kalimantan Barat' THEN 19
+            WHEN 'Kalimantan Tengah' THEN 20
+            WHEN 'Kalimantan Selatan' THEN 21
+            WHEN 'Kalimantan Timur' THEN 22
+            WHEN 'Kalimantan Utara' THEN 23
+            WHEN 'Sulawesi Utara' THEN 24
+            WHEN 'Gorontalo' THEN 25
+            WHEN 'Sulawesi Tengah' THEN 26
+            WHEN 'Sulawesi Barat' THEN 27
+            WHEN 'Sulawesi Selatan' THEN 28
+            WHEN 'Sulawesi Tenggara' THEN 29
+            WHEN 'Maluku' THEN 30
+            WHEN 'Maluku Utara' THEN 31
+            WHEN 'Papua Barat' THEN 32
+            WHEN 'Papua' THEN 33
+            WHEN 'Papua Pegunungan' THEN 34
+            WHEN 'Papua Selatan' THEN 35
+            WHEN 'Papua Barat Daya' THEN 36
+            ELSE 99
+        END
+    """
+    query_paged = query + f" ORDER BY {urutan_provinsi}, no_box ASC NULLS LAST, nama_perpustakaan ASC LIMIT %s OFFSET %s"
     cur.execute(query_paged, tuple(params + [per_page, offset]))
     daftar_penyebaran = cur.fetchall()
 
