@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Rekap Per Perpustakaan{% endblock %}
+{% block content %}
+<h4 class="mb-1">🏛️ Rekap Pembagian Buku Per Perpustakaan</h4>
+<p class="text-muted mb-3">
+    {{ total_perpustakaan_keseluruhan }} perpustakaan tujuan.
+    {% if restriksi_user %}
+    <span class="badge {{ 'bg-danger' if restriksi_user == 'RED' else ('bg-warning text-dark' if restriksi_user == 'YELLOW' else 'bg-success') }}">
+        Area kamu: {{ restriksi_user }}
+    </span>
+    {% endif %}
+</p>
+
+<form method="GET" class="mb-2" id="form-cari-rekap" autocomplete="off">
+    <div class="row g-2">
+        <div class="col-md-10 position-relative">
+            <input type="text" name="search" id="input-cari-rekap" class="form-control" placeholder="Cari nama perpustakaan, kabupaten, atau provinsi..." value="{{ search }}">
+            <div id="rekap-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 300px; overflow-y: auto;"></div>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Nama Perpustakaan</th>
+                <th>Kabupaten/Kota</th>
+                <th>Provinsi</th>
+                {% if not restriksi_user %}<th>Area</th>{% endif %}
+                <th class="text-end">Judul</th>
+                <th class="text-end">Sisa Eksemplar</th>
+                <th style="width: 160px;">Progres</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in daftar_perpustakaan %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=p.nama_perpustakaan, kabupaten=p.kabupaten_kota, provinsi=p.provinsi) }}">
+                        {{ p.nama_perpustakaan }}
+                    </a>
+                </td>
+                <td class="small">{{ p.kabupaten_kota }}</td>
+                <td class="small">{{ p.provinsi }}</td>
+                {% if not restriksi_user %}
+                <td>
+                    {% if p.warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
+                    {% elif p.warna_area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                    {% elif p.warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                    {% else %}<span class="badge bg-secondary">-</span>{% endif %}
+                </td>
+                {% endif %}
+                <td class="text-end mono">{{ p.judul_selesai }} / {{ p.total_judul }}</td>
+                <td class="text-end mono fw-bold">{{ p.sisa_eksemplar }} / {{ p.total_eksemplar }}</td>
+                <td>
+                    <div class="progress" style="height: 16px;">
+                        <div class="progress-bar {{ 'bg-success' if p.persen == 100 else 'bg-primary' }}" style="width: {{ p.persen }}%;">{{ p.persen }}%</div>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 6 if restriksi_user else 7 }}" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_halaman > 1 %}
+<nav class="mt-3">
+    <p class="text-muted small">Halaman {{ page }} dari {{ total_halaman }} ({{ total_data }} perpustakaan)</p>
+    <ul class="pagination pagination-sm flex-wrap">
+        <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+            <a class="page-link" href="{{ url_for('pembagian_buku_rekap_list', search=search, page=page-1) }}">← Sebelumnya</a>
+        </li>
+        {% for p in range(1, total_halaman + 1) %}
+            {% if p == 1 or p == total_halaman or (p >= page - 2 and p <= page + 2) %}
+            <li class="page-item {{ 'active' if p == page else '' }}">
+                <a class="page-link" href="{{ url_for('pembagian_buku_rekap_list', search=search, page=p) }}">{{ p }}</a>
+            </li>
+            {% elif p == page - 3 or p == page + 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page >= total_halaman else '' }}">
+            <a class="page-link" href="{{ url_for('pembagian_buku_rekap_list', search=search, page=page+1) }}">Selanjutnya →</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+<script>
+(function () {
+    const input = document.getElementById('input-cari-rekap');
+    const kotak = document.getElementById('rekap-suggestions');
+    let waktu = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(waktu);
+        const kata = this.value.trim();
+        if (kata.length < 2) {
+            kotak.style.display = 'none';
+            kotak.innerHTML = '';
+            return;
+        }
+        waktu = setTimeout(() => {
+            fetch(`/api/pembagian-buku/cari-perpustakaan-suggest?q=${encodeURIComponent(kata)}`)
+                .then(r => r.json())
+                .then(hasil => {
+                    if (hasil.length === 0) {
+                        kotak.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                    } else {
+                        kotak.innerHTML = hasil.map(p =>
+                            `<button type="button" class="list-group-item list-group-item-action small" data-nilai="${p.nama.replace(/"/g, '&quot;')}">${p.label}</button>`
+                        ).join('');
+                    }
+                    kotak.style.display = 'block';
+                });
+        }, 300);
+    });
+
+    kotak.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-nilai]');
+        if (!btn) return;
+        input.value = btn.dataset.nilai;
+        kotak.style.display = 'none';
+        kotak.innerHTML = '';
+        document.getElementById('form-cari-rekap').submit();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !kotak.contains(e.target)) {
+            kotak.style.display = 'none';
+        }
+    });
+})();
+</script>
+{% endblock %}

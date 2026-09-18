@@ -3562,7 +3562,178 @@ def pembagian_buku_checklist():
 
     return redirect(url_for('pembagian_buku_detail', penerbit=penerbit, isbn=isbn, area=area_filter, page=page))
 
+@app.route('/admin/pembagian-buku/rekap-perpustakaan')
+@login_required
+@viewer_blocked
+def pembagian_buku_rekap_list():
+    search = request.args.get('search', '').strip()
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 50
+    restriksi_user = session.get('area_restriction')
 
+    urutan_provinsi = """
+        CASE provinsi
+            WHEN 'Aceh' THEN 1 WHEN 'Sumatera Utara' THEN 2 WHEN 'Sumatera Barat' THEN 3
+            WHEN 'Riau' THEN 4 WHEN 'Kepulauan Riau' THEN 5 WHEN 'Jambi' THEN 6
+            WHEN 'Sumatera Selatan' THEN 7 WHEN 'Kepulauan Bangka Belitung' THEN 8
+            WHEN 'Bengkulu' THEN 9 WHEN 'Lampung' THEN 10 WHEN 'Banten' THEN 11
+            WHEN 'Jawa Barat' THEN 12 WHEN 'Jawa Tengah' THEN 13 WHEN 'D.I.Yogyakarta' THEN 14
+            WHEN 'Jawa Timur' THEN 15 WHEN 'Bali' THEN 16 WHEN 'Nusa Tenggara Barat' THEN 17
+            WHEN 'Nusa Tenggara Timur' THEN 18 WHEN 'Kalimantan Barat' THEN 19
+            WHEN 'Kalimantan Tengah' THEN 20 WHEN 'Kalimantan Selatan' THEN 21
+            WHEN 'Kalimantan Timur' THEN 22 WHEN 'Kalimantan Utara' THEN 23
+            WHEN 'Sulawesi Utara' THEN 24 WHEN 'Gorontalo' THEN 25 WHEN 'Sulawesi Tengah' THEN 26
+            WHEN 'Sulawesi Barat' THEN 27 WHEN 'Sulawesi Selatan' THEN 28
+            WHEN 'Sulawesi Tenggara' THEN 29 WHEN 'Maluku' THEN 30 WHEN 'Maluku Utara' THEN 31
+            WHEN 'Papua Barat' THEN 32 WHEN 'Papua' THEN 33 WHEN 'Papua Pegunungan' THEN 34
+            WHEN 'Papua Selatan' THEN 35 WHEN 'Papua Barat Daya' THEN 36
+            ELSE 99
+        END
+    """
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = f"""
+        SELECT nama_perpustakaan, kabupaten_kota, provinsi, warna_area,
+               COUNT(*) as total_judul,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as sisa_eksemplar,
+               COUNT(*) FILTER (WHERE sudah_diambil) as judul_selesai
+        FROM pembagian_buku_master
+        WHERE 1=1
+    """
+    params = []
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    if search:
+        query += " AND (nama_perpustakaan ILIKE %s OR kabupaten_kota ILIKE %s OR provinsi ILIKE %s)"
+        params += [f'%{search}%', f'%{search}%', f'%{search}%']
+
+    query += f" GROUP BY nama_perpustakaan, kabupaten_kota, provinsi, warna_area ORDER BY {urutan_provinsi}, kabupaten_kota ASC, nama_perpustakaan ASC"
+
+    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+    cur.execute(query_count, tuple(params))
+    total_data = cur.fetchone()['jumlah']
+
+    total_halaman = max(1, (total_data + per_page - 1) // per_page)
+    page = min(page, total_halaman)
+    offset = (page - 1) * per_page
+
+    query_paged = query + " LIMIT %s OFFSET %s"
+    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    baris_mentah = cur.fetchall()
+
+    count_query = "SELECT COUNT(DISTINCT (nama_perpustakaan, kabupaten_kota, provinsi)) as total FROM pembagian_buku_master WHERE 1=1"
+    count_params = []
+    if restriksi_user:
+        count_query += " AND warna_area = %s"
+        count_params.append(restriksi_user)
+    cur.execute(count_query, tuple(count_params))
+    total_perpustakaan_keseluruhan = cur.fetchone()['total']
+
+    cur.close()
+    conn.close()
+
+    daftar_perpustakaan = []
+    for p in baris_mentah:
+        total = p['total_eksemplar'] or 0
+        sisa = p['sisa_eksemplar'] or 0
+        eksemplar_selesai = total - sisa
+        persen = round((eksemplar_selesai / total) * 100) if total > 0 else 0
+        baris = dict(p)
+        baris['eksemplar_selesai'] = eksemplar_selesai
+        baris['persen'] = persen
+        daftar_perpustakaan.append(baris)
+
+    return render_template(
+        'admin/pembagian_buku_rekap_list.html',
+        daftar_perpustakaan=daftar_perpustakaan, search=search,
+        page=page, total_halaman=total_halaman, total_data=total_data,
+        total_perpustakaan_keseluruhan=total_perpustakaan_keseluruhan,
+        restriksi_user=restriksi_user
+    )
+
+
+@app.route('/admin/pembagian-buku/rekap-perpustakaan/detail')
+@login_required
+@viewer_blocked
+def pembagian_buku_rekap_detail():
+    nama = request.args.get('nama', '')
+    kabupaten = request.args.get('kabupaten', '')
+    provinsi = request.args.get('provinsi', '')
+    restriksi_user = session.get('area_restriction')
+
+    if not nama:
+        flash('Perpustakaan tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_rekap_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """SELECT penerbit, isbn, judul, pengarang, warna_area, no_box, eksemplar,
+                      sudah_diambil, diambil_at, diambil_oleh
+               FROM pembagian_buku_master
+               WHERE nama_perpustakaan = %s AND kabupaten_kota = %s AND provinsi = %s"""
+    params = [nama, kabupaten, provinsi]
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    query += " ORDER BY judul ASC"
+
+    cur.execute(query, tuple(params))
+    daftar_buku = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not daftar_buku:
+        flash('Perpustakaan tidak ditemukan atau di luar akses area kamu.', 'danger')
+        return redirect(url_for('pembagian_buku_rekap_list'))
+
+    warna_area = daftar_buku[0]['warna_area']
+    total_eksemplar = sum((b['eksemplar'] or 0) for b in daftar_buku)
+    sisa_eksemplar = sum((b['eksemplar'] or 0) for b in daftar_buku if not b['sudah_diambil'])
+    eksemplar_selesai = total_eksemplar - sisa_eksemplar
+    persen = round((eksemplar_selesai / total_eksemplar) * 100) if total_eksemplar > 0 else 0
+    judul_selesai = sum(1 for b in daftar_buku if b['sudah_diambil'])
+
+    return render_template(
+        'admin/pembagian_buku_rekap_detail.html',
+        nama=nama, kabupaten=kabupaten, provinsi=provinsi, warna_area=warna_area,
+        daftar_buku=daftar_buku, total_eksemplar=total_eksemplar,
+        sisa_eksemplar=sisa_eksemplar, eksemplar_selesai=eksemplar_selesai,
+        persen=persen, judul_selesai=judul_selesai, total_judul=len(daftar_buku),
+        restriksi_user=restriksi_user
+    )
+
+
+@app.route('/api/pembagian-buku/cari-perpustakaan-suggest')
+@login_required
+@viewer_blocked
+def api_cari_suggest_pembagian_perpustakaan():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    restriksi_user = session.get('area_restriction')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = """SELECT nama_perpustakaan, kabupaten_kota, provinsi
+               FROM pembagian_buku_master
+               WHERE (nama_perpustakaan ILIKE %s OR kabupaten_kota ILIKE %s OR provinsi ILIKE %s)"""
+    params = [f'%{q}%', f'%{q}%', f'%{q}%']
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    query += " GROUP BY nama_perpustakaan, kabupaten_kota, provinsi ORDER BY nama_perpustakaan ASC LIMIT 15"
+
+    cur.execute(query, tuple(params))
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{'nama': r['nama_perpustakaan'], 'kabupaten': r['kabupaten_kota'], 'provinsi': r['provinsi'],
+                      'label': f"{r['nama_perpustakaan']} ({r['kabupaten_kota']})"} for r in hasil])
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
 @login_required

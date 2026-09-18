@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ nama }} - Rekap Pembagian Buku{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('pembagian_buku_rekap_list') }}">Rekap Per Perpustakaan</a></li>
+        <li class="breadcrumb-item active">{{ nama }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">🏛️ {{ nama }}</h4>
+        <p class="text-muted mb-0">
+            {{ kabupaten }}, {{ provinsi }}
+            {% if warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
+            {% elif warna_area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+            {% elif warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+            {% else %}<span class="badge bg-secondary">-</span>{% endif %}
+        </p>
+    </div>
+    <a href="{{ url_for('pembagian_buku_rekap_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="small">
+                Judul: <span class="mono fw-bold">{{ judul_selesai }} / {{ total_judul }}</span> selesai
+                · Eksemplar: <span class="mono fw-bold">{{ eksemplar_selesai }} / {{ total_eksemplar }}</span>
+                · Sisa: <span class="mono fw-bold {{ 'text-success' if sisa_eksemplar == 0 else 'text-danger' }}">{{ sisa_eksemplar }}</span>
+            </div>
+            <div class="mono fw-bold">{{ persen }}%</div>
+        </div>
+        <div class="progress mt-2" style="height: 8px;">
+            <div class="progress-bar {{ 'bg-success' if persen == 100 else 'bg-primary' }}" style="width: {{ persen }}%;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Judul</th>
+                <th>ISBN</th>
+                <th>Pengarang</th>
+                <th>Penerbit</th>
+                <th>No Box</th>
+                <th class="text-end">Eksemplar</th>
+                <th class="text-center">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in daftar_buku %}
+            <tr class="{{ 'table-success' if b.sudah_diambil }}">
+                <td>{{ b.judul }}</td>
+                <td class="mono small">{{ b.isbn }}</td>
+                <td class="small">{{ b.pengarang or '-' }}</td>
+                <td class="small">{{ b.penerbit or '(Tanpa Penerbit)' }}</td>
+                <td class="mono">{{ b.no_box if b.no_box is not none else '-' }}</td>
+                <td class="text-end mono">
+                    {% if b.sudah_diambil %}
+                    <span class="text-muted text-decoration-line-through">{{ b.eksemplar if b.eksemplar is not none else '-' }}</span>
+                    {% else %}
+                    {{ b.eksemplar if b.eksemplar is not none else '-' }}
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if b.sudah_diambil %}
+                    <span class="text-success" title="Selesai — diambil oleh {{ b.diambil_oleh or '-' }}">✅</span>
+                    {% else %}
+                    <span class="text-muted">⏳</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<small class="text-muted">Halaman ini hanya rekap tampilan. Untuk mencentang buku sebagai selesai, gunakan menu Pembagian Buku (Master) → cari judulnya → checklist di sana.</small>
+{% endblock %}
