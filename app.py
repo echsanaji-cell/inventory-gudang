@@ -3734,6 +3734,115 @@ def api_cari_suggest_pembagian_perpustakaan():
     conn.close()
     return jsonify([{'nama': r['nama_perpustakaan'], 'kabupaten': r['kabupaten_kota'], 'provinsi': r['provinsi'],
                       'label': f"{r['nama_perpustakaan']} ({r['kabupaten_kota']})"} for r in hasil])
+
+@app.route('/admin/pembagian-buku/dashboard')
+@login_required
+@admin_required
+def pembagian_buku_dashboard():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # ringkasan keseluruhan
+    cur.execute("""
+        SELECT COUNT(DISTINCT (penerbit, isbn)) as total_judul,
+               COUNT(DISTINCT (nama_perpustakaan, kabupaten_kota, provinsi)) as total_perpustakaan,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END), 0) as eksemplar_selesai,
+               COUNT(*) as total_baris,
+               COUNT(*) FILTER (WHERE sudah_diambil) as baris_selesai
+        FROM pembagian_buku_master
+    """)
+    ringkasan = cur.fetchone()
+
+    total_eksemplar = ringkasan['total_eksemplar'] or 0
+    eksemplar_selesai = ringkasan['eksemplar_selesai'] or 0
+    sisa_eksemplar = total_eksemplar - eksemplar_selesai
+    persen_keseluruhan = round((eksemplar_selesai / total_eksemplar) * 100) if total_eksemplar > 0 else 0
+
+    # ringkasan per warna area
+    cur.execute("""
+        SELECT COALESCE(NULLIF(warna_area, ''), 'TANPA_AREA') as warna_area,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END), 0) as eksemplar_selesai,
+               COUNT(DISTINCT (nama_perpustakaan, kabupaten_kota, provinsi)) as total_perpustakaan
+        FROM pembagian_buku_master
+        GROUP BY COALESCE(NULLIF(warna_area, ''), 'TANPA_AREA')
+    """)
+    per_area = {}
+    for r in cur.fetchall():
+        total = r['total_eksemplar'] or 0
+        selesai = r['eksemplar_selesai'] or 0
+        per_area[r['warna_area']] = {
+            'total_eksemplar': total,
+            'eksemplar_selesai': selesai,
+            'sisa_eksemplar': total - selesai,
+            'total_perpustakaan': r['total_perpustakaan'],
+            'persen': round((selesai / total) * 100) if total > 0 else 0
+        }
+
+    # progres per provinsi (diurutkan dari yang paling sedikit progresnya, biar kelihatan mana yang perlu dikejar)
+    cur.execute("""
+        SELECT provinsi,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar,
+               COALESCE(SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END), 0) as eksemplar_selesai,
+               COUNT(DISTINCT (nama_perpustakaan, kabupaten_kota)) as total_perpustakaan
+        FROM pembagian_buku_master
+        WHERE provinsi IS NOT NULL AND provinsi != ''
+        GROUP BY provinsi
+        ORDER BY provinsi ASC
+    """)
+    per_provinsi = []
+    for r in cur.fetchall():
+        total = r['total_eksemplar'] or 0
+        selesai = r['eksemplar_selesai'] or 0
+        per_provinsi.append({
+            'provinsi': r['provinsi'],
+            'total_eksemplar': total,
+            'eksemplar_selesai': selesai,
+            'sisa_eksemplar': total - selesai,
+            'total_perpustakaan': r['total_perpustakaan'],
+            'persen': round((selesai / total) * 100) if total > 0 else 0
+        })
+    per_provinsi.sort(key=lambda x: x['persen'])
+
+    # perpustakaan yang belum tersentuh sama sekali (0% checklist) - buat prioritas kerja
+    cur.execute("""
+        SELECT nama_perpustakaan, kabupaten_kota, provinsi, warna_area,
+               COALESCE(SUM(eksemplar), 0) as total_eksemplar
+        FROM pembagian_buku_master
+        GROUP BY nama_perpustakaan, kabupaten_kota, provinsi, warna_area
+        HAVING COALESCE(SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END), 0) = 0
+        ORDER BY provinsi ASC, nama_perpustakaan ASC
+        LIMIT 20
+    """)
+    belum_mulai = cur.fetchall()
+    cur.execute("""
+        SELECT COUNT(*) as total FROM (
+            SELECT nama_perpustakaan, kabupaten_kota, provinsi
+            FROM pembagian_buku_master
+            GROUP BY nama_perpustakaan, kabupaten_kota, provinsi
+            HAVING COALESCE(SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END), 0) = 0
+        ) sub
+    """)
+    total_belum_mulai = cur.fetchone()['total']
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'admin/pembagian_buku_dashboard.html',
+        total_judul=ringkasan['total_judul'],
+        total_perpustakaan=ringkasan['total_perpustakaan'],
+        total_eksemplar=total_eksemplar,
+        eksemplar_selesai=eksemplar_selesai,
+        sisa_eksemplar=sisa_eksemplar,
+        persen_keseluruhan=persen_keseluruhan,
+        per_area=per_area,
+        per_provinsi=per_provinsi,
+        belum_mulai=belum_mulai,
+        total_belum_mulai=total_belum_mulai
+    )
+
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
 @app.route('/admin/penerbit')
 @login_required

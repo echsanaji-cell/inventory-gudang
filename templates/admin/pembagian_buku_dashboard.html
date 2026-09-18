@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Pembagian Buku{% endblock %}
+{% block content %}
+<h4 class="mb-1">📈 Dashboard Progres Pembagian Buku</h4>
+<p class="text-muted mb-3">Ringkasan keseluruhan — cuma bisa diakses admin.</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="small text-muted">Total Judul</div>
+                <div class="fs-3 fw-bold mono">{{ total_judul }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="small text-muted">Total Perpustakaan</div>
+                <div class="fs-3 fw-bold mono">{{ total_perpustakaan }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="small text-muted">Total Eksemplar</div>
+                <div class="fs-3 fw-bold mono">{{ total_eksemplar }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card h-100 border-primary">
+            <div class="card-body text-center">
+                <div class="small text-muted">Progres Keseluruhan</div>
+                <div class="fs-3 fw-bold mono text-primary">{{ persen_keseluruhan }}%</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between small mb-1">
+            <span>Selesai: <strong class="text-success">{{ eksemplar_selesai }}</strong> eksemplar</span>
+            <span>Sisa: <strong class="text-danger">{{ sisa_eksemplar }}</strong> eksemplar</span>
+        </div>
+        <div class="progress" style="height: 14px;">
+            <div class="progress-bar bg-success" style="width: {{ persen_keseluruhan }}%;">{{ persen_keseluruhan }}%</div>
+        </div>
+    </div>
+</div>
+
+<h5 class="mb-2">Progres per Area</h5>
+<div class="row g-3 mb-4">
+    {% for warna, label, kelas in [('RED', '🔴 RED', 'danger'), ('YELLOW', '🟡 YELLOW', 'warning'), ('GREEN', '🟢 GREEN', 'success')] %}
+    {% set data = per_area.get(warna) %}
+    <div class="col-md-4">
+        <div class="card border-{{ kelas }} h-100">
+            <div class="card-body">
+                <h6 class="mb-2">{{ label }}</h6>
+                {% if data %}
+                <div class="small text-muted mb-1">{{ data.total_perpustakaan }} perpustakaan</div>
+                <div class="mono mb-2">{{ data.eksemplar_selesai }} / {{ data.total_eksemplar }} eksemplar</div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar bg-{{ kelas }}" style="width: {{ data.persen }}%;"></div>
+                </div>
+                <div class="text-end small mt-1 fw-bold">{{ data.persen }}%</div>
+                {% else %}
+                <div class="text-muted small">Tidak ada data.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<h5 class="mb-2">Progres per Provinsi <span class="text-muted small fw-normal">(diurutkan dari yang paling tertinggal)</span></h5>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Provinsi</th>
+                <th class="text-end">Perpustakaan</th>
+                <th class="text-end">Selesai / Total Eksemplar</th>
+                <th style="width: 200px;">Progres</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in per_provinsi %}
+            <tr>
+                <td>{{ p.provinsi }}</td>
+                <td class="text-end mono">{{ p.total_perpustakaan }}</td>
+                <td class="text-end mono">{{ p.eksemplar_selesai }} / {{ p.total_eksemplar }}</td>
+                <td>
+                    <div class="progress" style="height: 14px;">
+                        <div class="progress-bar {{ 'bg-success' if p.persen == 100 else ('bg-danger' if p.persen == 0 else 'bg-primary') }}" style="width: {{ p.persen }}%;">{{ p.persen }}%</div>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted">Tidak ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h5 class="mb-2">⏳ Perpustakaan Belum Tersentuh <span class="text-muted small fw-normal">({{ total_belum_mulai }} total, ditampilkan 20 pertama)</span></h5>
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Nama Perpustakaan</th>
+                <th>Kabupaten/Kota</th>
+                <th>Provinsi</th>
+                <th>Area</th>
+                <th class="text-end">Total Eksemplar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in belum_mulai %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=b.nama_perpustakaan, kabupaten=b.kabupaten_kota, provinsi=b.provinsi) }}">
+                        {{ b.nama_perpustakaan }}
+                    </a>
+                </td>
+                <td class="small">{{ b.kabupaten_kota }}</td>
+                <td class="small">{{ b.provinsi }}</td>
+                <td>
+                    {% if b.warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
+                    {% elif b.warna_area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                    {% elif b.warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                    {% else %}<span class="badge bg-secondary">-</span>{% endif %}
+                </td>
+                <td class="text-end mono">{{ b.total_eksemplar }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted">🎉 Semua perpustakaan sudah mulai diproses.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="text-end">
+    <a href="{{ url_for('pembagian_buku_rekap_list') }}" class="btn btn-outline-secondary btn-sm">Lihat semua perpustakaan →</a>
+</div>
+{% endblock %}
