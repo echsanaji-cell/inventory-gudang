@@ -3410,7 +3410,7 @@ def pembagian_buku_detail():
     elif area_filter == 'TANPA_AREA':
         query += " AND (warna_area IS NULL OR warna_area = '')"
 
-        query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
     total_data = cur.fetchone()['jumlah']
 
