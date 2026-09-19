@@ -3947,6 +3947,11 @@ def pembagian_buku_dashboard():
         persen_keseluruhan=persen_keseluruhan,
         per_area=per_area,
         per_provinsi=per_provinsi,
+        belum_mulai=belum_mulai,
+        total_belum_mulai=total_belum_mulai
+    )
+
+
 @app.route('/admin/pembagian-buku/cek-silang', methods=['GET', 'POST'])
 @login_required
 @admin_required
