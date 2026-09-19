@@ -1,40 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Tambah User{% endblock %}
+{% block title %}{{ 'Edit User' if target_user else 'Tambah User' }}{% endblock %}
 {% block content %}
-<h3>Tambah User Baru</h3>
+<h3>{{ 'Edit User: ' + target_user.username if target_user else 'Tambah User Baru' }}</h3>
 <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if target_user %}
+    <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control" value="{{ target_user.username }}" disabled>
+        <small class="text-muted">Username tidak bisa diubah.</small>
+    </div>
+    {% else %}
     <div class="mb-3">
         <label class="form-label">Username *</label>
         <input type="text" name="username" class="form-control" required autofocus>
     </div>
+    {% endif %}
+
     <div class="mb-3">
         <label class="form-label">Nama Lengkap</label>
-        <input type="text" name="nama_lengkap" class="form-control">
+        <input type="text" name="nama_lengkap" class="form-control" value="{{ target_user.nama_lengkap or '' if target_user else '' }}">
     </div>
+
+    {% if not target_user %}
     <div class="mb-3">
         <label class="form-label">Password *</label>
         <input type="password" name="password" class="form-control" minlength="8" required>
         <small class="text-muted">Minimal 8 karakter.</small>
     </div>
+    {% endif %}
+
     <div class="mb-3">
         <label class="form-label">Role *</label>
         <select name="role" class="form-select" required>
-            <option value="staff">Staff</option>
-            <option value="admin">Admin</option>
-            <option value="viewer">Viewer (read-only Data Buku)</option>
+            <option value="staff" {{ 'selected' if target_user and target_user.role == 'staff' }}>Staff</option>
+            <option value="admin" {{ 'selected' if target_user and target_user.role == 'admin' }}>Admin</option>
+            <option value="viewer" {{ 'selected' if target_user and target_user.role == 'viewer' }}>Viewer (read-only Data Buku)</option>
         </select>
-            <div class="mb-3">
-                <label class="form-label">Batasan Area</label>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Batasan Area</label>
         <select name="area_restriction" class="form-select">
-            <option value="">-- Tidak dibatasi --</option>
-            <option value="RED">🔴 RED saja</option>
-            <option value="YELLOW">🟡 YELLOW saja</option>
-            <option value="GREEN">🟢 GREEN saja</option>
+            <option value="" {{ 'selected' if target_user and not target_user.area_restriction }}>-- Tidak dibatasi --</option>
+            <option value="RED" {{ 'selected' if target_user and target_user.area_restriction == 'RED' }}>🔴 RED saja</option>
+            <option value="YELLOW" {{ 'selected' if target_user and target_user.area_restriction == 'YELLOW' }}>🟡 YELLOW saja</option>
+            <option value="GREEN" {{ 'selected' if target_user and target_user.area_restriction == 'GREEN' }}>🟢 GREEN saja</option>
         </select>
-                <small class="text-muted">Kalau diisi, user cuma bisa lihat & memproses data area itu. Tidak berlaku untuk role Admin.</small>
+        <small class="text-muted">Kalau diisi, user cuma bisa lihat & memproses data area itu. Tidak berlaku untuk role Admin.</small>
     </div>
-    </div>
+
     <button type="submit" class="btn btn-primary">Simpan</button>
     <a href="{{ url_for('user_list') }}" class="btn btn-secondary">Batal</a>
 </form>

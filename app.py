@@ -2449,6 +2449,63 @@ def user_tambah():
     return render_template('admin/user_form.html')
 
 
+# ------------------ ADMIN: EDIT USER ------------------
+@app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def user_edit(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    target_user = cur.fetchone()
+
+    if not target_user:
+        cur.close()
+        conn.close()
+        flash('User tidak ditemukan.', 'danger')
+        return redirect(url_for('user_list'))
+
+    if request.method == 'POST':
+        nama_lengkap = request.form.get('nama_lengkap', '').strip()
+        role = request.form.get('role', 'staff').strip()
+
+        area_restriction = request.form.get('area_restriction', '').strip().upper() or None
+        if area_restriction not in ('RED', 'YELLOW', 'GREEN'):
+            area_restriction = None
+        if role == 'admin':
+            # admin tidak dibatasi area
+            area_restriction = None
+
+        if user_id == session['user_id'] and role != 'admin' and target_user['role'] == 'admin':
+            cur.close()
+            conn.close()
+            flash('Tidak bisa menurunkan role akun sendiri dari Admin.', 'danger')
+            return redirect(url_for('user_edit', user_id=user_id))
+
+        cur.execute(
+            "UPDATE users SET nama_lengkap = %s, role = %s, area_restriction = %s WHERE id = %s",
+            (nama_lengkap, role, area_restriction, user_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        keterangan_area = f', dibatasi area {area_restriction}' if area_restriction else ', tidak dibatasi area'
+        catat_aktivitas('Mengedit User', f'User "{target_user["username"]}" diubah jadi role: {role}{keterangan_area}')
+
+        if user_id == session['user_id']:
+            session['role'] = role
+            session['area_restriction'] = area_restriction
+            session['nama_lengkap'] = nama_lengkap
+
+        flash(f'User "{target_user["username"]}" berhasil diperbarui.', 'success')
+        return redirect(url_for('user_list'))
+
+    cur.close()
+    conn.close()
+    return render_template('admin/user_form.html', target_user=target_user)
+
+
 # ------------------ ADMIN: AKTIFKAN/NONAKTIFKAN USER ------------------
 @app.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
 @login_required
