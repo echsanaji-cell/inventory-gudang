@@ -2561,6 +2561,62 @@ def user_reset_password(user_id):
     flash('Password berhasil direset.', 'success')
     catat_aktivitas('Reset Password', f'Password user "{target_user["username"] if target_user else user_id}" direset')
     return redirect(url_for('user_list'))
+
+
+# ------------------ ADMIN: HAPUS USER ------------------
+@app.route('/admin/users/<int:user_id>/hapus', methods=['POST'])
+@login_required
+@admin_required
+def user_hapus(user_id):
+    if user_id == session['user_id']:
+        flash('Tidak bisa menghapus akun sendiri.', 'danger')
+        return redirect(url_for('user_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+    target_user = cur.fetchone()
+
+    if not target_user:
+        cur.close()
+        conn.close()
+        flash('User tidak ditemukan.', 'danger')
+        return redirect(url_for('user_list'))
+
+    # pengaman: jangan sampai admin terakhir terhapus
+    if target_user['role'] == 'admin':
+        cur.execute("SELECT COUNT(*) as total FROM users WHERE role = 'admin'")
+        jumlah_admin = cur.fetchone()['total']
+        if jumlah_admin <= 1:
+            cur.close()
+            conn.close()
+            flash('Tidak bisa menghapus admin terakhir.', 'danger')
+            return redirect(url_for('user_list'))
+
+    # pengaman: jangan hapus user yang sudah punya riwayat transaksi/aktivitas — nonaktifkan saja
+    cur.execute("SELECT COUNT(*) as total FROM transaksi WHERE user_id = %s", (user_id,))
+    jumlah_transaksi = cur.fetchone()['total']
+    cur.execute("SELECT COUNT(*) as total FROM activity_log WHERE user_id = %s", (user_id,))
+    jumlah_log = cur.fetchone()['total']
+
+    if jumlah_transaksi > 0 or jumlah_log > 0:
+        cur.close()
+        conn.close()
+        flash(f'User "{target_user["username"]}" sudah punya riwayat transaksi/aktivitas dan tidak bisa dihapus permanen — pakai tombol "Nonaktifkan" saja supaya riwayatnya tetap utuh.', 'danger')
+        return redirect(url_for('user_list'))
+
+    cur.execute("DELETE FROM user_backup_codes WHERE user_id = %s", (user_id,))
+    cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Menghapus User', f'User "{target_user["username"]}" dihapus permanen')
+    flash(f'User "{target_user["username"]}" berhasil dihapus.', 'success')
+    return redirect(url_for('user_list'))
+
+
 # ------------------ ADMIN: KIRIM NOTIFIKASI MANUAL ------------------
 @app.route('/admin/kirim-notifikasi-stok', methods=['POST'])
 @login_required

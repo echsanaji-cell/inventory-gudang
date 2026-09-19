@@ -61,6 +61,15 @@
                 <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#resetModal{{ u.id }}">
                     Reset Password
                 </button>
+                {% if u.id != session.user_id %}
+                <form method="POST" action="{{ url_for('user_hapus', user_id=u.id) }}" class="d-inline"
+                      onsubmit="return confirm('Yakin HAPUS PERMANEN user \'{{ u.username }}\'? Tindakan ini tidak bisa dibatalkan. Kalau user ini pernah bertransaksi, hapus akan ditolak otomatis.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        Hapus
+                    </button>
+                </form>
+                {% endif %}
             </td>
         </tr>
 
