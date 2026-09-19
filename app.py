@@ -3350,8 +3350,6 @@ def pembagian_buku_detail():
         area_filter = restriksi_user
     else:
         area_filter = request.args.get('area', '').strip().upper()
-    page = max(1, ambil_int(request.args, 'page', 1))
-    per_page = 100
 
     if not penerbit or not isbn:
         flash('Data tidak ditemukan.', 'danger')
@@ -3412,13 +3410,9 @@ def pembagian_buku_detail():
     elif area_filter == 'TANPA_AREA':
         query += " AND (warna_area IS NULL OR warna_area = '')"
 
-    query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
+        query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
     total_data = cur.fetchone()['jumlah']
-
-    total_halaman = max(1, (total_data + per_page - 1) // per_page)
-    page = min(page, total_halaman)
-    offset = (page - 1) * per_page
 
     urutan_provinsi = """
         CASE provinsi
@@ -3461,8 +3455,8 @@ def pembagian_buku_detail():
             ELSE 99
         END
     """
-    query_paged = query + f" ORDER BY {urutan_provinsi}, no_box ASC NULLS LAST, nama_perpustakaan ASC LIMIT %s OFFSET %s"
-    cur.execute(query_paged, tuple(params + [per_page, offset]))
+    query_paged = query + f" ORDER BY {urutan_provinsi}, no_box ASC NULLS LAST, nama_perpustakaan ASC"
+    cur.execute(query_paged, tuple(params))
     daftar_penyebaran = cur.fetchall()
 
     cur.close()
@@ -3479,7 +3473,7 @@ def pembagian_buku_detail():
         total_eksemplar_keseluruhan=total_eksemplar_keseluruhan,
         sisa_eksemplar_keseluruhan=sisa_eksemplar_keseluruhan,
         daftar_penyebaran=daftar_penyebaran, area_filter=area_filter,
-        page=page, total_halaman=total_halaman, total_data=total_data,
+        total_data=total_data,
         restriksi_user=restriksi_user,
         sudah_eksemplar_halaman=sudah_eksemplar_halaman,
         total_eksemplar_halaman=total_eksemplar_halaman
