@@ -21,6 +21,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from openpyxl import load_workbook
+import openpyxl
 import io
 import base64
 import pyotp
@@ -3946,8 +3947,156 @@ def pembagian_buku_dashboard():
         persen_keseluruhan=persen_keseluruhan,
         per_area=per_area,
         per_provinsi=per_provinsi,
-        belum_mulai=belum_mulai,
-        total_belum_mulai=total_belum_mulai
+@app.route('/admin/pembagian-buku/cek-silang', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def pembagian_buku_cek_silang():
+    if request.method == 'GET':
+        return render_template('admin/pembagian_buku_cek_silang.html')
+
+    file = request.files.get('file_excel')
+    if not file or file.filename == '':
+        flash('Pilih file Excel dulu.', 'danger')
+        return redirect(url_for('pembagian_buku_cek_silang'))
+
+    try:
+        wb = openpyxl.load_workbook(file, data_only=True)
+    except Exception:
+        flash('File tidak bisa dibaca. Pastikan formatnya .xlsx.', 'danger')
+        return redirect(url_for('pembagian_buku_cek_silang'))
+
+    # cari sheet yang punya header "Nama Perpustakaan" & "Notes Color"
+    ws = None
+    kolom_nama = kolom_notes = kolom_kabupaten = None
+    for sheet in wb.worksheets:
+        header = [str(c.value or '').strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+        idx_nama = next((i for i, h in enumerate(header) if 'nama perpustakaan' in h), None)
+        idx_notes = next((i for i, h in enumerate(header) if 'notes color' in h or h == 'notes'), None)
+        if idx_nama is not None and idx_notes is not None:
+            ws = sheet
+            kolom_nama = idx_nama
+            kolom_notes = idx_notes
+            kolom_kabupaten = next((i for i, h in enumerate(header) if 'kabupaten' in h), None)
+            break
+
+    if ws is None:
+        flash('Tidak ketemu kolom "Nama Perpustakaan Desa/Kelurahan" dan "Notes Color" di file ini.', 'danger')
+        return redirect(url_for('pembagian_buku_cek_silang'))
+
+    # ambil data dari file (mulai baris 2, lewati header)
+    baris_file = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row is None or all(v is None for v in row):
+            continue
+        nama = str(row[kolom_nama] or '').strip()
+        if not nama:
+            continue
+        notes = str(row[kolom_notes] or '').strip().upper()
+        kabupaten = str(row[kolom_kabupaten] or '').strip() if kolom_kabupaten is not None else ''
+        baris_file.append({'nama': nama, 'kabupaten': kabupaten, 'notes': notes})
+
+    if not baris_file:
+        flash('Tidak ada data yang bisa dibaca dari file ini.', 'danger')
+        return redirect(url_for('pembagian_buku_cek_silang'))
+
+    # ambil data pembanding dari database
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT nama_perpustakaan, kabupaten_kota, warna_area FROM pembagian_buku_master")
+    baris_db = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # index berdasar (nama, kabupaten) untuk pencocokan presisi, dan berdasar nama saja untuk fallback
+    peta_presisi = {}
+    peta_nama_saja = {}
+    for r in baris_db:
+        nama_key = (r['nama_perpustakaan'] or '').strip().lower()
+        kab_key = (r['kabupaten_kota'] or '').strip().lower()
+        warna = (r['warna_area'] or '').strip().upper() or 'TANPA_AREA'
+        peta_presisi.setdefault((nama_key, kab_key), set()).add(warna)
+        peta_nama_saja.setdefault(nama_key, set()).add((r['kabupaten_kota'] or '-', warna))
+
+    hasil = []
+    jumlah_cocok = jumlah_tidak_ketemu = jumlah_beda_area = jumlah_lainnya = 0
+
+    for b in baris_file:
+        nama_key = b['nama'].strip().lower()
+        kab_key = b['kabupaten'].strip().lower()
+        catatan = ''
+        status = 'OK'
+
+        if (nama_key, kab_key) in peta_presisi:
+            warna_db_set = peta_presisi[(nama_key, kab_key)]
+            if len(warna_db_set) > 1:
+                status = 'PERLU_CEK'
+                catatan = f"Data di database sendiri tidak konsisten, ada beberapa warna area: {', '.join(sorted(warna_db_set))}"
+                jumlah_lainnya += 1
+            else:
+                warna_db = next(iter(warna_db_set))
+                if warna_db != b['notes']:
+                    status = 'BEDA_AREA'
+                    catatan = f"Area beda — file: {b['notes'] or '(kosong)'}, database: {warna_db}"
+                    jumlah_beda_area += 1
+                else:
+                    jumlah_cocok += 1
+        elif nama_key in peta_nama_saja:
+            info = sorted(peta_nama_saja[nama_key])
+            daftar_kab = ', '.join(f"{k} ({w})" for k, w in info)
+            status = 'KABUPATEN_BEDA'
+            catatan = f"Nama ditemukan di database tapi beda Kabupaten/Kota — di database: {daftar_kab}"
+            jumlah_lainnya += 1
+        else:
+            status = 'TIDAK_KETEMU'
+            catatan = 'Nama perpustakaan tidak ditemukan sama sekali di database'
+            jumlah_tidak_ketemu += 1
+
+        hasil.append({
+            'nama': b['nama'], 'kabupaten': b['kabupaten'], 'notes_file': b['notes'],
+            'status': status, 'catatan': catatan
+        })
+
+    hasil_bermasalah = [h for h in hasil if h['status'] != 'OK']
+
+    # simpan hasil lengkap di session sementara buat didownload (base64 excel) — atau generate ulang saat request download
+    from flask import session as flask_session
+    flask_session['cek_silang_hasil'] = hasil
+
+    return render_template(
+        'admin/pembagian_buku_cek_silang.html',
+        hasil_bermasalah=hasil_bermasalah,
+        total_baris=len(hasil),
+        jumlah_cocok=jumlah_cocok,
+        jumlah_tidak_ketemu=jumlah_tidak_ketemu,
+        jumlah_beda_area=jumlah_beda_area,
+        jumlah_lainnya=jumlah_lainnya,
+        sudah_diproses=True
+    )
+
+
+@app.route('/admin/pembagian-buku/cek-silang/download')
+@login_required
+@admin_required
+def pembagian_buku_cek_silang_download():
+    hasil = session.get('cek_silang_hasil')
+    if not hasil:
+        flash('Belum ada hasil cek silang. Upload file dulu.', 'danger')
+        return redirect(url_for('pembagian_buku_cek_silang'))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Hasil Cek Silang'
+    ws.append(['Nama Perpustakaan', 'Kabupaten/Kota', 'Notes Color (File)', 'Status', 'Catatan'])
+    for h in hasil:
+        ws.append([h['nama'], h['kabupaten'], h['notes_file'], h['status'], h['catatan']])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output, as_attachment=True,
+        download_name=f"cek-silang-pembagian-buku-{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
 # ------------------ ADMIN: KELOLA PENERBIT ------------------
