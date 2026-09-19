@@ -121,7 +121,7 @@
             {% for b in belum_mulai %}
             <tr>
                 <td>
-                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=b.nama_perpustakaan, kabupaten=b.kabupaten_kota, provinsi=b.provinsi) }}">
+                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=b.nama_perpustakaan, kabupaten=b.kabupaten_kota, provinsi=b.provinsi, no_box=b.no_box) }}">
                         {{ b.nama_perpustakaan }}
                     </a>
                 </td>

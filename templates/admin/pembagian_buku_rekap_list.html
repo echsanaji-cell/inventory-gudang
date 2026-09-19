@@ -30,6 +30,7 @@
                 <th>Nama Perpustakaan</th>
                 <th>Kabupaten/Kota</th>
                 <th>Provinsi</th>
+                <th>No Box</th>
                 {% if not restriksi_user %}<th>Area</th>{% endif %}
                 <th class="text-end">Judul</th>
                 <th class="text-end">Sisa Eksemplar</th>
@@ -40,12 +41,13 @@
             {% for p in daftar_perpustakaan %}
             <tr>
                 <td>
-                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=p.nama_perpustakaan, kabupaten=p.kabupaten_kota, provinsi=p.provinsi) }}">
+                    <a href="{{ url_for('pembagian_buku_rekap_detail', nama=p.nama_perpustakaan, kabupaten=p.kabupaten_kota, provinsi=p.provinsi, no_box=p.no_box) }}">
                         {{ p.nama_perpustakaan }}
                     </a>
                 </td>
                 <td class="small">{{ p.kabupaten_kota }}</td>
                 <td class="small">{{ p.provinsi }}</td>
+                <td class="mono">{{ p.no_box if p.no_box is not none else '-' }}</td>
                 {% if not restriksi_user %}
                 <td>
                     {% if p.warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
@@ -63,7 +65,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="{{ 6 if restriksi_user else 7 }}" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="{{ 7 if restriksi_user else 8 }}" class="text-center text-muted">Tidak ada data.</td></tr>
             {% endfor %}
         </tbody>
     </table>

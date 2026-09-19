@@ -12,7 +12,7 @@
     <div>
         <h4 class="mb-1">🏛️ {{ nama }}</h4>
         <p class="text-muted mb-0">
-            {{ kabupaten }}, {{ provinsi }}
+            {{ kabupaten }}, {{ provinsi }} · No Box: <span class="mono">{{ no_box if no_box is not none else '-' }}</span>
             {% if warna_area == 'RED' %}<span class="badge bg-danger">RED</span>
             {% elif warna_area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
             {% elif warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
