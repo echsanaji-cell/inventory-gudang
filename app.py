@@ -3826,6 +3826,80 @@ def pembagian_buku_rekap_detail():
         restriksi_user=restriksi_user
     )
 
+@app.route('/admin/pembagian-buku/rekap-perpustakaan/detail/export')
+@login_required
+@viewer_blocked
+def pembagian_buku_rekap_detail_export():
+    nama = request.args.get('nama', '')
+    kabupaten = request.args.get('kabupaten', '')
+    provinsi = request.args.get('provinsi', '')
+    no_box_filter = request.args.get('no_box', '').strip()
+    restriksi_user = session.get('area_restriction')
+
+    if not nama:
+        flash('Perpustakaan tidak ditemukan.', 'danger')
+        return redirect(url_for('pembagian_buku_rekap_list'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """SELECT penerbit, isbn, judul, pengarang, warna_area, no_box, eksemplar,
+                      sudah_diambil, diambil_at, diambil_oleh
+               FROM pembagian_buku_master
+               WHERE nama_perpustakaan = %s AND kabupaten_kota = %s AND provinsi = %s
+                     AND COALESCE(no_box::text, '') = %s"""
+    params = [nama, kabupaten, provinsi, no_box_filter]
+    if restriksi_user:
+        query += " AND warna_area = %s"
+        params.append(restriksi_user)
+    query += " ORDER BY judul ASC"
+
+    cur.execute(query, tuple(params))
+    daftar_buku = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not daftar_buku:
+        flash('Perpustakaan tidak ditemukan atau di luar akses area kamu.', 'danger')
+        return redirect(url_for('pembagian_buku_rekap_list'))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Rekap Perpustakaan'
+
+    ws.append([f'Rekap Pembagian Buku - {nama}'])
+    ws.append([f'{kabupaten}, {provinsi}' + (f' - No Box {no_box_filter}' if no_box_filter else '')])
+    ws.append([])
+    ws.append(['Penerbit', 'ISBN', 'Judul', 'Pengarang', 'Area', 'No Box', 'Eksemplar', 'Status', 'Diambil Oleh', 'Tanggal Diambil'])
+
+    for b in daftar_buku:
+        ws.append([
+            b['penerbit'] or '-',
+            b['isbn'] or '-',
+            b['judul'] or '-',
+            b['pengarang'] or '-',
+            b['warna_area'] or '-',
+            b['no_box'] if b['no_box'] is not None else '-',
+            b['eksemplar'] if b['eksemplar'] is not None else '-',
+            'Selesai' if b['sudah_diambil'] else 'Belum',
+            b['diambil_oleh'] or '-',
+            b['diambil_at'].strftime('%Y-%m-%d %H:%M') if b['diambil_at'] else '-'
+        ])
+
+    for kolom in ws.columns:
+        panjang_max = max((len(str(c.value)) for c in kolom if c.value is not None), default=10)
+        ws.column_dimensions[kolom[0].column_letter].width = min(panjang_max + 2, 50)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    nama_file_aman = "".join(c for c in nama if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+    return send_file(
+        output, as_attachment=True,
+        download_name=f"rekap-{nama_file_aman}-{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 @app.route('/api/pembagian-buku/cari-perpustakaan-suggest')
 @login_required

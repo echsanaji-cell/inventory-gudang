@@ -19,7 +19,10 @@
             {% else %}<span class="badge bg-secondary">-</span>{% endif %}
         </p>
     </div>
-    <a href="{{ url_for('pembagian_buku_rekap_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('pembagian_buku_rekap_detail_export', nama=nama, kabupaten=kabupaten, provinsi=provinsi, no_box=no_box) }}" class="btn btn-outline-secondary btn-sm">⬇️ Download Excel</a>
+        <a href="{{ url_for('pembagian_buku_rekap_list') }}" class="btn btn-secondary btn-sm">Kembali</a>
+    </div>
 </div>
 
 <div class="card mb-3">
