@@ -3675,6 +3675,7 @@ def pembagian_buku_checklist():
 @viewer_blocked
 def pembagian_buku_rekap_list():
     search = request.args.get('search', '').strip()
+    sort = request.args.get('sort', 'lokasi').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 50
     restriksi_user = session.get('area_restriction')
@@ -3707,7 +3708,8 @@ def pembagian_buku_rekap_list():
                COUNT(*) as total_judul,
                COALESCE(SUM(eksemplar), 0) as total_eksemplar,
                COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) as sisa_eksemplar,
-               COUNT(*) FILTER (WHERE sudah_diambil) as judul_selesai
+               COUNT(*) FILTER (WHERE sudah_diambil) as judul_selesai,
+               COALESCE(ROUND(100.0 * SUM(CASE WHEN sudah_diambil THEN eksemplar ELSE 0 END) / NULLIF(SUM(eksemplar), 0)), 0) as persen
         FROM pembagian_buku_master
         WHERE 1=1
     """
@@ -3719,7 +3721,15 @@ def pembagian_buku_rekap_list():
         query += " AND (nama_perpustakaan ILIKE %s OR kabupaten_kota ILIKE %s OR provinsi ILIKE %s)"
         params += [f'%{search}%', f'%{search}%', f'%{search}%']
 
-    query += f" GROUP BY nama_perpustakaan, kabupaten_kota, provinsi, no_box, warna_area ORDER BY {urutan_provinsi}, kabupaten_kota ASC, nama_perpustakaan ASC, no_box ASC NULLS LAST"
+    query += " GROUP BY nama_perpustakaan, kabupaten_kota, provinsi, no_box, warna_area"
+
+    if sort == 'progress_asc':
+        query += " ORDER BY persen ASC, nama_perpustakaan ASC"
+    elif sort == 'progress_desc':
+        query += " ORDER BY persen DESC, nama_perpustakaan ASC"
+    else:
+        sort = 'lokasi'
+        query += f" ORDER BY {urutan_provinsi}, kabupaten_kota ASC, nama_perpustakaan ASC, no_box ASC NULLS LAST"
 
     query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
@@ -3749,15 +3759,13 @@ def pembagian_buku_rekap_list():
         total = p['total_eksemplar'] or 0
         sisa = p['sisa_eksemplar'] or 0
         eksemplar_selesai = total - sisa
-        persen = round((eksemplar_selesai / total) * 100) if total > 0 else 0
         baris = dict(p)
         baris['eksemplar_selesai'] = eksemplar_selesai
-        baris['persen'] = persen
         daftar_perpustakaan.append(baris)
 
     return render_template(
         'admin/pembagian_buku_rekap_list.html',
-        daftar_perpustakaan=daftar_perpustakaan, search=search,
+        daftar_perpustakaan=daftar_perpustakaan, search=search, sort=sort,
         page=page, total_halaman=total_halaman, total_data=total_data,
         total_perpustakaan_keseluruhan=total_perpustakaan_keseluruhan,
         restriksi_user=restriksi_user
