@@ -40,7 +40,7 @@ from bs4 import BeautifulSoup
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 app.config['MAX_CONTENT_LENGTH'] = 40 * 1024 * 1024  # 40MB — lebih aman untuk RAM terbatas
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER') is not None
+app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
