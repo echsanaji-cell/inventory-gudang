@@ -126,16 +126,20 @@
                     {% elif t.warna_area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
                     {% else %}<span class="badge bg-secondary">-</span>{% endif %}
                 </td>
-                <td class="text-center">
-                    {% if t.sudah_diambil %}
-                    <span class="text-success fs-5" title="Sudah tersimpan, tidak bisa diubah lagi di sini">✅</span>
+                                <td class="text-center">
+                    {% if t.sudah_diambil and session.role != 'admin' %}
+                    <span class="text-success" title="Sudah tersimpan, tidak bisa diubah lagi di sini">✅</span>
                     {% if t.diambil_oleh %}
                     <br><small class="text-muted" style="font-size: 10px;">{{ t.diambil_oleh }}</small>
                     {% endif %}
                     {% else %}
                     <input type="hidden" name="id_tampil" value="{{ t.id }}">
                     <input type="checkbox" class="form-check-input centang-baris" name="id_dicentang" value="{{ t.id }}"
-                           data-eksemplar="{{ t.eksemplar or 0 }}">
+                           data-eksemplar="{{ t.eksemplar or 0 }}"
+                           {{ 'checked' if t.sudah_diambil }}>
+                    {% if t.sudah_diambil and t.diambil_oleh %}
+                    <br><small class="text-muted" style="font-size: 10px;">{{ t.diambil_oleh }}</small>
+                    {% endif %}
                     {% endif %}
                 </td>
                 <td class="mono">{{ t.no_box if t.no_box is not none else '-' }}</td>
@@ -197,21 +201,33 @@
 
     const sudahHalamanAwal = parseInt(panel.dataset.sudahHalamanAwal || '0', 10);
     const totalHalaman = parseInt(panel.dataset.totalHalaman || '0', 10);
+    const isAdmin = {{ 'true' if session.role == 'admin' else 'false' }};
 
     function hitung() {
         let sisaHalaman = 0, sudahBaru = 0, berubah = 0;
 
         kotakBaris.forEach(cb => {
             const eks = parseInt(cb.dataset.eksemplar || '0', 10);
+            const awalTercentang = cb.defaultChecked;
+
             if (cb.checked) {
-                sudahBaru += eks;
-                berubah += 1;
+                sisaHalaman += 0; // sudah dihitung sebagai bagian "selesai" di bawah
             } else {
                 sisaHalaman += eks;
             }
+
+            if (isAdmin && cb.checked !== awalTercentang) {
+                berubah += 1;
+                if (!awalTercentang) sudahBaru += eks; // baru dicentang
+                else sudahBaru -= eks; // dibatalkan dari yang sudah tersimpan
+            } else if (!isAdmin && cb.checked) {
+                berubah += 1;
+                sudahBaru += eks;
+            }
         });
 
-        const sudahHalaman = sudahHalamanAwal + sudahBaru;
+        const totalTercentangSekarang = kotakBaris.reduce((sum, cb) => sum + (cb.checked ? parseInt(cb.dataset.eksemplar || '0', 10) : 0), 0);
+        const sudahHalaman = isAdmin ? totalTercentangSekarang : (sudahHalamanAwal + sudahBaru);
         const persen = totalHalaman > 0 ? Math.round((sudahHalaman / totalHalaman) * 100) : 0;
 
         elSisaHalaman.textContent = sisaHalaman.toLocaleString('id-ID');
