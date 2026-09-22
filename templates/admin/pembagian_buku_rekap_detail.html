@@ -182,12 +182,13 @@
             const butuh = parseInt(cocok.dataset.butuh || 0);
             cocok.querySelector('.dc-progress-text').textContent = scannedBaru;
 
+            cocok.classList.remove('table-success', 'table-danger');
             if (scannedBaru >= butuh) {
                 cocok.classList.add('table-success');
-                cocok.querySelector('.dc-status').textContent = '✅';
+                cocok.querySelector('.dc-status').innerHTML = '✅';
             } else {
-                cocok.classList.add('table-warning');
-                cocok.querySelector('.dc-status').textContent = '🔸';
+                cocok.classList.add('table-danger');
+                cocok.querySelector('.dc-status').innerHTML = '<span class="text-danger fw-bold">❌ Kurang</span>';
             }
         } else {
             const adaJudulnya = baris.some(tr => tr.dataset.isbn === kode);
@@ -224,9 +225,9 @@
         if (!confirm('Reset semua progress double check di halaman ini?')) return;
         baris.forEach(tr => {
             tr.dataset.scanned = 0;
-            tr.classList.remove('table-success', 'table-warning');
+            tr.classList.remove('table-success', 'table-danger');
             tr.querySelector('.dc-progress-text').textContent = '0';
-            tr.querySelector('.dc-status').textContent = '⏳';
+            tr.querySelector('.dc-status').innerHTML = '⏳';
         });
         jumlahTidakDikenali = 0;
         elTidakDikenali.textContent = '0';
