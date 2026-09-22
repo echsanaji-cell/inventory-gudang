@@ -97,18 +97,13 @@
     <div class="card-body">
         <p class="small text-muted mb-3">Progress sudah 100%. Scan ISBN tiap buku fisik satu per satu untuk memastikan jumlahnya benar-benar sesuai. Ini murni pengecekan — hasilnya tidak disimpan dan akan reset kalau halaman di-refresh.</p>
 
-        <div class="row g-2 mb-2">
-            <div class="col-md-8">
-                <input type="text" id="input-scan-double-check" class="form-control" placeholder="Scan atau ketik ISBN di sini..." autocomplete="off">
+        <div class="row g-2 mb-3">
+            <div class="col-md-8 position-relative">
+                <input type="text" id="input-scan-double-check" class="form-control" placeholder="Scan ISBN, atau ketik judul buku kalau tidak terbaca..." autocomplete="off">
+                <div id="dc-judul-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 250px; overflow-y: auto;"></div>
             </div>
             <div class="col-md-4">
                 <button type="button" class="btn btn-outline-success w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanDoubleCheck)">📷 Scan Kamera</button>
-            </div>
-        </div>
-        <div class="row g-2 mb-3">
-            <div class="col-12 position-relative">
-                <input type="text" id="input-judul-double-check" class="form-control" placeholder="Atau ketik judul buku kalau ISBN tidak terbaca..." autocomplete="off">
-                <div id="dc-judul-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 250px; overflow-y: auto;"></div>
             </div>
         </div>
 
@@ -241,17 +236,9 @@
         hitungUlang();
     };
 
-    input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleScanDoubleCheck(input.value);
-        }
-    });
-
     initPhysicalScanner(input, handleScanDoubleCheck);
 
-    // pencarian judul sebagai alternatif kalau ISBN tidak terbaca
-    const inputJudul = document.getElementById('input-judul-double-check');
+    // satu kolom: bisa buat scan ISBN (Enter/scanner fisik) ATAU ketik judul (muncul suggestion)
     const kotakSuggest = document.getElementById('dc-judul-suggestions');
     let waktuJudul = null;
 
@@ -260,12 +247,25 @@
         judul: tr.querySelector('td').textContent.trim()
     }));
 
-    inputJudul.addEventListener('input', function () {
+    function tutupSuggestion() {
+        kotakSuggest.style.display = 'none';
+        kotakSuggest.innerHTML = '';
+    }
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleScanDoubleCheck(input.value);
+            tutupSuggestion();
+        }
+    });
+
+    input.addEventListener('input', function () {
         clearTimeout(waktuJudul);
         const kata = this.value.trim().toLowerCase();
-        if (kata.length < 2) {
-            kotakSuggest.style.display = 'none';
-            kotakSuggest.innerHTML = '';
+        // heuristik sederhana: ISBN biasanya angka panjang, jadi suggestion judul cuma muncul kalau bukan input angka murni
+        if (kata.length < 2 || /^[0-9\-]+$/.test(kata)) {
+            tutupSuggestion();
             return;
         }
         waktuJudul = setTimeout(() => {
@@ -289,15 +289,14 @@
         const btn = e.target.closest('button[data-isbn]');
         if (!btn) return;
         handleScanDoubleCheck(btn.dataset.isbn);
-        inputJudul.value = '';
-        kotakSuggest.style.display = 'none';
-        kotakSuggest.innerHTML = '';
-        inputJudul.focus();
+        input.value = '';
+        tutupSuggestion();
+        input.focus();
     });
 
     document.addEventListener('click', function (e) {
-        if (!inputJudul.contains(e.target) && !kotakSuggest.contains(e.target)) {
-            kotakSuggest.style.display = 'none';
+        if (!input.contains(e.target) && !kotakSuggest.contains(e.target)) {
+            tutupSuggestion();
         }
     });
 })();
