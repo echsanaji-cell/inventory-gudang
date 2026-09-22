@@ -84,4 +84,166 @@
     </table>
 </div>
 <small class="text-muted">Halaman ini hanya rekap tampilan. Untuk mencentang buku sebagai selesai, gunakan menu Pembagian Buku (Master) → cari judulnya → checklist di sana.</small>
+
+{% if True %}
+<div class="card border-success mt-4" id="panel-double-check">
+    <div class="card-header bg-success bg-opacity-10">
+        <strong>🔍 Double Check dengan Scanner</strong>
+        <span class="text-muted small"> — verifikasi fisik buku, tidak mengubah data checklist</span>
+        {% if persen < 100 %}
+        <span class="badge bg-warning text-dark ms-2">⚠️ MODE TEST — progress belum 100%</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <p class="small text-muted mb-3">Progress sudah 100%. Scan ISBN tiap buku fisik satu per satu untuk memastikan jumlahnya benar-benar sesuai. Ini murni pengecekan — hasilnya tidak disimpan dan akan reset kalau halaman di-refresh.</p>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-8">
+                <input type="text" id="input-scan-double-check" class="form-control" placeholder="Scan atau ketik ISBN di sini..." autocomplete="off">
+            </div>
+            <div class="col-md-4">
+                <button type="button" class="btn btn-outline-success w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanDoubleCheck)">📷 Scan Kamera</button>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="small">
+                Terverifikasi: <span class="mono fw-bold" id="dc-terverifikasi">0</span> / <span class="mono">{{ total_eksemplar }}</span> eksemplar
+                <span class="text-danger ms-2" id="dc-tidak-dikenali-wrap" style="display: none;">
+                    · <span id="dc-tidak-dikenali">0</span> scan tidak dikenali
+                </span>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetDoubleCheck()">↺ Reset</button>
+        </div>
+        <div class="progress mb-3" style="height: 10px;">
+            <div class="progress-bar bg-success" id="dc-bar" style="width: 0%;"></div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="tabel-double-check">
+                <thead>
+                    <tr>
+                        <th>Judul</th>
+                        <th>ISBN</th>
+                        <th class="text-end">Progress Scan</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for b in daftar_buku %}
+                    <tr class="baris-dc" data-isbn="{{ b.isbn }}" data-butuh="{{ b.eksemplar or 0 }}" data-scanned="0">
+                        <td>{{ b.judul }}</td>
+                        <td class="mono small">{{ b.isbn }}</td>
+                        <td class="text-end mono"><span class="dc-progress-text">0</span> / {{ b.eksemplar if b.eksemplar is not none else '-' }}</td>
+                        <td class="text-center dc-status">⏳</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="dc-tidak-dikenali-list" style="display: none;">
+            <hr>
+            <p class="small fw-bold text-danger mb-1">⚠️ ISBN yang di-scan tapi tidak terdaftar di perpustakaan ini:</p>
+            <ul class="small text-danger" id="dc-tidak-dikenali-ul"></ul>
+        </div>
+
+        <div class="alert alert-success mt-3 d-none" id="dc-selesai-banner">
+            ✅ <strong>Double check selesai</strong> — semua eksemplar sudah terverifikasi sesuai catatan.
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const input = document.getElementById('input-scan-double-check');
+    const baris = Array.from(document.querySelectorAll('.baris-dc'));
+    const elTerverifikasi = document.getElementById('dc-terverifikasi');
+    const elBar = document.getElementById('dc-bar');
+    const elTidakDikenaliWrap = document.getElementById('dc-tidak-dikenali-wrap');
+    const elTidakDikenali = document.getElementById('dc-tidak-dikenali');
+    const elTidakDikenaliList = document.getElementById('dc-tidak-dikenali-list');
+    const elTidakDikenaliUl = document.getElementById('dc-tidak-dikenali-ul');
+    const elSelesaiBanner = document.getElementById('dc-selesai-banner');
+    const totalEksemplar = {{ total_eksemplar }};
+
+    let jumlahTidakDikenali = 0;
+
+    window.handleScanDoubleCheck = function (kodeMentah) {
+        const kode = (kodeMentah || '').trim();
+        if (!kode) return;
+
+        const cocok = baris.find(tr => tr.dataset.isbn === kode && parseInt(tr.dataset.scanned) < parseInt(tr.dataset.butuh || 0));
+
+        if (cocok) {
+            const scannedBaru = parseInt(cocok.dataset.scanned) + 1;
+            cocok.dataset.scanned = scannedBaru;
+            const butuh = parseInt(cocok.dataset.butuh || 0);
+            cocok.querySelector('.dc-progress-text').textContent = scannedBaru;
+
+            if (scannedBaru >= butuh) {
+                cocok.classList.add('table-success');
+                cocok.querySelector('.dc-status').textContent = '✅';
+            } else {
+                cocok.classList.add('table-warning');
+                cocok.querySelector('.dc-status').textContent = '🔸';
+            }
+        } else {
+            const adaJudulnya = baris.some(tr => tr.dataset.isbn === kode);
+            if (adaJudulnya) {
+                alert('ISBN ini sudah lengkap ter-scan sebelumnya (kelebihan scan): ' + kode);
+            } else {
+                jumlahTidakDikenali++;
+                elTidakDikenali.textContent = jumlahTidakDikenali;
+                elTidakDikenaliWrap.style.display = 'inline';
+                elTidakDikenaliList.style.display = 'block';
+                const li = document.createElement('li');
+                li.textContent = kode + ' — tidak ada di daftar buku perpustakaan ini';
+                elTidakDikenaliUl.appendChild(li);
+            }
+        }
+
+        hitungUlang();
+        input.value = '';
+        input.focus();
+    };
+
+    function hitungUlang() {
+        let totalTerverifikasi = 0;
+        baris.forEach(tr => {
+            totalTerverifikasi += Math.min(parseInt(tr.dataset.scanned), parseInt(tr.dataset.butuh || 0));
+        });
+        elTerverifikasi.textContent = totalTerverifikasi;
+        const persen = totalEksemplar > 0 ? Math.round((totalTerverifikasi / totalEksemplar) * 100) : 0;
+        elBar.style.width = persen + '%';
+        elSelesaiBanner.classList.toggle('d-none', totalTerverifikasi < totalEksemplar);
+    }
+
+    window.resetDoubleCheck = function () {
+        if (!confirm('Reset semua progress double check di halaman ini?')) return;
+        baris.forEach(tr => {
+            tr.dataset.scanned = 0;
+            tr.classList.remove('table-success', 'table-warning');
+            tr.querySelector('.dc-progress-text').textContent = '0';
+            tr.querySelector('.dc-status').textContent = '⏳';
+        });
+        jumlahTidakDikenali = 0;
+        elTidakDikenali.textContent = '0';
+        elTidakDikenaliWrap.style.display = 'none';
+        elTidakDikenaliList.style.display = 'none';
+        elTidakDikenaliUl.innerHTML = '';
+        hitungUlang();
+    };
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleScanDoubleCheck(input.value);
+        }
+    });
+
+    initPhysicalScanner(input, handleScanDoubleCheck);
+})();
+</script>
+{% endif %}
 {% endblock %}
