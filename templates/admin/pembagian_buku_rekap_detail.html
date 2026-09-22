@@ -85,7 +85,7 @@
 </div>
 <small class="text-muted">Halaman ini hanya rekap tampilan. Untuk mencentang buku sebagai selesai, gunakan menu Pembagian Buku (Master) → cari judulnya → checklist di sana.</small>
 
-{% if True %}
+{% if session.role == 'admin' %}
 <div class="card border-success mt-4" id="panel-double-check">
     <div class="card-header bg-success bg-opacity-10">
         <strong>🔍 Double Check dengan Scanner</strong>
