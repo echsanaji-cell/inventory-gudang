@@ -3389,6 +3389,7 @@ def mapping_area_referensi_riwayat():
 @viewer_blocked
 def pembagian_buku_list():
     search = request.args.get('search', '').strip()
+    sort = request.args.get('sort', 'judul').strip()
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 50
     restriksi_user = session.get('area_restriction')
@@ -3415,7 +3416,13 @@ def pembagian_buku_list():
         query += " AND (judul ILIKE %s OR isbn ILIKE %s OR penerbit ILIKE %s)"
         params += [f'%{search}%', f'%{search}%', f'%{search}%']
 
-    query += " GROUP BY penerbit, isbn ORDER BY MAX(judul) ASC"
+    query += " GROUP BY penerbit, isbn"
+
+    if sort == 'sisa':
+        query += " ORDER BY (COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) = 0) ASC, COALESCE(SUM(CASE WHEN sudah_diambil THEN 0 ELSE eksemplar END), 0) DESC, MAX(judul) ASC"
+    else:
+        sort = 'judul'
+        query += " ORDER BY MAX(judul) ASC"
 
     query_count = f"SELECT COUNT(*) as jumlah FROM ({query}) sub"
     cur.execute(query_count, tuple(params))
