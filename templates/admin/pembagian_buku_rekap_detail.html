@@ -97,12 +97,18 @@
     <div class="card-body">
         <p class="small text-muted mb-3">Progress sudah 100%. Scan ISBN tiap buku fisik satu per satu untuk memastikan jumlahnya benar-benar sesuai. Ini murni pengecekan — hasilnya tidak disimpan dan akan reset kalau halaman di-refresh.</p>
 
-        <div class="row g-2 mb-3">
+        <div class="row g-2 mb-2">
             <div class="col-md-8">
                 <input type="text" id="input-scan-double-check" class="form-control" placeholder="Scan atau ketik ISBN di sini..." autocomplete="off">
             </div>
             <div class="col-md-4">
                 <button type="button" class="btn btn-outline-success w-100" onclick="startCameraScanner('cameraModal', 'camera-reader', handleScanDoubleCheck)">📷 Scan Kamera</button>
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-12 position-relative">
+                <input type="text" id="input-judul-double-check" class="form-control" placeholder="Atau ketik judul buku kalau ISBN tidak terbaca..." autocomplete="off">
+                <div id="dc-judul-suggestions" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 250px; overflow-y: auto;"></div>
             </div>
         </div>
 
@@ -243,6 +249,57 @@
     });
 
     initPhysicalScanner(input, handleScanDoubleCheck);
+
+    // pencarian judul sebagai alternatif kalau ISBN tidak terbaca
+    const inputJudul = document.getElementById('input-judul-double-check');
+    const kotakSuggest = document.getElementById('dc-judul-suggestions');
+    let waktuJudul = null;
+
+    const daftarBuku = baris.map(tr => ({
+        isbn: tr.dataset.isbn,
+        judul: tr.querySelector('td').textContent.trim()
+    }));
+
+    inputJudul.addEventListener('input', function () {
+        clearTimeout(waktuJudul);
+        const kata = this.value.trim().toLowerCase();
+        if (kata.length < 2) {
+            kotakSuggest.style.display = 'none';
+            kotakSuggest.innerHTML = '';
+            return;
+        }
+        waktuJudul = setTimeout(() => {
+            const hasil = daftarBuku.filter(b => b.judul.toLowerCase().includes(kata)).slice(0, 10);
+            if (hasil.length === 0) {
+                kotakSuggest.innerHTML = '<div class="list-group-item text-muted small">Judul tidak ditemukan di perpustakaan ini.</div>';
+            } else {
+                kotakSuggest.innerHTML = hasil.map(b => {
+                    const barisCocok = baris.find(tr => tr.dataset.isbn === b.isbn);
+                    const scanned = barisCocok ? parseInt(barisCocok.dataset.scanned) : 0;
+                    const butuh = barisCocok ? parseInt(barisCocok.dataset.butuh || 0) : 0;
+                    const statusText = scanned >= butuh ? ' ✅ Lengkap' : ` (${scanned}/${butuh})`;
+                    return `<button type="button" class="list-group-item list-group-item-action small" data-isbn="${b.isbn}">${b.judul}<span class="text-muted">${statusText}</span></button>`;
+                }).join('');
+            }
+            kotakSuggest.style.display = 'block';
+        }, 250);
+    });
+
+    kotakSuggest.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-isbn]');
+        if (!btn) return;
+        handleScanDoubleCheck(btn.dataset.isbn);
+        inputJudul.value = '';
+        kotakSuggest.style.display = 'none';
+        kotakSuggest.innerHTML = '';
+        inputJudul.focus();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!inputJudul.contains(e.target) && !kotakSuggest.contains(e.target)) {
+            kotakSuggest.style.display = 'none';
+        }
+    });
 })();
 </script>
 {% endif %}
