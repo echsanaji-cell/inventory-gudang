@@ -6427,14 +6427,14 @@ def _rapikan_item_laporan(daftar):
     return hasil
 
 
-@app.route('/laporan-kurang/<token>')
+@app.route('/l/<token>')
 def laporan_kurang_publik(token):
     if not _token_laporan_valid(token):
         abort(404)
     return render_template('laporan_kurang_publik.html', token=token)
 
 
-@app.route('/laporan-kurang/<token>/csrf')
+@app.route('/l/<token>/csrf')
 def laporan_kurang_csrf(token):
     if not _token_laporan_valid(token):
         abort(404)
@@ -6443,7 +6443,7 @@ def laporan_kurang_csrf(token):
     return respons
 
 
-@app.route('/laporan-kurang/<token>/cari-tujuan')
+@app.route('/l/<token>/cari-tujuan')
 def laporan_kurang_cari_tujuan(token):
     if not _token_laporan_valid(token):
         abort(404)
@@ -6467,7 +6467,7 @@ def laporan_kurang_cari_tujuan(token):
     return jsonify([dict(r) for r in hasil])
 
 
-@app.route('/laporan-kurang/<token>/cari-buku')
+@app.route('/l/<token>/cari-buku')
 def laporan_kurang_cari_buku(token):
     if not _token_laporan_valid(token):
         abort(404)
@@ -6491,7 +6491,7 @@ def laporan_kurang_cari_buku(token):
     return jsonify([dict(r) for r in hasil])
 
 
-@app.route('/laporan-kurang/<token>/kirim', methods=['POST'])
+@app.route('/l/<token>/kirim', methods=['POST'])
 def laporan_kurang_kirim(token):
     if not _token_laporan_valid(token):
         abort(404)
@@ -6639,7 +6639,7 @@ def laporan_kurang_hapus(laporan_id):
 
 
 
-@app.route('/laporan-kurang/<token>/laporan-ada')
+@app.route('/l/<token>/laporan-ada')
 def laporan_kurang_laporan_ada(token):
     """Dipakai form publik: tampilkan laporan yang sudah ada untuk perpustakaan terpilih."""
     if not _token_laporan_valid(token):
