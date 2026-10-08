@@ -53,15 +53,15 @@
 </form>
 
 <div class="table-responsive">
-    <table class="table table-sm table-hover align-top">
+    <table class="table table-hover align-top">
         <thead>
             <tr>
                 <th>Perpustakaan</th>
                 <th>Provinsi</th>
                 <th>Kabupaten/Kota</th>
                 <th>Kecamatan</th>
-                <th>Buku Kurang</th>
-                <th>Buku Lebih / Di Luar Pesanan</th>
+                <th style="min-width: 280px;">Buku Kurang</th>
+                <th style="min-width: 280px;">Buku Lebih / Di Luar Pesanan</th>
                 <th>Dilaporkan</th>
                 <th></th>
             </tr>
@@ -78,16 +78,22 @@
                 <td class="small">{{ l.kecamatan or '-' }}</td>
                 <td>
                     {% if l.kurang %}
-                    <ul class="list-unstyled mb-0 small">
-                        {% for i in l.kurang %}<li>{{ i.judul }} <span class="badge bg-danger">{{ i.jumlah }}</span></li>{% endfor %}
-                    </ul>
+                    {% for i in l.kurang %}
+                    <div class="d-flex justify-content-between align-items-start gap-3 py-1 {{ 'border-bottom' if not loop.last }}">
+                        <span class="small">{{ i.judul }}</span>
+                        <span class="badge bg-danger flex-shrink-0">{{ i.jumlah }} eks</span>
+                    </div>
+                    {% endfor %}
                     {% else %}<span class="text-muted">-</span>{% endif %}
                 </td>
                 <td>
                     {% if l.lebih %}
-                    <ul class="list-unstyled mb-0 small">
-                        {% for i in l.lebih %}<li>{{ i.judul }} <span class="badge bg-primary">{{ i.jumlah }}</span></li>{% endfor %}
-                    </ul>
+                    {% for i in l.lebih %}
+                    <div class="d-flex justify-content-between align-items-start gap-3 py-1 {{ 'border-bottom' if not loop.last }}">
+                        <span class="small">{{ i.judul }}</span>
+                        <span class="badge bg-primary flex-shrink-0">{{ i.jumlah }} eks</span>
+                    </div>
+                    {% endfor %}
                     {% else %}<span class="text-muted">-</span>{% endif %}
                 </td>
                 <td class="small text-nowrap">{{ l.created_at.strftime('%d-%m-%Y %H:%M') }}</td>

@@ -6454,7 +6454,7 @@ def laporan_kurang_cari_tujuan(token):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, no_box
+        """SELECT id, nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan
            FROM tujuan
            WHERE nama ILIKE %s
            ORDER BY nama ASC, provinsi ASC, kabupaten_kota ASC

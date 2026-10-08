@@ -112,7 +112,7 @@
         inputTujuan, document.getElementById('saran-tujuan'), '/cari-tujuan',
         function (t) {
             const lokasi = [t.kecamatan, t.kabupaten_kota, t.provinsi].filter(Boolean).join(', ');
-            return t.nama + (lokasi ? ' — ' + lokasi : '') + (t.no_box != null ? ' (Box ' + t.no_box + ')' : '');
+            return t.nama + (lokasi ? ' — ' + lokasi : '');
         },
         function (t) {
             tujuanDipilih = t.id;
