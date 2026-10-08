@@ -31,13 +31,11 @@
 {% endif %}
 
 <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body text-center py-2">
-        <div class="small text-muted">Laporan</div><div class="fs-4 fw-bold mono">{{ total_laporan }}</div></div></div></div>
-    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body text-center py-2">
+    <div class="col-4"><div class="card h-100"><div class="card-body text-center py-2">
         <div class="small text-muted">Perpustakaan</div><div class="fs-4 fw-bold mono">{{ total_perpustakaan }}</div></div></div></div>
-    <div class="col-6 col-md-3"><div class="card h-100 border-danger"><div class="card-body text-center py-2">
+    <div class="col-4"><div class="card h-100 border-danger"><div class="card-body text-center py-2">
         <div class="small text-muted">Eksemplar Kurang</div><div class="fs-4 fw-bold mono text-danger">{{ total_kurang }}</div></div></div></div>
-    <div class="col-6 col-md-3"><div class="card h-100 border-primary"><div class="card-body text-center py-2">
+    <div class="col-4"><div class="card h-100 border-primary"><div class="card-body text-center py-2">
         <div class="small text-muted">Eksemplar Lebih</div><div class="fs-4 fw-bold mono text-primary">{{ total_lebih }}</div></div></div></div>
 </div>
 
@@ -62,7 +60,7 @@
                 <th>Kecamatan</th>
                 <th style="min-width: 280px;">Buku Kurang</th>
                 <th style="min-width: 280px;">Buku Lebih / Di Luar Pesanan</th>
-                <th>Dilaporkan</th>
+                <th>Terakhir Dikirim</th>
                 <th></th>
             </tr>
         </thead>
@@ -96,7 +94,7 @@
                     {% endfor %}
                     {% else %}<span class="text-muted">-</span>{% endif %}
                 </td>
-                <td class="small text-nowrap">{{ l.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                <td class="small text-nowrap">{{ l.updated_at.strftime('%d-%m-%Y %H:%M') }}</td>
                 <td>
                     <form method="POST" action="{{ url_for('laporan_kurang_hapus', laporan_id=l.id) }}"
                           onsubmit="return confirm('Hapus laporan untuk perpustakaan ini?');">
@@ -111,5 +109,5 @@
         </tbody>
     </table>
 </div>
-<small class="text-muted">Satu perpustakaan bisa punya lebih dari satu laporan kalau dikirim berulang. Tiap laporan tampil sebagai baris sendiri, dan angka ringkasan di atas mengikuti hasil pencarian.</small>
+<small class="text-muted">Satu perpustakaan hanya punya satu laporan. Kiriman berikutnya untuk perpustakaan yang sama otomatis dijumlahkan ke laporan ini. Angka ringkasan di atas mengikuti hasil pencarian.</small>
 {% endblock %}

@@ -218,7 +218,9 @@
             const hasil = await res.json().catch(function () { return {}; });
             if (res.ok && hasil.success) {
                 resetForm();
-                tampilPesan('success', '✅ Laporan terkirim, terima kasih. Form sudah dikosongkan kalau mau mengisi untuk perpustakaan lain.');
+                tampilPesan('success', hasil.digabung
+                    ? '✅ Laporan terkirim dan sudah dijumlahkan ke laporan sebelumnya untuk perpustakaan ini. Form dikosongkan kalau mau mengisi perpustakaan lain.'
+                    : '✅ Laporan terkirim, terima kasih. Form dikosongkan kalau mau mengisi perpustakaan lain.');
             } else {
                 tampilPesan('danger', hasil.message || 'Gagal mengirim laporan. Coba lagi.');
             }

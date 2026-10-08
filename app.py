@@ -6520,12 +6520,23 @@ def laporan_kurang_kirim(token):
         if len(cur.fetchall()) != len(semua_buku_id):
             return jsonify({'success': False, 'message': 'Ada judul buku yang tidak ditemukan.'}), 400
 
-        cur.execute("INSERT INTO laporan_buku_kurang (tujuan_id) VALUES (%s) RETURNING id", (tujuan_id,))
-        laporan_id = cur.fetchone()['id']
+        cur.execute(
+            """INSERT INTO laporan_buku_kurang (tujuan_id) VALUES (%s)
+               ON CONFLICT (tujuan_id)
+               DO UPDATE SET updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+               RETURNING id, (xmax = 0) AS baru""",
+            (tujuan_id,)
+        )
+        baris_laporan = cur.fetchone()
+        laporan_id = baris_laporan['id']
+        digabung = not baris_laporan['baru']
         for jenis, daftar in (('kurang', kurang), ('lebih', lebih)):
             for buku_id, jumlah in daftar.items():
                 cur.execute(
-                    "INSERT INTO laporan_buku_kurang_item (laporan_id, buku_id, jenis, jumlah) VALUES (%s, %s, %s, %s)",
+                    """INSERT INTO laporan_buku_kurang_item (laporan_id, buku_id, jenis, jumlah)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (laporan_id, buku_id, jenis)
+                       DO UPDATE SET jumlah = laporan_buku_kurang_item.jumlah + EXCLUDED.jumlah""",
                     (laporan_id, buku_id, jenis, jumlah)
                 )
         conn.commit()
@@ -6536,7 +6547,7 @@ def laporan_kurang_kirim(token):
     finally:
         conn.close()
 
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'digabung': digabung})
 
 
 @app.route('/admin/laporan-buku-kurang')
@@ -6550,7 +6561,7 @@ def laporan_kurang_admin():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    query = """SELECT l.id, l.tujuan_id, l.created_at,
+    query = """SELECT l.id, l.tujuan_id, l.created_at, l.updated_at,
                       t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box
                FROM laporan_buku_kurang l
                JOIN tujuan t ON t.id = l.tujuan_id
