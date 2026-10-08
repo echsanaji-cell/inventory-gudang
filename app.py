@@ -6637,5 +6637,136 @@ def laporan_kurang_hapus(laporan_id):
     flash('Laporan berhasil dihapus.', 'success')
     return redirect(url_for('laporan_kurang_admin'))
 
+
+
+@app.route('/laporan-kurang/<token>/laporan-ada')
+def laporan_kurang_laporan_ada(token):
+    """Dipakai form publik: tampilkan laporan yang sudah ada untuk perpustakaan terpilih."""
+    if not _token_laporan_valid(token):
+        abort(404)
+    try:
+        tujuan_id = _id_valid(request.args.get('tujuan_id'))
+    except (TypeError, ValueError):
+        return jsonify({'ada': False})
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, updated_at FROM laporan_buku_kurang WHERE tujuan_id = %s", (tujuan_id,))
+    laporan = cur.fetchone()
+    if not laporan:
+        cur.close()
+        conn.close()
+        return jsonify({'ada': False})
+
+    cur.execute(
+        """SELECT i.jenis, i.jumlah, b.judul
+           FROM laporan_buku_kurang_item i
+           JOIN buku b ON b.id = i.buku_id
+           WHERE i.laporan_id = %s
+           ORDER BY b.judul ASC""",
+        (laporan['id'],)
+    )
+    item = {'kurang': [], 'lebih': []}
+    for r in cur.fetchall():
+        item[r['jenis']].append({'judul': r['judul'], 'jumlah': r['jumlah']})
+    cur.close()
+    conn.close()
+
+    respons = jsonify({
+        'ada': True,
+        'updated_at': laporan['updated_at'].strftime('%d-%m-%Y %H:%M'),
+        'kurang': item['kurang'],
+        'lebih': item['lebih']
+    })
+    respons.headers['Cache-Control'] = 'no-store'
+    return respons
+
+
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def laporan_kurang_edit(laporan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT l.id, t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box
+           FROM laporan_buku_kurang l
+           JOIN tujuan t ON t.id = l.tujuan_id
+           WHERE l.id = %s""",
+        (laporan_id,)
+    )
+    laporan = cur.fetchone()
+    if not laporan:
+        cur.close()
+        conn.close()
+        flash('Laporan tidak ditemukan.', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    cur.execute(
+        """SELECT i.id, i.jenis, i.jumlah, b.judul, b.isbn
+           FROM laporan_buku_kurang_item i
+           JOIN buku b ON b.id = i.buku_id
+           WHERE i.laporan_id = %s
+           ORDER BY b.judul ASC""",
+        (laporan_id,)
+    )
+    daftar_item = cur.fetchall()
+
+    if request.method == 'POST':
+        hapus_ids = []
+        perubahan = []
+        for it in daftar_item:
+            if request.form.get(f'hapus_{it["id"]}'):
+                hapus_ids.append(it['id'])
+                continue
+            try:
+                jumlah_baru = int(request.form.get(f'jumlah_{it["id"]}', ''))
+            except ValueError:
+                jumlah_baru = 0
+            if not 1 <= jumlah_baru <= 9999:
+                cur.close()
+                conn.close()
+                flash(f'Jumlah untuk "{it["judul"]}" harus angka 1-9999.', 'danger')
+                return redirect(url_for('laporan_kurang_edit', laporan_id=laporan_id))
+            if jumlah_baru != it['jumlah']:
+                perubahan.append((jumlah_baru, it['id']))
+
+        for jumlah_baru, item_id in perubahan:
+            cur.execute(
+                "UPDATE laporan_buku_kurang_item SET jumlah = %s WHERE id = %s AND laporan_id = %s",
+                (jumlah_baru, item_id, laporan_id)
+            )
+        if hapus_ids:
+            cur.execute(
+                "DELETE FROM laporan_buku_kurang_item WHERE id = ANY(%s) AND laporan_id = %s",
+                (hapus_ids, laporan_id)
+            )
+
+        laporan_ikut_dihapus = len(hapus_ids) == len(daftar_item)
+        if laporan_ikut_dihapus:
+            cur.execute("DELETE FROM laporan_buku_kurang WHERE id = %s", (laporan_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        catat_aktivitas(
+            'Mengedit Laporan Buku Kurang',
+            f'Laporan "{laporan["nama"]}": {len(perubahan)} jumlah diubah, {len(hapus_ids)} judul dihapus'
+        )
+        if laporan_ikut_dihapus:
+            flash('Semua judul dihapus, jadi laporan perpustakaan ini ikut dihapus.', 'success')
+        else:
+            flash('Laporan berhasil diperbarui.', 'success')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    cur.close()
+    conn.close()
+    return render_template(
+        'admin/laporan_buku_kurang_edit.html',
+        laporan=laporan,
+        kurang=[i for i in daftar_item if i['jenis'] == 'kurang'],
+        lebih=[i for i in daftar_item if i['jenis'] == 'lebih']
+    )
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

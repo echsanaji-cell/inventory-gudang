@@ -19,6 +19,7 @@
                 <div class="col-md-4"><span class="text-muted">Kabupaten/Kota</span><div class="fw-semibold" id="info-kabupaten"></div></div>
                 <div class="col-md-4"><span class="text-muted">Kecamatan</span><div class="fw-semibold" id="info-kecamatan"></div></div>
             </div>
+            <div id="laporan-ada" class="alert alert-warning small d-none mt-3 mb-0"></div>
         </div>
     </div>
 
@@ -105,6 +106,59 @@
         });
     }
 
+    // Laporan yang sudah ada untuk perpustakaan terpilih
+    const kotakAda = document.getElementById('laporan-ada');
+    let sudahAdaLaporan = false;
+
+    function sembunyikanLaporanAda() {
+        sudahAdaLaporan = false;
+        kotakAda.classList.add('d-none');
+        kotakAda.replaceChildren();
+    }
+
+    function buatDaftar(judulBagian, daftar) {
+        const bagian = document.createElement('div');
+        bagian.className = 'mt-2';
+        const judul = document.createElement('div');
+        judul.className = 'fw-semibold';
+        judul.textContent = judulBagian;
+        bagian.appendChild(judul);
+        if (daftar.length === 0) {
+            const kosong = document.createElement('div');
+            kosong.className = 'text-muted';
+            kosong.textContent = '-';
+            bagian.appendChild(kosong);
+        }
+        daftar.forEach(function (i) {
+            const baris = document.createElement('div');
+            baris.textContent = '• ' + i.judul + ' — ' + i.jumlah + ' eks';
+            bagian.appendChild(baris);
+        });
+        return bagian;
+    }
+
+    async function cekLaporanAda(idTujuan) {
+        try {
+            const res = await fetch(BASE + '/laporan-ada?tujuan_id=' + encodeURIComponent(idTujuan));
+            if (!res.ok) return;
+            const data = await res.json();
+            if (tujuanDipilih !== idTujuan || !data.ada) return; // pilihan sudah berganti, atau belum ada laporan
+            kotakAda.replaceChildren();
+            const kepala = document.createElement('div');
+            kepala.className = 'fw-semibold';
+            kepala.textContent = '⚠️ Perpustakaan ini sudah punya laporan (terakhir dikirim ' + data.updated_at + ').';
+            kotakAda.appendChild(kepala);
+            kotakAda.appendChild(buatDaftar('Buku kurang:', data.kurang));
+            kotakAda.appendChild(buatDaftar('Buku lebih / di luar pesanan:', data.lebih));
+            const catatan = document.createElement('div');
+            catatan.className = 'mt-2';
+            catatan.textContent = 'Kiriman baru akan DITAMBAHKAN ke angka di atas. Kalau datanya sama, tidak perlu dikirim lagi.';
+            kotakAda.appendChild(catatan);
+            sudahAdaLaporan = true;
+            kotakAda.classList.remove('d-none');
+        } catch (e) { /* info tambahan saja, abaikan kalau gagal */ }
+    }
+
     // Perpustakaan
     const inputTujuan = document.getElementById('input-tujuan');
     const infoTujuan = document.getElementById('info-tujuan');
@@ -121,8 +175,9 @@
             document.getElementById('info-kabupaten').textContent = t.kabupaten_kota || '-';
             document.getElementById('info-kecamatan').textContent = t.kecamatan || '-';
             infoTujuan.classList.remove('d-none');
+            cekLaporanAda(t.id);
         },
-        function () { tujuanDipilih = null; infoTujuan.classList.add('d-none'); }
+        function () { tujuanDipilih = null; infoTujuan.classList.add('d-none'); sembunyikanLaporanAda(); }
     );
 
     // Baris judul buku (kurang / lebih)
@@ -177,6 +232,7 @@
         inputTujuan.value = '';
         tujuanDipilih = null;
         infoTujuan.classList.add('d-none');
+        sembunyikanLaporanAda();
         ['kurang', 'lebih'].forEach(function (j) {
             document.getElementById('daftar-' + j).replaceChildren();
             tambahBaris(j);
@@ -201,6 +257,10 @@
         }
         if (kurang.length === 0 && lebih.length === 0) {
             tampilPesan('danger', 'Isi minimal satu judul buku kurang atau lebih.');
+            return;
+        }
+
+        if (sudahAdaLaporan && !confirm('Perpustakaan ini sudah punya laporan. Kiriman ini akan DITAMBAHKAN ke angka yang sudah ada. Lanjut kirim?')) {
             return;
         }
 

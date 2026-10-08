@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Edit Laporan - {{ laporan.nama }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('laporan_kurang_admin') }}">Laporan Buku Kurang</a></li>
+        <li class="breadcrumb-item active">Edit</li>
+    </ol>
+</nav>
+
+<h4 class="mb-1">
+    ✏️ {{ laporan.nama }}
+    {% if laporan.no_box is not none %}<span class="text-muted fs-6">(Box {{ laporan.no_box }})</span>{% endif %}
+</h4>
+<p class="text-muted">{{ laporan.kecamatan or '-' }}, {{ laporan.kabupaten_kota or '-' }}, {{ laporan.provinsi or '-' }}</p>
+
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% for nama_bagian, daftar, warna in [('📕 Buku Kurang', kurang, 'danger'), ('📘 Buku Lebih / Di Luar Pesanan', lebih, 'primary')] %}
+    <div class="card mb-3">
+        <div class="card-header bg-{{ warna }} bg-opacity-10"><strong>{{ nama_bagian }}</strong></div>
+        <div class="card-body p-0">
+            <table class="table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Judul</th>
+                        <th style="width: 140px;">Jumlah (eks)</th>
+                        <th style="width: 90px;" class="text-center">Hapus</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in daftar %}
+                    <tr>
+                        <td>{{ i.judul }} <span class="text-muted small mono">{{ i.isbn }}</span></td>
+                        <td>
+                            <input type="number" name="jumlah_{{ i.id }}" value="{{ i.jumlah }}" min="1" max="9999" class="form-control form-control-sm">
+                        </td>
+                        <td class="text-center">
+                            <input type="checkbox" name="hapus_{{ i.id }}" value="1" class="form-check-input"
+                                   onchange="this.closest('tr').classList.toggle('table-danger', this.checked)">
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-center text-muted">Tidak ada.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+    <a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary">Batal</a>
+    <div class="small text-muted mt-2">Kalau semua judul dicentang hapus, laporan perpustakaan ini ikut terhapus. Mengubah jumlah tidak mengubah tanggal "Terakhir Dikirim".</div>
+</form>
+{% endblock %}

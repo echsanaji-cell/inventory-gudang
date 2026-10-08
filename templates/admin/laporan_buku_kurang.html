@@ -95,9 +95,10 @@
                     {% else %}<span class="text-muted">-</span>{% endif %}
                 </td>
                 <td class="small text-nowrap">{{ l.updated_at.strftime('%d-%m-%Y %H:%M') }}</td>
-                <td>
-                    <form method="POST" action="{{ url_for('laporan_kurang_hapus', laporan_id=l.id) }}"
-                          onsubmit="return confirm('Hapus laporan untuk perpustakaan ini?');">
+                <td class="text-nowrap">
+                    <a href="{{ url_for('laporan_kurang_edit', laporan_id=l.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                    <form method="POST" action="{{ url_for('laporan_kurang_hapus', laporan_id=l.id) }}" class="d-inline"
+                          onsubmit="return confirm('Hapus SELURUH laporan untuk perpustakaan ini?');">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
                     </form>
