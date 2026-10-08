@@ -27,7 +27,7 @@ import base64
 import pyotp
 import qrcode
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from db import get_db_connection
@@ -53,6 +53,7 @@ def tambah_security_headers(response):
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 from flask_wtf import CSRFProtect
+from flask_wtf.csrf import generate_csrf
 from datetime import timedelta
 
 csrf = CSRFProtect(app)
@@ -6393,6 +6394,237 @@ def buku_detail_distribusi(buku_id):
         ringkasan_area=ringkasan_area,
         restriksi_user=restriksi_user
     )
+
+# ------------------ LAPORAN BUKU KURANG / LEBIH (FORM PUBLIK + REKAP ADMIN) ------------------
+def _token_laporan_valid(token):
+    """Halaman publik hanya aktif kalau LAPORAN_PUBLIK_TOKEN diisi di server, dan token di URL cocok."""
+    token_benar = os.environ.get('LAPORAN_PUBLIK_TOKEN', '')
+    if not token_benar:
+        return False
+    return hmac.compare_digest(token.encode('utf-8'), token_benar.encode('utf-8'))
+
+
+def _id_valid(nilai):
+    angka = int(nilai)
+    if not 1 <= angka <= 2147483647:
+        raise ValueError('id di luar rentang')
+    return angka
+
+
+def _rapikan_item_laporan(daftar):
+    """Validasi daftar [{buku_id, jumlah}], gabungkan baris yang bukunya sama."""
+    if not isinstance(daftar, list) or len(daftar) > 50:
+        raise ValueError('daftar tidak valid')
+    hasil = {}
+    for item in daftar:
+        if not isinstance(item, dict):
+            raise ValueError('item tidak valid')
+        buku_id = _id_valid(item.get('buku_id'))
+        jumlah = int(item.get('jumlah'))
+        if not 1 <= jumlah <= 9999:
+            raise ValueError('jumlah di luar rentang')
+        hasil[buku_id] = hasil.get(buku_id, 0) + jumlah
+    return hasil
+
+
+@app.route('/laporan-kurang/<token>')
+def laporan_kurang_publik(token):
+    if not _token_laporan_valid(token):
+        abort(404)
+    return render_template('laporan_kurang_publik.html', token=token)
+
+
+@app.route('/laporan-kurang/<token>/csrf')
+def laporan_kurang_csrf(token):
+    if not _token_laporan_valid(token):
+        abort(404)
+    respons = jsonify({'token': generate_csrf()})
+    respons.headers['Cache-Control'] = 'no-store'
+    return respons
+
+
+@app.route('/laporan-kurang/<token>/cari-tujuan')
+def laporan_kurang_cari_tujuan(token):
+    if not _token_laporan_valid(token):
+        abort(404)
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, nama, provinsi, kabupaten_kota, kecamatan, desa_kelurahan, no_box
+           FROM tujuan
+           WHERE nama ILIKE %s
+           ORDER BY nama ASC, provinsi ASC, kabupaten_kota ASC
+           LIMIT 15""",
+        (f'%{q}%',)
+    )
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([dict(r) for r in hasil])
+
+
+@app.route('/laporan-kurang/<token>/cari-buku')
+def laporan_kurang_cari_buku(token):
+    if not _token_laporan_valid(token):
+        abort(404)
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, isbn, judul, penerbit
+           FROM buku
+           WHERE judul ILIKE %s OR isbn ILIKE %s
+           ORDER BY judul ASC
+           LIMIT 15""",
+        (f'%{q}%', f'%{q}%')
+    )
+    hasil = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([dict(r) for r in hasil])
+
+
+@app.route('/laporan-kurang/<token>/kirim', methods=['POST'])
+def laporan_kurang_kirim(token):
+    if not _token_laporan_valid(token):
+        abort(404)
+
+    data = request.get_json(silent=True) or {}
+    try:
+        tujuan_id = _id_valid(data.get('tujuan_id'))
+        kurang = _rapikan_item_laporan(data.get('kurang', []))
+        lebih = _rapikan_item_laporan(data.get('lebih', []))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Data tidak valid. Pastikan perpustakaan dan judul buku dipilih dari daftar suggestion, dan jumlah berupa angka 1-9999.'}), 400
+
+    if not kurang and not lebih:
+        return jsonify({'success': False, 'message': 'Isi minimal satu judul buku kurang atau lebih.'}), 400
+
+    semua_buku_id = list(set(kurang) | set(lebih))
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM tujuan WHERE id = %s", (tujuan_id,))
+        if not cur.fetchone():
+            return jsonify({'success': False, 'message': 'Perpustakaan tidak ditemukan.'}), 400
+
+        cur.execute("SELECT id FROM buku WHERE id = ANY(%s)", (semua_buku_id,))
+        if len(cur.fetchall()) != len(semua_buku_id):
+            return jsonify({'success': False, 'message': 'Ada judul buku yang tidak ditemukan.'}), 400
+
+        cur.execute("INSERT INTO laporan_buku_kurang (tujuan_id) VALUES (%s) RETURNING id", (tujuan_id,))
+        laporan_id = cur.fetchone()['id']
+        for jenis, daftar in (('kurang', kurang), ('lebih', lebih)):
+            for buku_id, jumlah in daftar.items():
+                cur.execute(
+                    "INSERT INTO laporan_buku_kurang_item (laporan_id, buku_id, jenis, jumlah) VALUES (%s, %s, %s, %s)",
+                    (laporan_id, buku_id, jenis, jumlah)
+                )
+        conn.commit()
+        cur.close()
+    except Exception:
+        conn.rollback()
+        return jsonify({'success': False, 'message': 'Gagal menyimpan laporan. Coba lagi sebentar lagi.'}), 500
+    finally:
+        conn.close()
+
+    return jsonify({'success': True})
+
+
+@app.route('/admin/laporan-buku-kurang')
+@login_required
+@admin_required
+def laporan_kurang_admin():
+    search = request.args.get('search', '').strip()
+    token_publik = os.environ.get('LAPORAN_PUBLIK_TOKEN', '')
+    link_path = url_for('laporan_kurang_publik', token=token_publik) if token_publik else None
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """SELECT l.id, l.tujuan_id, l.created_at,
+                      t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box
+               FROM laporan_buku_kurang l
+               JOIN tujuan t ON t.id = l.tujuan_id
+               WHERE 1=1"""
+    params = []
+    if search:
+        query += " AND (t.nama ILIKE %s OR t.kecamatan ILIKE %s OR t.kabupaten_kota ILIKE %s OR t.provinsi ILIKE %s)"
+        params += [f'%{search}%'] * 4
+    query += " ORDER BY t.nama ASC, l.created_at DESC"
+
+    cur.execute(query, tuple(params))
+    daftar_laporan = [dict(r) for r in cur.fetchall()]
+
+    item_per_laporan = {}
+    if daftar_laporan:
+        cur.execute(
+            """SELECT i.laporan_id, i.jenis, i.jumlah, b.judul, b.isbn
+               FROM laporan_buku_kurang_item i
+               JOIN buku b ON b.id = i.buku_id
+               WHERE i.laporan_id = ANY(%s)
+               ORDER BY b.judul ASC""",
+            ([l['id'] for l in daftar_laporan],)
+        )
+        for r in cur.fetchall():
+            item_per_laporan.setdefault(r['laporan_id'], {'kurang': [], 'lebih': []})[r['jenis']].append(r)
+
+    cur.close()
+    conn.close()
+
+    total_kurang = 0
+    total_lebih = 0
+    for l in daftar_laporan:
+        item = item_per_laporan.get(l['id'], {'kurang': [], 'lebih': []})
+        l['kurang'] = item['kurang']
+        l['lebih'] = item['lebih']
+        total_kurang += sum(i['jumlah'] for i in l['kurang'])
+        total_lebih += sum(i['jumlah'] for i in l['lebih'])
+
+    return render_template(
+        'admin/laporan_buku_kurang.html',
+        daftar_laporan=daftar_laporan, search=search, link_path=link_path,
+        total_laporan=len(daftar_laporan),
+        total_perpustakaan=len({l['tujuan_id'] for l in daftar_laporan}),
+        total_kurang=total_kurang, total_lebih=total_lebih
+    )
+
+
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/hapus', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_hapus(laporan_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.nama FROM laporan_buku_kurang l
+           JOIN tujuan t ON t.id = l.tujuan_id WHERE l.id = %s""",
+        (laporan_id,)
+    )
+    baris = cur.fetchone()
+
+    if not baris:
+        cur.close()
+        conn.close()
+        flash('Laporan tidak ditemukan.', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    cur.execute("DELETE FROM laporan_buku_kurang WHERE id = %s", (laporan_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Menghapus Laporan Buku Kurang', f'Laporan untuk "{baris["nama"]}" dihapus')
+    flash('Laporan berhasil dihapus.', 'success')
+    return redirect(url_for('laporan_kurang_admin'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Laporan Buku Kurang{% endblock %}
+{% block content %}
+<h4 class="mb-1">📋 Laporan Buku Kurang / Lebih</h4>
+<p class="text-muted mb-3">Rekap laporan yang masuk lewat form publik, per perpustakaan.</p>
+
+{% if link_path %}
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="small text-muted mb-1">Link form publik. Bagikan ke yang akan mengisi, jangan dipasang di tempat umum:</div>
+        <div class="input-group input-group-sm">
+            <input type="text" id="link-publik" class="form-control mono" readonly>
+            <button class="btn btn-outline-secondary" type="button" id="salin-link">Salin</button>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    const input = document.getElementById('link-publik');
+    input.value = window.location.origin + {{ link_path|tojson }};
+    document.getElementById('salin-link').addEventListener('click', async function () {
+        try { await navigator.clipboard.writeText(input.value); }
+        catch (e) { input.select(); document.execCommand('copy'); }
+        this.textContent = 'Tersalin ✓';
+        setTimeout(() => { this.textContent = 'Salin'; }, 2000);
+    });
+})();
+</script>
+{% else %}
+<div class="alert alert-warning small">Form publik belum aktif: <code>LAPORAN_PUBLIK_TOKEN</code> belum diisi di server (file <code>.env</code>).</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body text-center py-2">
+        <div class="small text-muted">Laporan</div><div class="fs-4 fw-bold mono">{{ total_laporan }}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body text-center py-2">
+        <div class="small text-muted">Perpustakaan</div><div class="fs-4 fw-bold mono">{{ total_perpustakaan }}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100 border-danger"><div class="card-body text-center py-2">
+        <div class="small text-muted">Eksemplar Kurang</div><div class="fs-4 fw-bold mono text-danger">{{ total_kurang }}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100 border-primary"><div class="card-body text-center py-2">
+        <div class="small text-muted">Eksemplar Lebih</div><div class="fs-4 fw-bold mono text-primary">{{ total_lebih }}</div></div></div></div>
+</div>
+
+<form method="GET" class="mb-2">
+    <div class="row g-2">
+        <div class="col-md-10">
+            <input type="text" name="search" class="form-control" placeholder="Cari nama perpustakaan, kecamatan, kabupaten, atau provinsi..." value="{{ search }}">
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-sm table-hover align-top">
+        <thead>
+            <tr>
+                <th>Perpustakaan</th>
+                <th>Provinsi</th>
+                <th>Kabupaten/Kota</th>
+                <th>Kecamatan</th>
+                <th>Buku Kurang</th>
+                <th>Buku Lebih / Di Luar Pesanan</th>
+                <th>Dilaporkan</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in daftar_laporan %}
+            <tr>
+                <td>
+                    {{ l.nama }}
+                    {% if l.no_box is not none %}<span class="text-muted small">(Box {{ l.no_box }})</span>{% endif %}
+                </td>
+                <td class="small">{{ l.provinsi or '-' }}</td>
+                <td class="small">{{ l.kabupaten_kota or '-' }}</td>
+                <td class="small">{{ l.kecamatan or '-' }}</td>
+                <td>
+                    {% if l.kurang %}
+                    <ul class="list-unstyled mb-0 small">
+                        {% for i in l.kurang %}<li>{{ i.judul }} <span class="badge bg-danger">{{ i.jumlah }}</span></li>{% endfor %}
+                    </ul>
+                    {% else %}<span class="text-muted">-</span>{% endif %}
+                </td>
+                <td>
+                    {% if l.lebih %}
+                    <ul class="list-unstyled mb-0 small">
+                        {% for i in l.lebih %}<li>{{ i.judul }} <span class="badge bg-primary">{{ i.jumlah }}</span></li>{% endfor %}
+                    </ul>
+                    {% else %}<span class="text-muted">-</span>{% endif %}
+                </td>
+                <td class="small text-nowrap">{{ l.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('laporan_kurang_hapus', laporan_id=l.id) }}"
+                          onsubmit="return confirm('Hapus laporan untuk perpustakaan ini?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted">Belum ada laporan.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<small class="text-muted">Satu perpustakaan bisa punya lebih dari satu laporan kalau dikirim berulang. Tiap laporan tampil sebagai baris sendiri, dan angka ringkasan di atas mengikuti hasil pencarian.</small>
+{% endblock %}

@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Laporan Buku Kurang{% endblock %}
+{% block content %}
+<div class="mx-auto" style="max-width: 760px;">
+    <h4 class="mb-1">📋 Laporan Buku Kurang / Lebih</h4>
+    <p class="text-muted small mb-3">Isi form ini untuk melaporkan buku yang kurang, atau buku yang ikut terkirim tapi bukan bagian dari pesanan.</p>
+
+    <div id="pesan" class="alert d-none" role="alert"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <label class="form-label fw-semibold" for="input-tujuan">Nama Perpustakaan *</label>
+            <div class="position-relative">
+                <input type="text" id="input-tujuan" class="form-control" placeholder="Ketik nama perpustakaan..." autocomplete="off">
+                <div id="saran-tujuan" class="list-group position-absolute w-100 shadow-sm" style="z-index:1000; display:none; max-height:260px; overflow-y:auto;"></div>
+            </div>
+            <div id="info-tujuan" class="row g-2 mt-1 small d-none">
+                <div class="col-md-4"><span class="text-muted">Provinsi</span><div class="fw-semibold" id="info-provinsi"></div></div>
+                <div class="col-md-4"><span class="text-muted">Kabupaten/Kota</span><div class="fw-semibold" id="info-kabupaten"></div></div>
+                <div class="col-md-4"><span class="text-muted">Kecamatan</span><div class="fw-semibold" id="info-kecamatan"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header bg-danger bg-opacity-10"><strong>📕 Judul Buku Kurang</strong></div>
+        <div class="card-body">
+            <div class="row g-2 small text-muted mb-1">
+                <div class="col-8 col-md-9">Judul buku</div>
+                <div class="col-3 col-md-2">Jumlah (eks)</div>
+            </div>
+            <div id="daftar-kurang"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-tambah="kurang">+ Tambah judul</button>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header bg-primary bg-opacity-10"><strong>📘 Judul Buku Lebih / Di Luar Pesanan</strong></div>
+        <div class="card-body">
+            <div class="row g-2 small text-muted mb-1">
+                <div class="col-8 col-md-9">Judul buku</div>
+                <div class="col-3 col-md-2">Jumlah (eks)</div>
+            </div>
+            <div id="daftar-lebih"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-tambah="lebih">+ Tambah judul</button>
+        </div>
+    </div>
+
+    <div class="d-grid mb-5">
+        <button type="button" class="btn btn-primary btn-lg" id="tombol-kirim">Kirim Laporan</button>
+    </div>
+</div>
+
+<script>
+(function () {
+    const BASE = {{ url_for('laporan_kurang_publik', token=token)|tojson }};
+    let tujuanDipilih = null;
+
+    const elPesan = document.getElementById('pesan');
+    function tampilPesan(jenis, teks) {
+        if (!teks) { elPesan.classList.add('d-none'); return; }
+        elPesan.className = 'alert alert-' + jenis;
+        elPesan.textContent = teks;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Kotak suggestion yang dipakai ulang untuk perpustakaan dan judul buku.
+    function pasangSuggestion(input, kotak, endpoint, labelFn, onPilih, onReset) {
+        let waktu = null;
+        const tutup = function () { kotak.style.display = 'none'; kotak.replaceChildren(); };
+
+        input.addEventListener('input', function () {
+            onReset();
+            clearTimeout(waktu);
+            const q = input.value.trim();
+            if (q.length < 2) { tutup(); return; }
+            waktu = setTimeout(async function () {
+                try {
+                    const res = await fetch(BASE + endpoint + '?q=' + encodeURIComponent(q));
+                    if (!res.ok) throw new Error('gagal');
+                    const hasil = await res.json();
+                    if (input.value.trim() !== q) return; // ketikan sudah berubah
+                    kotak.replaceChildren();
+                    if (hasil.length === 0) {
+                        const kosong = document.createElement('div');
+                        kosong.className = 'list-group-item text-muted small';
+                        kosong.textContent = 'Tidak ditemukan.';
+                        kotak.appendChild(kosong);
+                    }
+                    hasil.forEach(function (item) {
+                        const tombol = document.createElement('button');
+                        tombol.type = 'button';
+                        tombol.className = 'list-group-item list-group-item-action small';
+                        tombol.textContent = labelFn(item);
+                        tombol.addEventListener('click', function () { onPilih(item); tutup(); });
+                        kotak.appendChild(tombol);
+                    });
+                    kotak.style.display = 'block';
+                } catch (e) { tutup(); }
+            }, 250);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!input.contains(e.target) && !kotak.contains(e.target)) tutup();
+        });
+    }
+
+    // Perpustakaan
+    const inputTujuan = document.getElementById('input-tujuan');
+    const infoTujuan = document.getElementById('info-tujuan');
+    pasangSuggestion(
+        inputTujuan, document.getElementById('saran-tujuan'), '/cari-tujuan',
+        function (t) {
+            const lokasi = [t.kecamatan, t.kabupaten_kota, t.provinsi].filter(Boolean).join(', ');
+            return t.nama + (lokasi ? ' — ' + lokasi : '') + (t.no_box != null ? ' (Box ' + t.no_box + ')' : '');
+        },
+        function (t) {
+            tujuanDipilih = t.id;
+            inputTujuan.value = t.nama;
+            document.getElementById('info-provinsi').textContent = t.provinsi || '-';
+            document.getElementById('info-kabupaten').textContent = t.kabupaten_kota || '-';
+            document.getElementById('info-kecamatan').textContent = t.kecamatan || '-';
+            infoTujuan.classList.remove('d-none');
+        },
+        function () { tujuanDipilih = null; infoTujuan.classList.add('d-none'); }
+    );
+
+    // Baris judul buku (kurang / lebih)
+    function tambahBaris(jenis) {
+        const wadah = document.getElementById('daftar-' + jenis);
+        const baris = document.createElement('div');
+        baris.className = 'row g-2 mb-2 baris-buku';
+        baris.innerHTML =
+            '<div class="col-8 col-md-9 position-relative">' +
+                '<input type="text" class="form-control input-judul" placeholder="Ketik judul buku..." autocomplete="off">' +
+                '<div class="list-group position-absolute w-100 shadow-sm saran" style="z-index:1000; display:none; max-height:260px; overflow-y:auto;"></div>' +
+            '</div>' +
+            '<div class="col-3 col-md-2"><input type="number" class="form-control input-jumlah" min="1" max="9999" value="1"></div>' +
+            '<div class="col-1"><button type="button" class="btn btn-outline-danger w-100 px-0 hapus-baris" title="Hapus baris">✕</button></div>';
+        wadah.appendChild(baris);
+
+        const input = baris.querySelector('.input-judul');
+        pasangSuggestion(
+            input, baris.querySelector('.saran'), '/cari-buku',
+            function (b) { return b.judul + (b.penerbit ? ' — ' + b.penerbit : '') + ' (' + b.isbn + ')'; },
+            function (b) { baris.dataset.bukuId = b.id; input.value = b.judul; },
+            function () { delete baris.dataset.bukuId; }
+        );
+        baris.querySelector('.hapus-baris').addEventListener('click', function () {
+            baris.remove();
+            if (wadah.children.length === 0) tambahBaris(jenis);
+        });
+    }
+
+    document.querySelectorAll('[data-tambah]').forEach(function (tombol) {
+        tombol.addEventListener('click', function () { tambahBaris(tombol.dataset.tambah); });
+    });
+
+    function kumpulkan(jenis) {
+        const hasil = [];
+        document.querySelectorAll('#daftar-' + jenis + ' .baris-buku').forEach(function (baris) {
+            const judul = baris.querySelector('.input-judul').value.trim();
+            if (!judul) return; // baris kosong diabaikan
+            if (!baris.dataset.bukuId) {
+                throw new Error('Judul "' + judul + '" belum dipilih dari daftar suggestion.');
+            }
+            const jumlah = parseInt(baris.querySelector('.input-jumlah').value, 10);
+            if (!(jumlah >= 1 && jumlah <= 9999)) {
+                throw new Error('Jumlah untuk "' + judul + '" harus angka 1-9999.');
+            }
+            hasil.push({ buku_id: parseInt(baris.dataset.bukuId, 10), jumlah: jumlah });
+        });
+        return hasil;
+    }
+
+    function resetForm() {
+        inputTujuan.value = '';
+        tujuanDipilih = null;
+        infoTujuan.classList.add('d-none');
+        ['kurang', 'lebih'].forEach(function (j) {
+            document.getElementById('daftar-' + j).replaceChildren();
+            tambahBaris(j);
+        });
+    }
+
+    const tombolKirim = document.getElementById('tombol-kirim');
+    tombolKirim.addEventListener('click', async function () {
+        tampilPesan(null);
+        if (!tujuanDipilih) {
+            tampilPesan('danger', 'Pilih nama perpustakaan dari daftar suggestion dulu.');
+            return;
+        }
+
+        let kurang, lebih;
+        try {
+            kurang = kumpulkan('kurang');
+            lebih = kumpulkan('lebih');
+        } catch (e) {
+            tampilPesan('danger', e.message);
+            return;
+        }
+        if (kurang.length === 0 && lebih.length === 0) {
+            tampilPesan('danger', 'Isi minimal satu judul buku kurang atau lebih.');
+            return;
+        }
+
+        tombolKirim.disabled = true;
+        tombolKirim.textContent = 'Mengirim...';
+        try {
+            // Ambil token CSRF baru tepat sebelum kirim, supaya form yang dibiarkan lama tidak kedaluwarsa.
+            const resToken = await fetch(BASE + '/csrf');
+            const dataToken = await resToken.json();
+            const res = await fetch(BASE + '/kirim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': dataToken.token },
+                body: JSON.stringify({ tujuan_id: tujuanDipilih, kurang: kurang, lebih: lebih })
+            });
+            const hasil = await res.json().catch(function () { return {}; });
+            if (res.ok && hasil.success) {
+                resetForm();
+                tampilPesan('success', '✅ Laporan terkirim, terima kasih. Form sudah dikosongkan kalau mau mengisi untuk perpustakaan lain.');
+            } else {
+                tampilPesan('danger', hasil.message || 'Gagal mengirim laporan. Coba lagi.');
+            }
+        } catch (e) {
+            tampilPesan('danger', 'Gagal terhubung ke server. Cek koneksi lalu coba lagi.');
+        } finally {
+            tombolKirim.disabled = false;
+            tombolKirim.textContent = 'Kirim Laporan';
+        }
+    });
+
+    tambahBaris('kurang');
+    tambahBaris('lebih');
+})();
+</script>
+{% endblock %}
