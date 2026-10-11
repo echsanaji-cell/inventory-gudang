@@ -42,32 +42,23 @@
 <div class="card mb-3">
     <div class="card-body py-2">
         <div class="d-flex justify-content-between small mb-1">
-            <strong>Progres Laporan</strong>
-            <span class="mono">{{ progres_total.sudah }} / {{ progres_total.total }} perpustakaan sudah melapor ({{ progres_total.persen }}%)</span>
+            <strong>Progres Tindak Lanjut</strong>
+            <span class="mono">{{ progres.selesai }} / {{ progres.total }} laporan selesai ({{ progres.persen }}%)</span>
         </div>
         <div class="progress mb-2" style="height: 14px;">
-            <div class="progress-bar" role="progressbar" style="width: {{ progres_total.persen }}%"></div>
+            <div class="progress-bar bg-success" style="width: {{ progres.persen }}%"></div>
         </div>
-        <div class="row g-2">
-            {% for a in progres_area %}
-            <div class="col-6 col-md-3">
-                <div class="small mb-1">
-                    {% if a.kode == 'RED' %}<span class="badge bg-danger">RED</span>
-                    {% elif a.kode == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
-                    {% elif a.kode == 'GREEN' %}<span class="badge bg-success">GREEN</span>
-                    {% else %}<span class="badge bg-secondary">Tanpa area</span>{% endif %}
-                    <span class="mono">{{ a.sudah }}/{{ a.total }} ({{ a.persen }}%)</span>
-                </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar {{ 'bg-danger' if a.kode == 'RED' else 'bg-warning' if a.kode == 'YELLOW' else 'bg-success' if a.kode == 'GREEN' else 'bg-secondary' }}" style="width: {{ a.persen }}%"></div>
-                </div>
-            </div>
-            {% endfor %}
+        <div class="d-flex gap-2 flex-wrap small">
+            <a href="{{ url_for('laporan_kurang_admin', search=search) }}" class="badge text-bg-light border text-decoration-none">Semua ({{ progres.total }})</a>
+            <a href="{{ url_for('laporan_kurang_admin', status='baru', search=search) }}" class="badge bg-danger text-decoration-none">Baru ({{ progres.baru }})</a>
+            <a href="{{ url_for('laporan_kurang_admin', status='diproses', search=search) }}" class="badge bg-warning text-dark text-decoration-none">Diproses ({{ progres.diproses }})</a>
+            <a href="{{ url_for('laporan_kurang_admin', status='selesai', search=search) }}" class="badge bg-success text-decoration-none">Selesai ({{ progres.selesai }})</a>
         </div>
     </div>
 </div>
 
 <form method="GET" class="mb-2">
+    <input type="hidden" name="status" value="{{ filter_status }}">
     <div class="row g-2">
         <div class="col-md-10">
             <input type="text" name="search" class="form-control" placeholder="Cari nama perpustakaan, kecamatan, kabupaten, atau provinsi..." value="{{ search }}">
@@ -89,6 +80,7 @@
                 <th>Kecamatan</th>
                 <th style="min-width: 280px;">Buku Kurang</th>
                 <th style="min-width: 280px;">Buku Lebih / Di Luar Pesanan</th>
+                <th style="min-width: 200px;">Tindak Lanjut</th>
                 <th>Terakhir Dikirim</th>
                 <th></th>
             </tr>
@@ -128,6 +120,20 @@
                     </div>
                     {% endfor %}
                     {% else %}<span class="text-muted">-</span>{% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('laporan_kurang_status', laporan_id=l.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="status" class="form-select form-select-sm mb-1 {{ 'border-danger' if l.status == 'baru' else 'border-warning' if l.status == 'diproses' else 'border-success' }}">
+                            {% for kode, label in status_label.items() %}
+                            <option value="{{ kode }}" {{ 'selected' if l.status == kode }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="catatan" maxlength="500" class="form-control form-control-sm mb-1"
+                               placeholder="Catatan (mis. dikirim 12/10)" value="{{ l.catatan_tindak_lanjut or '' }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Simpan</button>
+                        {% if l.status_updated_at %}<div class="text-muted" style="font-size:.7rem">Diubah {{ l.status_updated_at.strftime('%d-%m-%Y %H:%M') }}</div>{% endif %}
+                    </form>
                 </td>
                 <td class="small text-nowrap">{{ l.updated_at.strftime('%d-%m-%Y %H:%M') }}</td>
                 <td class="text-nowrap">

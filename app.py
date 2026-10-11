@@ -6523,7 +6523,9 @@ def laporan_kurang_kirim(token):
         cur.execute(
             """INSERT INTO laporan_buku_kurang (tujuan_id) VALUES (%s)
                ON CONFLICT (tujuan_id)
-               DO UPDATE SET updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+               DO UPDATE SET updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta'),
+                             status = CASE WHEN laporan_buku_kurang.status = 'selesai'
+                                           THEN 'baru' ELSE laporan_buku_kurang.status END
                RETURNING id, (xmax = 0) AS baru""",
             (tujuan_id,)
         )
@@ -6549,12 +6551,16 @@ def laporan_kurang_kirim(token):
 
     return jsonify({'success': True, 'digabung': digabung})
 
+STATUS_TINDAK_LANJUT = {'baru': 'Baru', 'diproses': 'Diproses', 'selesai': 'Selesai'}
 
 @app.route('/admin/laporan-buku-kurang')
 @login_required
 @admin_required
 def laporan_kurang_admin():
     search = request.args.get('search', '').strip()
+    filter_status = request.args.get('status', '').strip()
+    if filter_status not in STATUS_TINDAK_LANJUT:
+        filter_status = ''
     token_publik = os.environ.get('LAPORAN_PUBLIK_TOKEN', '')
     link_path = url_for('laporan_kurang_publik', token=token_publik) if token_publik else None
 
@@ -6562,6 +6568,7 @@ def laporan_kurang_admin():
     cur = conn.cursor()
 
     query = """SELECT l.id, l.tujuan_id, l.created_at, l.updated_at,
+                      l.status, l.catatan_tindak_lanjut, l.status_updated_at,
                       t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box, t.area
                FROM laporan_buku_kurang l
                JOIN tujuan t ON t.id = l.tujuan_id
@@ -6570,6 +6577,9 @@ def laporan_kurang_admin():
     if search:
         query += " AND (t.nama ILIKE %s OR t.kecamatan ILIKE %s OR t.kabupaten_kota ILIKE %s OR t.provinsi ILIKE %s)"
         params += [f'%{search}%'] * 4
+    if filter_status:
+        query += " AND l.status = %s"
+        params.append(filter_status)
     query += " ORDER BY t.nama ASC, l.created_at DESC"
 
     cur.execute(query, tuple(params))
@@ -6588,30 +6598,15 @@ def laporan_kurang_admin():
         for r in cur.fetchall():
             item_per_laporan.setdefault(r['laporan_id'], {'kurang': [], 'lebih': []})[r['jenis']].append(r)
 
-    cur.execute(
-        """SELECT UPPER(COALESCE(NULLIF(TRIM(t.area), ''), 'TANPA')) AS area,
-                  COUNT(*) AS total,
-                  COUNT(*) FILTER (WHERE EXISTS (
-                      SELECT 1 FROM laporan_buku_kurang l WHERE l.tujuan_id = t.id)) AS sudah
-           FROM tujuan t
-           GROUP BY 1"""
-    )
-    baris_progres = {r['area']: r for r in cur.fetchall()}
+    cur.execute("SELECT status, COUNT(*) AS jumlah FROM laporan_buku_kurang GROUP BY status")
+    hitung_status = {r['status']: r['jumlah'] for r in cur.fetchall()}
 
     cur.close()
     conn.close()
 
-    progres_area = []
-    progres_total = {'total': 0, 'sudah': 0}
-    for kode in ('RED', 'YELLOW', 'GREEN', 'TANPA'):
-        r = baris_progres.get(kode)
-        if not r:
-            continue
-        progres_total['total'] += r['total']
-        progres_total['sudah'] += r['sudah']
-        progres_area.append({'kode': kode, 'total': r['total'], 'sudah': r['sudah'],
-                             'persen': round(100 * r['sudah'] / r['total']) if r['total'] else 0})
-    progres_total['persen'] = round(100 * progres_total['sudah'] / progres_total['total']) if progres_total['total'] else 0
+    progres = {k: hitung_status.get(k, 0) for k in STATUS_TINDAK_LANJUT}
+    progres['total'] = sum(progres.values())
+    progres['persen'] = round(100 * progres['selesai'] / progres['total']) if progres['total'] else 0
 
     total_kurang = 0
     total_lebih = 0
@@ -6628,8 +6623,75 @@ def laporan_kurang_admin():
         total_laporan=len(daftar_laporan),
         total_perpustakaan=len({l['tujuan_id'] for l in daftar_laporan}),
         total_kurang=total_kurang, total_lebih=total_lebih,
-        progres_area=progres_area, progres_total=progres_total
+        progres=progres, filter_status=filter_status,
+        status_label=STATUS_TINDAK_LANJUT
     )
+
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_status(laporan_id):
+    status = request.form.get('status', '').strip()
+    catatan = request.form.get('catatan', '').strip()[:500]
+    if status not in STATUS_TINDAK_LANJUT:
+        flash('Status tidak valid.', 'danger')
+        return redirect(request.referrer or url_for('laporan_kurang_admin'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE laporan_buku_kurang
+           SET status = %s, catatan_tindak_lanjut = %s,
+               status_updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+           WHERE id = %s
+           RETURNING (SELECT nama FROM tujuan WHERE id = tujuan_id) AS nama""",
+        (status, catatan or None, laporan_id)
+    )
+    baris = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if not baris:
+        flash('Laporan tidak ditemukan.', 'danger')
+    else:
+        catat_aktivitas('Update Tindak Lanjut Laporan Buku Kurang',
+                        f'"{baris["nama"]}" -> {STATUS_TINDAK_LANJUT[status]}')
+        flash(f'Status "{baris["nama"]}" diubah ke {STATUS_TINDAK_LANJUT[status]}.', 'success')
+    return redirect(request.referrer or url_for('laporan_kurang_admin'))
+
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_status(laporan_id):
+    status = request.form.get('status', '').strip()
+    catatan = request.form.get('catatan', '').strip()[:500]
+    if status not in STATUS_TINDAK_LANJUT:
+        flash('Status tidak valid.', 'danger')
+        return redirect(request.referrer or url_for('laporan_kurang_admin'))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE laporan_buku_kurang
+           SET status = %s, catatan_tindak_lanjut = %s,
+               status_updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
+           WHERE id = %s
+           RETURNING (SELECT nama FROM tujuan WHERE id = tujuan_id) AS nama""",
+        (status, catatan or None, laporan_id)
+    )
+    baris = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if not baris:
+        flash('Laporan tidak ditemukan.', 'danger')
+    else:
+        catat_aktivitas('Update Tindak Lanjut Laporan Buku Kurang',
+                        f'"{baris["nama"]}" -> {STATUS_TINDAK_LANJUT[status]}')
+        flash(f'Status "{baris["nama"]}" diubah ke {STATUS_TINDAK_LANJUT[status]}.', 'success')
+    return redirect(request.referrer or url_for('laporan_kurang_admin'))
 
 
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/hapus', methods=['POST'])
