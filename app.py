@@ -6660,39 +6660,6 @@ def laporan_kurang_status(laporan_id):
         flash(f'Status "{baris["nama"]}" diubah ke {STATUS_TINDAK_LANJUT[status]}.', 'success')
     return redirect(request.referrer or url_for('laporan_kurang_admin'))
 
-@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])
-@login_required
-@admin_required
-def laporan_kurang_status(laporan_id):
-    status = request.form.get('status', '').strip()
-    catatan = request.form.get('catatan', '').strip()[:500]
-    if status not in STATUS_TINDAK_LANJUT:
-        flash('Status tidak valid.', 'danger')
-        return redirect(request.referrer or url_for('laporan_kurang_admin'))
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """UPDATE laporan_buku_kurang
-           SET status = %s, catatan_tindak_lanjut = %s,
-               status_updated_at = (NOW() AT TIME ZONE 'Asia/Jakarta')
-           WHERE id = %s
-           RETURNING (SELECT nama FROM tujuan WHERE id = tujuan_id) AS nama""",
-        (status, catatan or None, laporan_id)
-    )
-    baris = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    if not baris:
-        flash('Laporan tidak ditemukan.', 'danger')
-    else:
-        catat_aktivitas('Update Tindak Lanjut Laporan Buku Kurang',
-                        f'"{baris["nama"]}" -> {STATUS_TINDAK_LANJUT[status]}')
-        flash(f'Status "{baris["nama"]}" diubah ke {STATUS_TINDAK_LANJUT[status]}.', 'success')
-    return redirect(request.referrer or url_for('laporan_kurang_admin'))
-
 
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/hapus', methods=['POST'])
 @login_required
