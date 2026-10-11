@@ -6848,8 +6848,9 @@ def laporan_kurang_edit(laporan_id):
     conn.close()
     return render_template(
         'admin/laporan_buku_kurang_edit.html',
-        total_kurang=total_kurang, total_lebih=total_lebih,
-        progres_area=progres_area, progres_total=progres_total
+        laporan=laporan,
+        kurang=[i for i in daftar_item if i['jenis'] == 'kurang'],
+        lebih=[i for i in daftar_item if i['jenis'] == 'lebih']
     )
 
 if __name__ == '__main__':
