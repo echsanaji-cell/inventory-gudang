@@ -6627,7 +6627,8 @@ def laporan_kurang_admin():
         daftar_laporan=daftar_laporan, search=search, link_path=link_path,
         total_laporan=len(daftar_laporan),
         total_perpustakaan=len({l['tujuan_id'] for l in daftar_laporan}),
-        total_kurang=total_kurang, total_lebih=total_lebih
+        total_kurang=total_kurang, total_lebih=total_lebih,
+        progres_area=progres_area, progres_total=progres_total
     )
 
 
@@ -6785,9 +6786,6 @@ def laporan_kurang_edit(laporan_id):
     conn.close()
     return render_template(
         'admin/laporan_buku_kurang_edit.html',
-        laporan=laporan,
-        kurang=[i for i in daftar_item if i['jenis'] == 'kurang'],
-        lebih=[i for i in daftar_item if i['jenis'] == 'lebih']
         total_kurang=total_kurang, total_lebih=total_lebih,
         progres_area=progres_area, progres_total=progres_total
     )
