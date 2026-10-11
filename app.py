@@ -6562,7 +6562,7 @@ def laporan_kurang_admin():
     cur = conn.cursor()
 
     query = """SELECT l.id, l.tujuan_id, l.created_at, l.updated_at,
-                      t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box
+                      t.nama, t.provinsi, t.kabupaten_kota, t.kecamatan, t.no_box, t.area
                FROM laporan_buku_kurang l
                JOIN tujuan t ON t.id = l.tujuan_id
                WHERE 1=1"""
@@ -6588,8 +6588,30 @@ def laporan_kurang_admin():
         for r in cur.fetchall():
             item_per_laporan.setdefault(r['laporan_id'], {'kurang': [], 'lebih': []})[r['jenis']].append(r)
 
+    cur.execute(
+        """SELECT UPPER(COALESCE(NULLIF(TRIM(t.area), ''), 'TANPA')) AS area,
+                  COUNT(*) AS total,
+                  COUNT(*) FILTER (WHERE EXISTS (
+                      SELECT 1 FROM laporan_buku_kurang l WHERE l.tujuan_id = t.id)) AS sudah
+           FROM tujuan t
+           GROUP BY 1"""
+    )
+    baris_progres = {r['area']: r for r in cur.fetchall()}
+
     cur.close()
     conn.close()
+
+    progres_area = []
+    progres_total = {'total': 0, 'sudah': 0}
+    for kode in ('RED', 'YELLOW', 'GREEN', 'TANPA'):
+        r = baris_progres.get(kode)
+        if not r:
+            continue
+        progres_total['total'] += r['total']
+        progres_total['sudah'] += r['sudah']
+        progres_area.append({'kode': kode, 'total': r['total'], 'sudah': r['sudah'],
+                             'persen': round(100 * r['sudah'] / r['total']) if r['total'] else 0})
+    progres_total['persen'] = round(100 * progres_total['sudah'] / progres_total['total']) if progres_total['total'] else 0
 
     total_kurang = 0
     total_lebih = 0
@@ -6766,6 +6788,8 @@ def laporan_kurang_edit(laporan_id):
         laporan=laporan,
         kurang=[i for i in daftar_item if i['jenis'] == 'kurang'],
         lebih=[i for i in daftar_item if i['jenis'] == 'lebih']
+        total_kurang=total_kurang, total_lebih=total_lebih,
+        progres_area=progres_area, progres_total=progres_total
     )
 
 if __name__ == '__main__':

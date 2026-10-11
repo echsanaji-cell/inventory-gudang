@@ -39,6 +39,34 @@
         <div class="small text-muted">Eksemplar Lebih</div><div class="fs-4 fw-bold mono text-primary">{{ total_lebih }}</div></div></div></div>
 </div>
 
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between small mb-1">
+            <strong>Progres Laporan</strong>
+            <span class="mono">{{ progres_total.sudah }} / {{ progres_total.total }} perpustakaan sudah melapor ({{ progres_total.persen }}%)</span>
+        </div>
+        <div class="progress mb-2" style="height: 14px;">
+            <div class="progress-bar" role="progressbar" style="width: {{ progres_total.persen }}%"></div>
+        </div>
+        <div class="row g-2">
+            {% for a in progres_area %}
+            <div class="col-6 col-md-3">
+                <div class="small mb-1">
+                    {% if a.kode == 'RED' %}<span class="badge bg-danger">RED</span>
+                    {% elif a.kode == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                    {% elif a.kode == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                    {% else %}<span class="badge bg-secondary">Tanpa area</span>{% endif %}
+                    <span class="mono">{{ a.sudah }}/{{ a.total }} ({{ a.persen }}%)</span>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar {{ 'bg-danger' if a.kode == 'RED' else 'bg-warning' if a.kode == 'YELLOW' else 'bg-success' if a.kode == 'GREEN' else 'bg-secondary' }}" style="width: {{ a.persen }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
 <form method="GET" class="mb-2">
     <div class="row g-2">
         <div class="col-md-10">
@@ -55,6 +83,7 @@
         <thead>
             <tr>
                 <th>Perpustakaan</th>
+                <th>Area</th>
                 <th>Provinsi</th>
                 <th>Kabupaten/Kota</th>
                 <th>Kecamatan</th>
@@ -70,6 +99,12 @@
                 <td>
                     {{ l.nama }}
                     {% if l.no_box is not none %}<span class="text-muted small">(Box {{ l.no_box }})</span>{% endif %}
+                </td>
+                <td>
+                    {% if l.area == 'RED' %}<span class="badge bg-danger">RED</span>
+                    {% elif l.area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                    {% elif l.area == 'GREEN' %}<span class="badge bg-success">GREEN</span>
+                    {% else %}<span class="text-muted">-</span>{% endif %}
                 </td>
                 <td class="small">{{ l.provinsi or '-' }}</td>
                 <td class="small">{{ l.kabupaten_kota or '-' }}</td>
