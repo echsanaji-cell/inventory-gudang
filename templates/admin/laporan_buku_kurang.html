@@ -59,6 +59,7 @@
 
 <form method="GET" class="mb-2">
     <input type="hidden" name="status" value="{{ filter_status }}">
+    <input type="hidden" name="urut" value="{{ urutan }}">
     <div class="row g-2">
         <div class="col-md-10">
             <input type="text" name="search" class="form-control" placeholder="Cari nama perpustakaan, kecamatan, kabupaten, atau provinsi..." value="{{ search }}">
@@ -81,7 +82,11 @@
                 <th style="min-width: 280px;">Buku Kurang</th>
                 <th style="min-width: 280px;">Buku Lebih / Di Luar Pesanan</th>
                 <th style="min-width: 200px;">Tindak Lanjut</th>
-                <th>Terakhir Dikirim</th>
+                <th class="text-nowrap">
+                    <a href="{{ url_for('laporan_kurang_admin', search=search, status=filter_status, urut=('terlama' if urutan == 'terbaru' else 'terbaru')) }}" class="text-decoration-none text-reset">
+                        Terakhir Dikirim {{ '▼' if urutan == 'terbaru' else '▲' }}
+                    </a>
+                </th>
                 <th></th>
             </tr>
         </thead>

@@ -6580,7 +6580,12 @@ def laporan_kurang_admin():
     if filter_status:
         query += " AND l.status = %s"
         params.append(filter_status)
-    query += " ORDER BY t.nama ASC, l.created_at DESC"
+    urutan = request.args.get('urut', 'terbaru').strip()
+    if urutan == 'terlama':
+        query += " ORDER BY l.updated_at ASC, t.nama ASC"
+    else:
+        urutan = 'terbaru'
+        query += " ORDER BY l.updated_at DESC, t.nama ASC"
 
     cur.execute(query, tuple(params))
     daftar_laporan = [dict(r) for r in cur.fetchall()]
@@ -6624,7 +6629,7 @@ def laporan_kurang_admin():
         total_perpustakaan=len({l['tujuan_id'] for l in daftar_laporan}),
         total_kurang=total_kurang, total_lebih=total_lebih,
         progres=progres, filter_status=filter_status,
-        status_label=STATUS_TINDAK_LANJUT
+        status_label=STATUS_TINDAK_LANJUT, urutan=urutan
     )
 
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])
