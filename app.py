@@ -6632,6 +6632,66 @@ def laporan_kurang_admin():
         status_label=STATUS_TINDAK_LANJUT, urutan=urutan
     )
 
+@app.route('/admin/laporan-buku-kurang/ringkasan')
+@login_required
+@admin_required
+def laporan_kurang_ringkasan():
+    search = request.args.get('search', '').strip()
+    urut = request.args.get('urut', 'kurang').strip()
+    if urut not in ('kurang', 'lebih', 'judul'):
+        urut = 'kurang'
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = """SELECT b.id AS buku_id, b.judul, b.isbn, i.jenis, i.jumlah,
+                      t.nama, t.kabupaten_kota, t.provinsi, t.area
+               FROM laporan_buku_kurang_item i
+               JOIN laporan_buku_kurang l ON l.id = i.laporan_id
+               JOIN tujuan t ON t.id = l.tujuan_id
+               JOIN buku b ON b.id = i.buku_id
+               WHERE 1=1"""
+    params = []
+    if search:
+        query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s)"
+        params += [f'%{search}%'] * 2
+    query += " ORDER BY b.judul ASC, t.nama ASC"
+    cur.execute(query, tuple(params))
+    baris = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    per_judul = {}
+    for r in baris:
+        j = per_judul.setdefault(r['buku_id'], {
+            'judul': r['judul'], 'isbn': r['isbn'],
+            'total_kurang': 0, 'total_lebih': 0,
+            'lib_kurang': 0, 'lib_lebih': 0, 'rincian': []
+        })
+        if r['jenis'] == 'kurang':
+            j['total_kurang'] += r['jumlah']
+            j['lib_kurang'] += 1
+        else:
+            j['total_lebih'] += r['jumlah']
+            j['lib_lebih'] += 1
+        j['rincian'].append(r)
+
+    ringkasan = list(per_judul.values())
+    if urut == 'judul':
+        ringkasan.sort(key=lambda x: x['judul'].lower())
+    elif urut == 'lebih':
+        ringkasan.sort(key=lambda x: (-x['total_lebih'], x['judul'].lower()))
+    else:
+        ringkasan.sort(key=lambda x: (-x['total_kurang'], x['judul'].lower()))
+
+    return render_template(
+        'admin/laporan_buku_kurang_ringkasan.html',
+        ringkasan=ringkasan, search=search, urut=urut,
+        total_judul=len(ringkasan),
+        total_kurang=sum(x['total_kurang'] for x in ringkasan),
+        total_lebih=sum(x['total_lebih'] for x in ringkasan)
+    )
+
+
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])
 @login_required
 @admin_required

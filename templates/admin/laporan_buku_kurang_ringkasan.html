@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Ringkasan Laporan per Judul{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('laporan_kurang_admin') }}">Laporan Buku Kurang</a></li>
+        <li class="breadcrumb-item active">Ringkasan per Judul</li>
+    </ol>
+</nav>
+
+<h4 class="mb-1">📊 Ringkasan per Judul Buku</h4>
+<p class="text-muted mb-3">Jumlah buku kurang dan lebih per judul, dijumlahkan dari semua laporan perpustakaan.</p>
+
+<div class="row g-3 mb-3">
+    <div class="col-4"><div class="card h-100"><div class="card-body text-center py-2">
+        <div class="small text-muted">Judul</div><div class="fs-4 fw-bold mono">{{ total_judul }}</div></div></div></div>
+    <div class="col-4"><div class="card h-100 border-danger"><div class="card-body text-center py-2">
+        <div class="small text-muted">Total Kurang</div><div class="fs-4 fw-bold mono text-danger">{{ total_kurang }}</div></div></div></div>
+    <div class="col-4"><div class="card h-100 border-primary"><div class="card-body text-center py-2">
+        <div class="small text-muted">Total Lebih</div><div class="fs-4 fw-bold mono text-primary">{{ total_lebih }}</div></div></div></div>
+</div>
+
+<form method="GET" class="mb-2">
+    <input type="hidden" name="urut" value="{{ urut }}">
+    <div class="row g-2">
+        <div class="col-md-10">
+            <input type="text" name="search" class="form-control" placeholder="Cari judul atau ISBN..." value="{{ search }}">
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
+        </div>
+    </div>
+</form>
+
+<div class="d-flex gap-2 flex-wrap small mb-2 align-items-center">
+    <span class="text-muted">Urutkan:</span>
+    <a href="{{ url_for('laporan_kurang_ringkasan', search=search, urut='kurang') }}" class="badge {{ 'bg-danger' if urut == 'kurang' else 'text-bg-light border' }} text-decoration-none">Paling banyak kurang</a>
+    <a href="{{ url_for('laporan_kurang_ringkasan', search=search, urut='lebih') }}" class="badge {{ 'bg-primary' if urut == 'lebih' else 'text-bg-light border' }} text-decoration-none">Paling banyak lebih</a>
+    <a href="{{ url_for('laporan_kurang_ringkasan', search=search, urut='judul') }}" class="badge {{ 'bg-secondary' if urut == 'judul' else 'text-bg-light border' }} text-decoration-none">Judul A-Z</a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-hover align-top">
+        <thead>
+            <tr>
+                <th>Judul</th>
+                <th class="text-end">Kurang (eks)</th>
+                <th class="text-end">Lebih (eks)</th>
+                <th style="min-width: 260px;">Rincian per Perpustakaan</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for j in ringkasan %}
+            <tr>
+                <td>
+                    {{ j.judul }}
+                    <div class="text-muted small mono">{{ j.isbn }}</div>
+                </td>
+                <td class="text-end">
+                    {% if j.total_kurang %}<span class="badge bg-danger">{{ j.total_kurang }}</span>
+                    <div class="text-muted small">{{ j.lib_kurang }} perpus.</div>
+                    {% else %}<span class="text-muted">-</span>{% endif %}
+                </td>
+                <td class="text-end">
+                    {% if j.total_lebih %}<span class="badge bg-primary">{{ j.total_lebih }}</span>
+                    <div class="text-muted small">{{ j.lib_lebih }} perpus.</div>
+                    {% else %}<span class="text-muted">-</span>{% endif %}
+                </td>
+                <td>
+                    <details>
+                        <summary class="small text-primary" style="cursor:pointer;">Lihat {{ j.rincian|length }} laporan</summary>
+                        {% for r in j.rincian %}
+                        <div class="d-flex justify-content-between align-items-start gap-2 py-1 small {{ 'border-bottom' if not loop.last }}">
+                            <span>
+                                {{ r.nama }}
+                                <span class="text-muted">({{ r.kabupaten_kota or '-' }}, {{ r.provinsi or '-' }})</span>
+                                {% if r.area == 'RED' %}<span class="badge bg-danger">RED</span>
+                                {% elif r.area == 'YELLOW' %}<span class="badge bg-warning text-dark">YELLOW</span>
+                                {% elif r.area == 'GREEN' %}<span class="badge bg-success">GREEN</span>{% endif %}
+                            </span>
+                            <span class="badge {{ 'bg-danger' if r.jenis == 'kurang' else 'bg-primary' }} flex-shrink-0">
+                                {{ 'Kurang' if r.jenis == 'kurang' else 'Lebih' }} {{ r.jumlah }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </details>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted">Belum ada data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary btn-sm">← Kembali</a>
+{% endblock %}
