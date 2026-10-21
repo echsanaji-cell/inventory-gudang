@@ -491,7 +491,7 @@ def sync_laporan_kurang_ke_sheets():
             kel[r['jenis']].append((r['judul'], r['isbn'], int(r['total'])))
 
     # nama sheet: tanpa karakter terlarang, maksimal 90 huruf, unik tanpa peduli huruf besar/kecil
-    dipakai = set()
+    dipakai = {'ringkasan'}   # nama sheet ini dipesan untuk sheet Ringkasan
     isi_sheet = {}   # judul sheet -> (daftar baris, nomor baris yang dicetak tebal)
     waktu = datetime.now().strftime('%d-%m-%Y %H:%M')
     for penerbit in sorted(per_penerbit, key=lambda x: x.lower()):
@@ -521,8 +521,28 @@ def sync_laporan_kurang_ke_sheets():
             rows.append([])
         isi_sheet[bersih] = (rows, tebal)
 
-    if not isi_sheet:
-        isi_sheet['Belum ada data'] = ([['Belum ada laporan buku kurang/lebih yang masuk.']], [0])
+    # sheet Ringkasan (paling depan): total keseluruhan dan rekap per penerbit, tanpa nama perpustakaan
+    rk = [['RINGKASAN LAPORAN BUKU KURANG / LEBIH'], ['Diperbarui', waktu], []]
+    rk_tebal = [0, 3]
+    rk.append(['', 'Judul', 'Eksemplar'])
+    judul_k = sum(len(k['kurang']) for k in per_penerbit.values())
+    judul_l = sum(len(k['lebih']) for k in per_penerbit.values())
+    eks_k = sum(x[2] for k in per_penerbit.values() for x in k['kurang'])
+    eks_l = sum(x[2] for k in per_penerbit.values() for x in k['lebih'])
+    rk.append(['Buku Kurang', judul_k, eks_k])
+    rk.append(['Buku Lebih / Di Luar Pesanan', judul_l, eks_l])
+    rk.append([])
+    rk_tebal.append(len(rk))
+    rk.append(['REKAP PER PENERBIT'])
+    rk_tebal.append(len(rk))
+    rk.append(['No', 'Penerbit', 'Judul Kurang', 'Eks Kurang', 'Judul Lebih', 'Eks Lebih'])
+    for no, penerbit in enumerate(sorted(per_penerbit, key=lambda x: x.lower()), start=1):
+        kel = per_penerbit[penerbit]
+        rk.append([no, penerbit, len(kel['kurang']), sum(x[2] for x in kel['kurang']),
+                   len(kel['lebih']), sum(x[2] for x in kel['lebih'])])
+    rk_tebal.append(len(rk))
+    rk.append(['', 'TOTAL', judul_k, eks_k, judul_l, eks_l])
+    isi_sheet = {'Ringkasan': (rk, rk_tebal), **isi_sheet}
 
     def rentang(judul):
         return "'" + judul.replace("'", "''") + "'!"
@@ -533,7 +553,8 @@ def sync_laporan_kurang_ke_sheets():
         ada = {s['properties']['title']: s['properties']['sheetId'] for s in meta.get('sheets', [])}
 
         # 1) tambah sheet yang belum ada (sebelum menghapus, karena file tidak boleh kosong)
-        tambah = [{'addSheet': {'properties': {'title': t}}} for t in isi_sheet if t not in ada]
+        tambah = [{'addSheet': {'properties': ({'title': t, 'index': 0} if t == 'Ringkasan' else {'title': t})}}
+                  for t in isi_sheet if t not in ada]
         if tambah:
             api.batchUpdate(spreadsheetId=sheet_id, body={'requests': tambah}).execute()
             meta = api.get(spreadsheetId=sheet_id, fields='sheets.properties(sheetId,title)').execute()
@@ -568,14 +589,15 @@ def sync_laporan_kurang_ke_sheets():
                     'cell': {'userEnteredFormat': {'textFormat': {'bold': True}}},
                     'fields': 'userEnteredFormat.textFormat.bold'}})
             format_req.append({'autoResizeDimensions': {'dimensions': {
-                'sheetId': sid, 'dimension': 'COLUMNS', 'startIndex': 0, 'endIndex': 4}}})
+                'sheetId': sid, 'dimension': 'COLUMNS', 'startIndex': 0,
+                'endIndex': max((len(r) for r in rows), default=1)}}})
         api.batchUpdate(spreadsheetId=sheet_id, body={'requests': format_req}).execute()
     except Exception as e:
         return False, (f"Gagal sync ke Google Sheets: {str(e)}. Pastikan file sudah dibagikan "
                        f"sebagai Editor ke {email_sa or 'service account'} dan ID file benar.")
 
     total_judul = sum(len(k['kurang']) + len(k['lebih']) for k in per_penerbit.values())
-    return True, f"{len(per_penerbit)} sheet penerbit ({total_judul} baris judul) berhasil disinkronkan ke Google Sheets."
+    return True, f"Sheet Ringkasan + {len(per_penerbit)} sheet penerbit ({total_judul} baris judul) berhasil disinkronkan ke Google Sheets."
 
 
 def catat_log_referensi(aksi, detail='', referensi_id=None):
