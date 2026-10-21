@@ -6780,6 +6780,136 @@ def laporan_kurang_admin():
         status_label=STATUS_TINDAK_LANJUT, urutan=urutan
     )
 
+def _kembali_stok_gudang():
+    """Alamat halaman stok gudang dengan filter yang sama (hanya nilai yang sudah divalidasi)."""
+    tampil = request.form.get('tampil', 'dihitung')
+    if tampil not in ('dihitung', 'semua'):
+        tampil = 'dihitung'
+    try:
+        page = max(1, int(request.form.get('page', '1')))
+    except ValueError:
+        page = 1
+    return url_for('stok_gudang', tampil=tampil, search=request.form.get('search', '').strip(), page=page)
+
+
+@app.route('/admin/laporan-buku-kurang/stok-gudang')
+@login_required
+@admin_required
+def stok_gudang():
+    search = request.args.get('search', '').strip()
+    tampil = request.args.get('tampil', 'dihitung').strip()
+    if tampil not in ('dihitung', 'semua'):
+        tampil = 'dihitung'
+    page = max(1, ambil_int(request.args, 'page', 1))
+    per_page = 100
+
+    dari = " FROM buku b LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id WHERE 1=1"
+    params = []
+    if tampil == 'dihitung':
+        dari += " AND s.id IS NOT NULL"
+    if search:
+        dari += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s OR b.penerbit ILIKE %s)"
+        params += [f'%{search}%'] * 3
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS jumlah" + dari, tuple(params))
+    total_data = cur.fetchone()['jumlah']
+    total_halaman = max(1, -(-total_data // per_page))
+    page = min(page, total_halaman)
+
+    cur.execute(
+        "SELECT b.id, b.judul, b.isbn, b.penerbit, s.jumlah, s.diupdate_at, s.diupdate_oleh"
+        + dari + " ORDER BY b.judul ASC LIMIT %s OFFSET %s",
+        tuple(params) + (per_page, (page - 1) * per_page)
+    )
+    daftar = cur.fetchall()
+
+    cur.execute(
+        """SELECT (SELECT COUNT(*) FROM stok_gudang_fisik) AS judul_dihitung,
+                  (SELECT COALESCE(SUM(jumlah), 0) FROM stok_gudang_fisik) AS total_eks,
+                  (SELECT COUNT(*) FROM buku) AS total_buku"""
+    )
+    ringkas = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'admin/stok_gudang.html',
+        daftar=daftar, search=search, tampil=tampil, page=page,
+        total_halaman=total_halaman, total_data=total_data,
+        judul_dihitung=ringkas['judul_dihitung'], total_eks=ringkas['total_eks'],
+        belum_dihitung=ringkas['total_buku'] - ringkas['judul_dihitung']
+    )
+
+
+@app.route('/admin/laporan-buku-kurang/stok-gudang/simpan', methods=['POST'])
+@login_required
+@admin_required
+def stok_gudang_simpan():
+    try:
+        buku_id = int(request.form.get('buku_id', ''))
+        jumlah = int(request.form.get('jumlah', ''))
+    except ValueError:
+        buku_id, jumlah = 0, -1
+    if buku_id <= 0 or not 0 <= jumlah <= 999999:
+        flash('Pilih judul dari daftar saran, lalu isi jumlah 0-999999.', 'danger')
+        return redirect(_kembali_stok_gudang())
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT judul FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+    if not buku:
+        cur.close()
+        conn.close()
+        flash('Judul buku tidak ditemukan.', 'danger')
+        return redirect(_kembali_stok_gudang())
+
+    cur.execute(
+        """INSERT INTO stok_gudang_fisik (buku_id, jumlah, diupdate_at, diupdate_oleh)
+           VALUES (%s, %s, (NOW() AT TIME ZONE 'Asia/Jakarta'), %s)
+           ON CONFLICT (buku_id)
+           DO UPDATE SET jumlah = EXCLUDED.jumlah,
+                         diupdate_at = EXCLUDED.diupdate_at,
+                         diupdate_oleh = EXCLUDED.diupdate_oleh""",
+        (buku_id, jumlah, session.get('nama_lengkap') or session.get('username'))
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas('Catat Stok Gudang Fisik', f'"{buku["judul"]}": {jumlah} eks', buku_id=buku_id)
+    flash(f'Stok "{buku["judul"]}" dicatat: {jumlah} eks.', 'success')
+    return redirect(_kembali_stok_gudang())
+
+
+@app.route('/admin/laporan-buku-kurang/stok-gudang/reset', methods=['POST'])
+@login_required
+@admin_required
+def stok_gudang_reset():
+    try:
+        buku_id = int(request.form.get('buku_id', ''))
+    except ValueError:
+        buku_id = 0
+    if buku_id > 0:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """DELETE FROM stok_gudang_fisik WHERE buku_id = %s
+               RETURNING (SELECT judul FROM buku WHERE id = %s) AS judul""",
+            (buku_id, buku_id)
+        )
+        baris = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        if baris:
+            catat_aktivitas('Reset Stok Gudang Fisik', f'"{baris["judul"]}" dikembalikan ke belum dihitung', buku_id=buku_id)
+            flash(f'Hitungan "{baris["judul"]}" dikembalikan ke belum dihitung (0).', 'success')
+    return redirect(_kembali_stok_gudang())
+
+
 @app.route('/admin/laporan-buku-kurang/sync-sheets', methods=['POST'])
 @login_required
 @admin_required
