@@ -6739,6 +6739,55 @@ def laporan_kurang_laporan_ada(token):
     return respons
 
 
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/tambah', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_tambah(laporan_id):
+    jenis = request.form.get('jenis', '').strip()
+    try:
+        buku_id = int(request.form.get('buku_id', ''))
+        jumlah = int(request.form.get('jumlah', ''))
+    except ValueError:
+        buku_id, jumlah = 0, 0
+    if jenis not in ('kurang', 'lebih') or buku_id <= 0 or not 1 <= jumlah <= 9999:
+        flash('Pilih judul dari daftar saran, lalu isi jumlah 1-9999.', 'danger')
+        return redirect(url_for('laporan_kurang_edit', laporan_id=laporan_id))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT t.nama FROM laporan_buku_kurang l
+           JOIN tujuan t ON t.id = l.tujuan_id WHERE l.id = %s""",
+        (laporan_id,)
+    )
+    laporan = cur.fetchone()
+    cur.execute("SELECT judul FROM buku WHERE id = %s", (buku_id,))
+    buku = cur.fetchone()
+    if not laporan or not buku:
+        cur.close()
+        conn.close()
+        flash('Laporan atau judul buku tidak ditemukan.', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    cur.execute(
+        """INSERT INTO laporan_buku_kurang_item (laporan_id, buku_id, jenis, jumlah)
+           VALUES (%s, %s, %s, %s)
+           ON CONFLICT (laporan_id, buku_id, jenis)
+           DO UPDATE SET jumlah = LEAST(laporan_buku_kurang_item.jumlah + EXCLUDED.jumlah, 9999)""",
+        (laporan_id, buku_id, jenis, jumlah)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    catat_aktivitas(
+        'Menambah Judul Laporan Buku Kurang',
+        f'Laporan "{laporan["nama"]}": +{jumlah} eks "{buku["judul"]}" ({jenis})'
+    )
+    flash(f'"{buku["judul"]}" ({jumlah} eks) ditambahkan ke {"Buku Kurang" if jenis == "kurang" else "Buku Lebih"}.', 'success')
+    return redirect(url_for('laporan_kurang_edit', laporan_id=laporan_id))
+
+
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/edit', methods=['GET', 'POST'])
 @login_required
 @admin_required

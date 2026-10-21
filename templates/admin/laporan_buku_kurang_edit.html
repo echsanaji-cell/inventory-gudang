@@ -54,4 +54,75 @@
     <a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary">Batal</a>
     <div class="small text-muted mt-2">Kalau semua judul dicentang hapus, laporan perpustakaan ini ikut terhapus. Mengubah jumlah tidak mengubah tanggal "Terakhir Dikirim".</div>
 </form>
+
+<div class="card mt-4">
+    <div class="card-header"><strong>➕ Tambah Judul</strong></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('laporan_kurang_tambah', laporan_id=laporan.id) }}" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="buku_id" id="tambah-buku-id">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <select name="jenis" class="form-select">
+                        <option value="kurang">📕 Buku Kurang</option>
+                        <option value="lebih">📘 Buku Lebih / Di Luar Pesanan</option>
+                    </select>
+                </div>
+                <div class="col-md-5 position-relative">
+                    <input type="text" id="tambah-cari" class="form-control" placeholder="Ketik judul atau ISBN, lalu pilih dari saran...">
+                    <div id="tambah-saran" class="list-group position-absolute w-100 shadow" style="z-index: 20; display: none;"></div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <input type="number" name="jumlah" min="1" max="9999" value="1" class="form-control" required>
+                </div>
+                <div class="col-6 col-md-2">
+                    <button type="submit" id="tambah-kirim" class="btn btn-success w-100" disabled>Tambah</button>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">Simpan dulu perubahan di atas sebelum menambah judul, karena halaman dimuat ulang. Kalau judul sudah ada di bagian yang sama, jumlahnya dijumlahkan.</div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    const cari = document.getElementById('tambah-cari');
+    const saran = document.getElementById('tambah-saran');
+    const idBuku = document.getElementById('tambah-buku-id');
+    const kirim = document.getElementById('tambah-kirim');
+    let timer = null;
+
+    cari.addEventListener('input', function () {
+        idBuku.value = '';
+        kirim.disabled = true;
+        clearTimeout(timer);
+        const kata = cari.value.trim();
+        if (kata.length < 2) { saran.style.display = 'none'; return; }
+        timer = setTimeout(async function () {
+            try {
+                const r = await fetch('/api/buku/cari-suggest?q=' + encodeURIComponent(kata));
+                const data = await r.json();
+                saran.innerHTML = '';
+                data.forEach(function (b) {
+                    const a = document.createElement('button');
+                    a.type = 'button';
+                    a.className = 'list-group-item list-group-item-action small';
+                    a.textContent = b.label;
+                    a.addEventListener('click', function () {
+                        cari.value = b.label;
+                        idBuku.value = b.id;
+                        kirim.disabled = false;
+                        saran.style.display = 'none';
+                    });
+                    saran.appendChild(a);
+                });
+                saran.style.display = data.length ? 'block' : 'none';
+            } catch (e) { saran.style.display = 'none'; }
+        }, 250);
+    });
+    document.addEventListener('click', function (e) {
+        if (!saran.contains(e.target) && e.target !== cari) saran.style.display = 'none';
+    });
+})();
+</script>
 {% endblock %}
