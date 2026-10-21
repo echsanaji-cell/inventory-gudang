@@ -6637,13 +6637,13 @@ def laporan_kurang_admin():
 @admin_required
 def laporan_kurang_ringkasan():
     search = request.args.get('search', '').strip()
-    urut = request.args.get('urut', 'kurang').strip()
-    if urut not in ('kurang', 'lebih', 'judul'):
-        urut = 'kurang'
+    urut = request.args.get('urut', 'jumlah').strip()
+    if urut not in ('jumlah', 'judul', 'penerbit'):
+        urut = 'jumlah'
 
     conn = get_db_connection()
     cur = conn.cursor()
-    query = """SELECT b.id AS buku_id, b.judul, b.isbn, i.jenis, i.jumlah,
+    query = """SELECT b.id AS buku_id, b.judul, b.isbn, b.penerbit, i.jenis, i.jumlah,
                       t.nama, t.kabupaten_kota, t.provinsi, t.area
                FROM laporan_buku_kurang_item i
                JOIN laporan_buku_kurang l ON l.id = i.laporan_id
@@ -6652,43 +6652,46 @@ def laporan_kurang_ringkasan():
                WHERE 1=1"""
     params = []
     if search:
-        query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s)"
-        params += [f'%{search}%'] * 2
+        query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s OR b.penerbit ILIKE %s)"
+        params += [f'%{search}%'] * 3
     query += " ORDER BY b.judul ASC, t.nama ASC"
     cur.execute(query, tuple(params))
     baris = cur.fetchall()
     cur.close()
     conn.close()
 
-    per_judul = {}
+    kelompok = {'kurang': {}, 'lebih': {}}
     for r in baris:
-        j = per_judul.setdefault(r['buku_id'], {
-            'judul': r['judul'], 'isbn': r['isbn'],
-            'total_kurang': 0, 'total_lebih': 0,
-            'lib_kurang': 0, 'lib_lebih': 0, 'rincian': []
+        if r['jenis'] not in kelompok:
+            continue
+        j = kelompok[r['jenis']].setdefault(r['buku_id'], {
+            'judul': r['judul'], 'isbn': r['isbn'], 'penerbit': r['penerbit'],
+            'total': 0, 'jumlah_perpus': 0, 'rincian': []
         })
-        if r['jenis'] == 'kurang':
-            j['total_kurang'] += r['jumlah']
-            j['lib_kurang'] += 1
-        else:
-            j['total_lebih'] += r['jumlah']
-            j['lib_lebih'] += 1
+        j['total'] += r['jumlah']
+        j['jumlah_perpus'] += 1
         j['rincian'].append(r)
 
-    ringkasan = list(per_judul.values())
-    if urut == 'judul':
-        ringkasan.sort(key=lambda x: x['judul'].lower())
-    elif urut == 'lebih':
-        ringkasan.sort(key=lambda x: (-x['total_lebih'], x['judul'].lower()))
-    else:
-        ringkasan.sort(key=lambda x: (-x['total_kurang'], x['judul'].lower()))
+    def urutkan(d):
+        daftar = list(d.values())
+        if urut == 'judul':
+            daftar.sort(key=lambda x: x['judul'].lower())
+        elif urut == 'penerbit':
+            daftar.sort(key=lambda x: ((x['penerbit'] or '~').lower(), x['judul'].lower()))
+        else:
+            daftar.sort(key=lambda x: (-x['total'], x['judul'].lower()))
+        return daftar
+
+    daftar_kurang = urutkan(kelompok['kurang'])
+    daftar_lebih = urutkan(kelompok['lebih'])
 
     return render_template(
         'admin/laporan_buku_kurang_ringkasan.html',
-        ringkasan=ringkasan, search=search, urut=urut,
-        total_judul=len(ringkasan),
-        total_kurang=sum(x['total_kurang'] for x in ringkasan),
-        total_lebih=sum(x['total_lebih'] for x in ringkasan)
+        daftar_kurang=daftar_kurang, daftar_lebih=daftar_lebih,
+        search=search, urut=urut,
+        judul_kurang=len(daftar_kurang), judul_lebih=len(daftar_lebih),
+        total_kurang=sum(x['total'] for x in daftar_kurang),
+        total_lebih=sum(x['total'] for x in daftar_lebih)
     )
 
 
