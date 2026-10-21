@@ -3,7 +3,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
     <h4 class="mb-1">📋 Laporan Buku Kurang / Lebih</h4>
-    <a href="{{ url_for('laporan_kurang_ringkasan') }}" class="btn btn-sm btn-outline-primary">📊 Ringkasan per Judul</a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('laporan_kurang_ringkasan') }}" class="btn btn-sm btn-outline-primary">📊 Ringkasan per Judul</a>
+        <form method="POST" action="{{ url_for('laporan_kurang_sync_sheets') }}" class="d-inline"
+              onsubmit="return confirm('Sinkronkan ke Google Sheets? Isi file tujuan akan ditimpa dengan data terbaru.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-outline-success">📤 Sync ke Google Sheets</button>
+        </form>
+    </div>
 </div>
 <p class="text-muted mb-3">Rekap laporan yang masuk lewat form publik, per perpustakaan.</p>
 

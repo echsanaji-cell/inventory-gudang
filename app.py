@@ -452,6 +452,132 @@ def sync_mapping_referensi_ke_sheets():
         return False, f"Gagal sync ke Google Sheets: {str(e)}"
 
 
+def sync_laporan_kurang_ke_sheets():
+    """Tulis ulang seluruh isi file Google Sheets laporan: satu sheet per penerbit,
+    berisi daftar judul buku kurang dan lebih beserta jumlah eksemplarnya."""
+    creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
+    sheet_id = os.environ.get('GOOGLE_SHEETS_ID_LAPORAN_KURANG')
+    if not creds_json or not sheet_id:
+        return False, "GOOGLE_SHEETS_ID_LAPORAN_KURANG belum diisi di .env server."
+
+    try:
+        creds_dict = json_lib.loads(creds_json)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        service = build('sheets', 'v4', credentials=creds)
+        email_sa = creds_dict.get('client_email', '')
+    except Exception as e:
+        return False, f"Gagal autentikasi Google Sheets: {str(e)}"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT COALESCE(NULLIF(TRIM(b.penerbit), ''), 'Tanpa Penerbit') AS penerbit,
+                  b.judul, b.isbn, i.jenis, SUM(i.jumlah) AS total
+           FROM laporan_buku_kurang_item i
+           JOIN buku b ON b.id = i.buku_id
+           GROUP BY 1, b.id, b.judul, b.isbn, i.jenis
+           ORDER BY 1, b.judul"""
+    )
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    per_penerbit = {}
+    for r in data:
+        kel = per_penerbit.setdefault(r['penerbit'], {'kurang': [], 'lebih': []})
+        if r['jenis'] in kel:
+            kel[r['jenis']].append((r['judul'], r['isbn'], int(r['total'])))
+
+    # nama sheet: tanpa karakter terlarang, maksimal 90 huruf, unik tanpa peduli huruf besar/kecil
+    dipakai = set()
+    isi_sheet = {}   # judul sheet -> (daftar baris, nomor baris yang dicetak tebal)
+    waktu = datetime.now().strftime('%d-%m-%Y %H:%M')
+    for penerbit in sorted(per_penerbit, key=lambda x: x.lower()):
+        bersih = ''.join(' ' if c in '[]*?/\\:' else c for c in penerbit)
+        bersih = ' '.join(bersih.split()).strip("'")[:90] or 'Tanpa Penerbit'
+        dasar, n = bersih, 2
+        while bersih.lower() in dipakai:
+            bersih = f"{dasar[:85]} ({n})"
+            n += 1
+        dipakai.add(bersih.lower())
+
+        kel = per_penerbit[penerbit]
+        rows = [[f'PENERBIT: {penerbit}'], ['Diperbarui', waktu], []]
+        tebal = [0]
+        for kunci, judul_bagian in (('kurang', 'BUKU KURANG'), ('lebih', 'BUKU LEBIH / DI LUAR PESANAN')):
+            tebal.append(len(rows))
+            rows.append([judul_bagian])
+            tebal.append(len(rows))
+            rows.append(['No', 'Judul', 'ISBN', 'Jumlah (eks)'])
+            if kel[kunci]:
+                for no, (judul, isbn, total) in enumerate(kel[kunci], start=1):
+                    rows.append([no, judul, isbn or '', total])
+            else:
+                rows.append(['', 'Tidak ada', '', ''])
+            tebal.append(len(rows))
+            rows.append(['', f'TOTAL {kunci.upper()}', '', sum(x[2] for x in kel[kunci])])
+            rows.append([])
+        isi_sheet[bersih] = (rows, tebal)
+
+    if not isi_sheet:
+        isi_sheet['Belum ada data'] = ([['Belum ada laporan buku kurang/lebih yang masuk.']], [0])
+
+    def rentang(judul):
+        return "'" + judul.replace("'", "''") + "'!"
+
+    try:
+        api = service.spreadsheets()
+        meta = api.get(spreadsheetId=sheet_id, fields='sheets.properties(sheetId,title)').execute()
+        ada = {s['properties']['title']: s['properties']['sheetId'] for s in meta.get('sheets', [])}
+
+        # 1) tambah sheet yang belum ada (sebelum menghapus, karena file tidak boleh kosong)
+        tambah = [{'addSheet': {'properties': {'title': t}}} for t in isi_sheet if t not in ada]
+        if tambah:
+            api.batchUpdate(spreadsheetId=sheet_id, body={'requests': tambah}).execute()
+            meta = api.get(spreadsheetId=sheet_id, fields='sheets.properties(sheetId,title)').execute()
+            ada = {s['properties']['title']: s['properties']['sheetId'] for s in meta.get('sheets', [])}
+
+        # 2) hapus sheet yang penerbitnya sudah tidak ada di laporan (termasuk Sheet1 bawaan)
+        hapus = [{'deleteSheet': {'sheetId': sid}} for t, sid in ada.items() if t not in isi_sheet]
+        if hapus:
+            api.batchUpdate(spreadsheetId=sheet_id, body={'requests': hapus}).execute()
+
+        # 3) kosongkan lalu tulis isi semua sheet
+        api.values().batchClear(
+            spreadsheetId=sheet_id,
+            body={'ranges': [rentang(t) + 'A:Z' for t in isi_sheet]}
+        ).execute()
+        api.values().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={'valueInputOption': 'RAW',
+                  'data': [{'range': rentang(t) + 'A1', 'values': rows}
+                           for t, (rows, _) in isi_sheet.items()]}
+        ).execute()
+
+        # 4) rapikan: hapus format lama, tebalkan judul/header/total, lebarkan kolom
+        format_req = []
+        for t, (rows, tebal) in isi_sheet.items():
+            sid = ada[t]
+            format_req.append({'repeatCell': {'range': {'sheetId': sid}, 'cell': {},
+                                              'fields': 'userEnteredFormat'}})
+            for baris in tebal:
+                format_req.append({'repeatCell': {
+                    'range': {'sheetId': sid, 'startRowIndex': baris, 'endRowIndex': baris + 1},
+                    'cell': {'userEnteredFormat': {'textFormat': {'bold': True}}},
+                    'fields': 'userEnteredFormat.textFormat.bold'}})
+            format_req.append({'autoResizeDimensions': {'dimensions': {
+                'sheetId': sid, 'dimension': 'COLUMNS', 'startIndex': 0, 'endIndex': 4}}})
+        api.batchUpdate(spreadsheetId=sheet_id, body={'requests': format_req}).execute()
+    except Exception as e:
+        return False, (f"Gagal sync ke Google Sheets: {str(e)}. Pastikan file sudah dibagikan "
+                       f"sebagai Editor ke {email_sa or 'service account'} dan ID file benar.")
+
+    total_judul = sum(len(k['kurang']) + len(k['lebih']) for k in per_penerbit.values())
+    return True, f"{len(per_penerbit)} sheet penerbit ({total_judul} baris judul) berhasil disinkronkan ke Google Sheets."
+
+
 def catat_log_referensi(aksi, detail='', referensi_id=None):
     try:
         conn = get_db_connection()
@@ -6631,6 +6757,19 @@ def laporan_kurang_admin():
         progres=progres, filter_status=filter_status,
         status_label=STATUS_TINDAK_LANJUT, urutan=urutan
     )
+
+@app.route('/admin/laporan-buku-kurang/sync-sheets', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_sync_sheets():
+    sukses, pesan = sync_laporan_kurang_ke_sheets()
+    if sukses:
+        catat_aktivitas('Sync Laporan Buku Kurang ke Google Sheets', pesan)
+        flash(pesan, 'success')
+    else:
+        flash(pesan, 'danger')
+    return redirect(url_for('laporan_kurang_admin'))
+
 
 @app.route('/admin/laporan-buku-kurang/ringkasan')
 @login_required
