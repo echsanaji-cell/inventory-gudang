@@ -6906,7 +6906,7 @@ def stok_gudang_reset():
         conn.close()
         if baris:
             catat_aktivitas('Reset Stok Gudang Fisik', f'"{baris["judul"]}" dikembalikan ke belum dihitung', buku_id=buku_id)
-            flash(f'Hitungan "{baris["judul"]}" dikembalikan ke belum dihitung (0).', 'success')
+            flash(f'Hitungan "{baris["judul"]}" dihapus dari stok gudang (kembali ke 0).', 'success')
     return redirect(_kembali_stok_gudang())
 
 

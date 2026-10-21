@@ -93,8 +93,8 @@
                                class="form-control form-control-sm" style="max-width: 100px;">
                         <button type="submit" class="btn btn-sm btn-outline-success">Simpan</button>
                         {% if b.jumlah is not none %}
-                        <button type="submit" formaction="{{ url_for('stok_gudang_reset') }}" class="btn btn-sm btn-outline-secondary"
-                                onclick="return confirm('Kembalikan judul ini ke belum dihitung?');">Reset</button>
+                        <button type="submit" formaction="{{ url_for('stok_gudang_reset') }}" class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Hapus hitungan judul ini dari daftar stok gudang? Judul tetap ada di data buku dan kembali ke 0 (belum dihitung).');">🗑️ Hapus</button>
                         {% else %}
                         <span class="badge text-bg-light border">belum dihitung</span>
                         {% endif %}
