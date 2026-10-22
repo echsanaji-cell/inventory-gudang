@@ -107,6 +107,10 @@
                 <td>
                     {{ l.nama }}
                     {% if l.no_box is not none %}<span class="text-muted small">(Box {{ l.no_box }})</span>{% endif %}
+                    <div class="mt-1">
+                        <span class="badge bg-danger">Kurang {{ l.kurang|sum(attribute='jumlah') }} eks</span>
+                        <span class="badge bg-primary">Lebih {{ l.lebih|sum(attribute='jumlah') }} eks</span>
+                    </div>
                 </td>
                 <td>
                     {% if l.area == 'RED' %}<span class="badge bg-danger">RED</span>
