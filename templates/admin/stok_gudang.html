@@ -31,11 +31,14 @@
             <input type="hidden" name="buku_id" id="stok-buku-id">
             <div class="row g-2">
                 <div class="col-md-7 position-relative">
-                    <input type="text" id="stok-cari" class="form-control" placeholder="Ketik judul atau ISBN, lalu pilih dari saran...">
+                    <div class="input-group">
+                        <input type="text" id="stok-cari" class="form-control" placeholder="Scan barcode, atau ketik judul/ISBN lalu pilih dari saran...">
+                        <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', pilihDariKode)">📷 Scan</button>
+                    </div>
                     <div id="stok-saran" class="list-group position-absolute w-100 shadow" style="z-index: 20; display: none;"></div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <input type="number" name="jumlah" min="0" max="999999" value="0" class="form-control" required>
+                    <input type="number" name="jumlah" id="stok-jumlah" min="0" max="999999" value="0" class="form-control" required>
                 </div>
                 <div class="col-6 col-md-2">
                     <button type="submit" id="stok-kirim" class="btn btn-success w-100" disabled>Simpan</button>
@@ -50,7 +53,10 @@
     <input type="hidden" name="tampil" value="{{ tampil }}">
     <div class="row g-2">
         <div class="col-md-10">
-            <input type="text" name="search" class="form-control" placeholder="Cari judul, ISBN, atau penerbit..." value="{{ search }}">
+            <div class="input-group">
+                <input type="text" name="search" id="stok-filter" class="form-control" placeholder="Cari / scan judul, ISBN, atau penerbit..." value="{{ search }}">
+                <button type="button" class="btn btn-outline-secondary" onclick="startCameraScanner('cameraModal', 'camera-reader', scanFilterStok)">📷 Scan</button>
+            </div>
         </div>
         <div class="col-md-2">
             <button class="btn btn-outline-secondary w-100" type="submit">🔍 Cari</button>
@@ -186,12 +192,45 @@
 <a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary btn-sm">← Kembali</a>
 
 <script>
+// scan untuk mencari/menyaring tabel di bawah
+function scanFilterStok(kode) {
+    const input = document.getElementById('stok-filter');
+    input.value = kode;
+    input.form.submit();
+}
+
 (function () {
     const cari = document.getElementById('stok-cari');
     const saran = document.getElementById('stok-saran');
     const idBuku = document.getElementById('stok-buku-id');
     const kirim = document.getElementById('stok-kirim');
+    const jumlah = document.getElementById('stok-jumlah');
     let timer = null;
+
+    async function ambilSaran(kata) {
+        const r = await fetch('/api/buku/cari-suggest?q=' + encodeURIComponent(kata));
+        return r.json();
+    }
+
+    function pilih(b) {
+        cari.value = b.label;
+        idBuku.value = b.id;
+        kirim.disabled = false;
+        saran.style.display = 'none';
+    }
+
+    function tampilkanSaran(data) {
+        saran.innerHTML = '';
+        data.forEach(function (b) {
+            const a = document.createElement('button');
+            a.type = 'button';
+            a.className = 'list-group-item list-group-item-action small';
+            a.textContent = b.label;
+            a.addEventListener('click', function () { pilih(b); jumlah.focus(); jumlah.select(); });
+            saran.appendChild(a);
+        });
+        saran.style.display = data.length ? 'block' : 'none';
+    }
 
     cari.addEventListener('input', function () {
         idBuku.value = '';
@@ -200,30 +239,41 @@
         const kata = cari.value.trim();
         if (kata.length < 2) { saran.style.display = 'none'; return; }
         timer = setTimeout(async function () {
-            try {
-                const r = await fetch('/api/buku/cari-suggest?q=' + encodeURIComponent(kata));
-                const data = await r.json();
-                saran.innerHTML = '';
-                data.forEach(function (b) {
-                    const a = document.createElement('button');
-                    a.type = 'button';
-                    a.className = 'list-group-item list-group-item-action small';
-                    a.textContent = b.label;
-                    a.addEventListener('click', function () {
-                        cari.value = b.label;
-                        idBuku.value = b.id;
-                        kirim.disabled = false;
-                        saran.style.display = 'none';
-                    });
-                    saran.appendChild(a);
-                });
-                saran.style.display = data.length ? 'block' : 'none';
-            } catch (e) { saran.style.display = 'none'; }
+            try { tampilkanSaran(await ambilSaran(kata)); }
+            catch (e) { saran.style.display = 'none'; }
         }, 250);
     });
+
+    // dipakai scanner (USB maupun kamera HP): cari buku dari kode, kalau cocok langsung dipilih
+    window.pilihDariKode = async function (kode) {
+        try {
+            const data = await ambilSaran(kode);
+            const polos = function (s) { return (s || '').replace(/[^0-9Xx]/g, ''); };
+            const persis = data.find(function (b) { return polos(b.isbn) === polos(kode); });
+            const dipilih = persis || (data.length === 1 ? data[0] : null);
+            if (dipilih) {
+                pilih(dipilih);
+                jumlah.focus();
+                jumlah.select();
+            } else if (data.length) {
+                cari.value = kode;
+                tampilkanSaran(data);
+            } else {
+                cari.value = '';
+                alert('Buku dengan kode "' + kode + '" tidak ditemukan di data buku.');
+            }
+        } catch (e) {
+            alert('Gagal mencari buku. Coba lagi.');
+        }
+    };
+
     document.addEventListener('click', function (e) {
         if (!saran.contains(e.target) && e.target !== cari) saran.style.display = 'none';
     });
+
+    // scanner fisik: kolom filter dulu, kolom catat hitungan terakhir supaya fokus awal ada di sana
+    initPhysicalScanner(document.getElementById('stok-filter'), scanFilterStok);
+    initPhysicalScanner(cari, window.pilihDariKode);
 })();
 </script>
 {% endblock %}
