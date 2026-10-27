@@ -6789,7 +6789,10 @@ def _kembali_stok_gudang():
         page = max(1, int(request.form.get('page', '1')))
     except ValueError:
         page = 1
-    return url_for('stok_gudang', tampil=tampil, search=request.form.get('search', '').strip(), page=page)
+    urut = request.form.get('urut', 'judul')
+    if urut not in ('judul', 'penerbit'):
+        urut = 'judul'
+    return url_for('stok_gudang', tampil=tampil, search=request.form.get('search', '').strip(), page=page, urut=urut)
 
 
 @app.route('/admin/laporan-buku-kurang/stok-gudang')
@@ -6805,6 +6808,9 @@ def stok_gudang():
 
     if tampil == 'banding':
         # komparasi: judul yang dilaporkan LEBIH di lapangan vs hitungan stok gudang
+        urut = request.args.get('urut', 'judul').strip()
+        if urut not in ('judul', 'penerbit'):
+            urut = 'judul'
         conn = get_db_connection()
         cur = conn.cursor()
         query = """SELECT b.id, b.judul, b.isbn, b.penerbit,
@@ -6819,7 +6825,11 @@ def stok_gudang():
         if search:
             query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s OR b.penerbit ILIKE %s)"
             params_b += [f'%{search}%'] * 3
-        query += " ORDER BY b.judul ASC"
+        if urut == 'penerbit':
+            query += (" ORDER BY (b.penerbit IS NULL OR TRIM(b.penerbit) = ''),"
+                      " LOWER(b.penerbit) ASC, LOWER(b.judul) ASC")
+        else:
+            query += " ORDER BY LOWER(b.judul) ASC"
         cur.execute(query, tuple(params_b))
         daftar_b = [dict(r) for r in cur.fetchall()]
         cur.execute(
@@ -6847,7 +6857,7 @@ def stok_gudang():
             total_halaman=1, total_data=len(daftar_b),
             judul_dihitung=ringkas_b['judul_dihitung'], total_eks=ringkas_b['total_eks'],
             belum_dihitung=ringkas_b['total_buku'] - ringkas_b['judul_dihitung'],
-            banding=banding
+            banding=banding, urut=urut
         )
 
     dari = " FROM buku b LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id WHERE 1=1"

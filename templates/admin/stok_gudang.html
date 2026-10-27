@@ -50,6 +50,7 @@
 </div>
 
 <form method="GET" class="mb-2">
+    <input type="hidden" name="urut" value="{{ urut }}">
     <input type="hidden" name="tampil" value="{{ tampil }}">
     <div class="row g-2">
         <div class="col-md-10">
@@ -69,6 +70,11 @@
     <a href="{{ url_for('stok_gudang', tampil='dihitung', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'dihitung' else 'text-bg-light border' }} text-decoration-none">Sudah dihitung ({{ judul_dihitung }})</a>
     <a href="{{ url_for('stok_gudang', tampil='semua', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'semua' else 'text-bg-light border' }} text-decoration-none">Semua judul ({{ judul_dihitung + belum_dihitung }})</a>
     <a href="{{ url_for('stok_gudang', tampil='banding', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'banding' else 'text-bg-light border' }} text-decoration-none">🔍 Komparasi Buku Lebih</a>
+    {% if tampil == 'banding' %}
+    <span class="text-muted ms-3">Urutkan:</span>
+    <a href="{{ url_for('stok_gudang', tampil='banding', search=search, urut='judul') }}" class="badge {{ 'bg-secondary' if urut == 'judul' else 'text-bg-light border' }} text-decoration-none">Judul A-Z</a>
+    <a href="{{ url_for('stok_gudang', tampil='banding', search=search, urut='penerbit') }}" class="badge {{ 'bg-secondary' if urut == 'penerbit' else 'text-bg-light border' }} text-decoration-none">Penerbit A-Z</a>
+    {% endif %}
 </div>
 
 {% if tampil == 'banding' %}
@@ -86,6 +92,7 @@
     <table class="table table-hover align-middle">
         <thead>
             <tr>
+                <th style="width: 50px;">No</th>
                 <th>Judul</th>
                 <th>Penerbit</th>
                 <th class="text-end">Lebih di Lapangan</th>
@@ -96,6 +103,7 @@
         <tbody>
             {% for b in daftar %}
             <tr>
+                <td class="text-muted">{{ loop.index }}</td>
                 <td>{{ b.judul }}<div class="text-muted small mono">{{ b.isbn }}</div></td>
                 <td class="small">{{ b.penerbit or '-' }}</td>
                 <td class="text-end">
@@ -106,6 +114,7 @@
                     <form method="POST" action="{{ url_for('stok_gudang_simpan') }}" class="d-flex gap-1 align-items-center">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="tampil" value="banding">
+                        <input type="hidden" name="urut" value="{{ urut }}">
                         <input type="hidden" name="search" value="{{ search }}">
                         <input type="hidden" name="page" value="1">
                         <input type="hidden" name="buku_id" value="{{ b.id }}">
@@ -122,7 +131,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="text-center text-muted">Belum ada buku lebih yang dilaporkan{% if search %} untuk pencarian ini{% endif %}.</td></tr>
+            <tr><td colspan="6" class="text-center text-muted">Belum ada buku lebih yang dilaporkan{% if search %} untuk pencarian ini{% endif %}.</td></tr>
             {% endfor %}
         </tbody>
     </table>
