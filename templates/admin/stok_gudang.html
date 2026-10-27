@@ -62,8 +62,66 @@
     <span class="text-muted">Tampilkan:</span>
     <a href="{{ url_for('stok_gudang', tampil='dihitung', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'dihitung' else 'text-bg-light border' }} text-decoration-none">Sudah dihitung ({{ judul_dihitung }})</a>
     <a href="{{ url_for('stok_gudang', tampil='semua', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'semua' else 'text-bg-light border' }} text-decoration-none">Semua judul ({{ judul_dihitung + belum_dihitung }})</a>
+    <a href="{{ url_for('stok_gudang', tampil='banding', search=search) }}" class="badge {{ 'bg-dark' if tampil == 'banding' else 'text-bg-light border' }} text-decoration-none">🔍 Komparasi Buku Lebih</a>
 </div>
 
+{% if tampil == 'banding' %}
+<div class="alert alert-light border small">
+    <strong>Komparasi:</strong> daftar judul yang dilaporkan <strong>lebih</strong> di lapangan (dari menu Laporan Buku Kurang) dibandingkan dengan hitungan stok gudang.
+    Selisih = Stok Gudang &minus; Buku Lebih di lapangan. Isi atau ubah stok langsung di tabel ini.
+    <div class="mt-1 mono">
+        {{ banding.judul }} judul &middot; {{ banding.total_lebih }} eks lebih di lapangan &middot;
+        <span class="text-success">{{ banding.sama }} sama</span> &middot;
+        <span class="text-danger">{{ banding.beda }} berbeda</span> &middot;
+        <span class="text-muted">{{ banding.belum }} belum dihitung</span>
+    </div>
+</div>
+<div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Judul</th>
+                <th>Penerbit</th>
+                <th class="text-end">Lebih di Lapangan</th>
+                <th style="min-width: 220px;">Stok Gudang (eks)</th>
+                <th>Selisih</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in daftar %}
+            <tr>
+                <td>{{ b.judul }}<div class="text-muted small mono">{{ b.isbn }}</div></td>
+                <td class="small">{{ b.penerbit or '-' }}</td>
+                <td class="text-end">
+                    <span class="badge bg-primary">{{ b.total_lebih }}</span>
+                    <div class="text-muted small">{{ b.jumlah_perpus }} perpus.</div>
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('stok_gudang_simpan') }}" class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="tampil" value="banding">
+                        <input type="hidden" name="search" value="{{ search }}">
+                        <input type="hidden" name="page" value="1">
+                        <input type="hidden" name="buku_id" value="{{ b.id }}">
+                        <input type="number" name="jumlah" min="0" max="999999" value="{{ b.stok if b.stok is not none else 0 }}"
+                               class="form-control form-control-sm" style="max-width: 100px;">
+                        <button type="submit" class="btn btn-sm btn-outline-success">Simpan</button>
+                    </form>
+                </td>
+                <td class="text-nowrap">
+                    {% if b.stok is none %}<span class="badge text-bg-light border">belum dihitung</span>
+                    {% elif b.selisih == 0 %}<span class="badge bg-success">Sama</span>
+                    {% elif b.selisih > 0 %}<span class="badge bg-warning text-dark">Gudang +{{ b.selisih }}</span>
+                    {% else %}<span class="badge bg-danger">Gudang &minus;{{ -b.selisih }}</span>{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted">Belum ada buku lebih yang dilaporkan{% if search %} untuk pencarian ini{% endif %}.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
 <div class="table-responsive">
     <table class="table table-hover align-middle">
         <thead>
@@ -112,6 +170,8 @@
         </tbody>
     </table>
 </div>
+
+{% endif %}
 
 {% if total_halaman > 1 %}
 <nav class="d-flex justify-content-between align-items-center small mb-3">

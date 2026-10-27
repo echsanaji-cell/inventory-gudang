@@ -6783,7 +6783,7 @@ def laporan_kurang_admin():
 def _kembali_stok_gudang():
     """Alamat halaman stok gudang dengan filter yang sama (hanya nilai yang sudah divalidasi)."""
     tampil = request.form.get('tampil', 'dihitung')
-    if tampil not in ('dihitung', 'semua'):
+    if tampil not in ('dihitung', 'semua', 'banding'):
         tampil = 'dihitung'
     try:
         page = max(1, int(request.form.get('page', '1')))
@@ -6798,10 +6798,57 @@ def _kembali_stok_gudang():
 def stok_gudang():
     search = request.args.get('search', '').strip()
     tampil = request.args.get('tampil', 'dihitung').strip()
-    if tampil not in ('dihitung', 'semua'):
+    if tampil not in ('dihitung', 'semua', 'banding'):
         tampil = 'dihitung'
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 100
+
+    if tampil == 'banding':
+        # komparasi: judul yang dilaporkan LEBIH di lapangan vs hitungan stok gudang
+        conn = get_db_connection()
+        cur = conn.cursor()
+        query = """SELECT b.id, b.judul, b.isbn, b.penerbit,
+                          l.total_lebih, l.jumlah_perpus, s.jumlah AS stok
+                   FROM (SELECT buku_id, SUM(jumlah) AS total_lebih, COUNT(*) AS jumlah_perpus
+                         FROM laporan_buku_kurang_item
+                         WHERE jenis = 'lebih' GROUP BY buku_id) l
+                   JOIN buku b ON b.id = l.buku_id
+                   LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id
+                   WHERE 1=1"""
+        params_b = []
+        if search:
+            query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s OR b.penerbit ILIKE %s)"
+            params_b += [f'%{search}%'] * 3
+        query += " ORDER BY b.judul ASC"
+        cur.execute(query, tuple(params_b))
+        daftar_b = [dict(r) for r in cur.fetchall()]
+        cur.execute(
+            """SELECT (SELECT COUNT(*) FROM stok_gudang_fisik) AS judul_dihitung,
+                      (SELECT COALESCE(SUM(jumlah), 0) FROM stok_gudang_fisik) AS total_eks,
+                      (SELECT COUNT(*) FROM buku) AS total_buku"""
+        )
+        ringkas_b = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        for r in daftar_b:
+            r['total_lebih'] = int(r['total_lebih'])
+            r['selisih'] = None if r['stok'] is None else r['stok'] - r['total_lebih']
+        banding = {
+            'judul': len(daftar_b),
+            'total_lebih': sum(r['total_lebih'] for r in daftar_b),
+            'belum': sum(1 for r in daftar_b if r['stok'] is None),
+            'sama': sum(1 for r in daftar_b if r['selisih'] == 0),
+            'beda': sum(1 for r in daftar_b if r['selisih'] not in (None, 0)),
+        }
+        return render_template(
+            'admin/stok_gudang.html',
+            daftar=daftar_b, search=search, tampil=tampil, page=1,
+            total_halaman=1, total_data=len(daftar_b),
+            judul_dihitung=ringkas_b['judul_dihitung'], total_eks=ringkas_b['total_eks'],
+            belum_dihitung=ringkas_b['total_buku'] - ringkas_b['judul_dihitung'],
+            banding=banding
+        )
 
     dari = " FROM buku b LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id WHERE 1=1"
     params = []
