@@ -6783,7 +6783,7 @@ def laporan_kurang_admin():
 def _kembali_stok_gudang():
     """Alamat halaman stok gudang dengan filter yang sama (hanya nilai yang sudah divalidasi)."""
     tampil = request.form.get('tampil', 'dihitung')
-    if tampil not in ('dihitung', 'semua', 'banding'):
+    if tampil not in ('dihitung', 'semua', 'banding', 'banding_kurang'):
         tampil = 'dihitung'
     try:
         page = max(1, int(request.form.get('page', '1')))
@@ -6801,12 +6801,14 @@ def _kembali_stok_gudang():
 def stok_gudang():
     search = request.args.get('search', '').strip()
     tampil = request.args.get('tampil', 'dihitung').strip()
-    if tampil not in ('dihitung', 'semua', 'banding'):
+    if tampil not in ('dihitung', 'semua', 'banding', 'banding_kurang'):
         tampil = 'dihitung'
     page = max(1, ambil_int(request.args, 'page', 1))
     per_page = 100
 
-    if tampil == 'banding':
+    if tampil in ('banding', 'banding_kurang'):
+        # 'banding' = buku LEBIH di lapangan, 'banding_kurang' = buku KURANG di lapangan
+        jenis_b = 'kurang' if tampil == 'banding_kurang' else 'lebih'
         # komparasi: judul yang dilaporkan LEBIH di lapangan vs hitungan stok gudang
         urut = request.args.get('urut', 'judul').strip()
         if urut not in ('judul', 'penerbit'):
@@ -6817,11 +6819,11 @@ def stok_gudang():
                           l.total_lebih, l.jumlah_perpus, s.jumlah AS stok
                    FROM (SELECT buku_id, SUM(jumlah) AS total_lebih, COUNT(*) AS jumlah_perpus
                          FROM laporan_buku_kurang_item
-                         WHERE jenis = 'lebih' GROUP BY buku_id) l
+                         WHERE jenis = %s GROUP BY buku_id) l
                    JOIN buku b ON b.id = l.buku_id
                    LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id
                    WHERE 1=1"""
-        params_b = []
+        params_b = [jenis_b]
         if search:
             query += " AND (b.judul ILIKE %s OR b.isbn ILIKE %s OR b.penerbit ILIKE %s)"
             params_b += [f'%{search}%'] * 3
@@ -6850,6 +6852,8 @@ def stok_gudang():
             'belum': sum(1 for r in daftar_b if r['stok'] is None),
             'sama': sum(1 for r in daftar_b if r['selisih'] == 0),
             'beda': sum(1 for r in daftar_b if r['selisih'] not in (None, 0)),
+            'plus': sum(1 for r in daftar_b if r['selisih'] is not None and r['selisih'] > 0),
+            'minus': sum(1 for r in daftar_b if r['selisih'] is not None and r['selisih'] < 0),
         }
         return render_template(
             'admin/stok_gudang.html',
@@ -6857,7 +6861,7 @@ def stok_gudang():
             total_halaman=1, total_data=len(daftar_b),
             judul_dihitung=ringkas_b['judul_dihitung'], total_eks=ringkas_b['total_eks'],
             belum_dihitung=ringkas_b['total_buku'] - ringkas_b['judul_dihitung'],
-            banding=banding, urut=urut
+            banding=banding, urut=urut, jenis_b=jenis_b
         )
 
     dari = " FROM buku b LEFT JOIN stok_gudang_fisik s ON s.buku_id = b.id WHERE 1=1"
