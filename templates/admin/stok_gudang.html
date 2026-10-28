@@ -29,6 +29,7 @@
             <input type="hidden" name="search" value="{{ search }}">
             <input type="hidden" name="page" value="{{ page }}">
             <input type="hidden" name="buku_id" id="stok-buku-id">
+            <input type="hidden" name="mode" value="tambah">
             <div class="row g-2">
                 <div class="col-md-7 position-relative">
                     <div class="input-group">
@@ -44,7 +45,7 @@
                     <button type="submit" id="stok-kirim" class="btn btn-success w-100" disabled>Simpan</button>
                 </div>
             </div>
-            <div class="small text-muted mt-2">Jumlah yang Anda isi menggantikan hitungan sebelumnya untuk judul itu (bukan ditambahkan).</div>
+            <div class="small text-muted mt-2">Jumlah yang Anda isi <strong>ditambahkan</strong> ke hitungan sebelumnya untuk judul yang sama. Untuk mengoreksi (mengganti angkanya), ubah langsung di kolom Stok Fisik pada tabel di bawah lalu klik Simpan.</div>
         </form>
     </div>
 </div>

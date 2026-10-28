@@ -6923,21 +6923,32 @@ def stok_gudang_simpan():
         flash('Judul buku tidak ditemukan.', 'danger')
         return redirect(_kembali_stok_gudang())
 
+    # mode 'tambah' (form Catat Hitungan): dijumlahkan dengan hitungan sebelumnya.
+    # selain itu (kolom stok di tabel): angka menggantikan hitungan sebelumnya.
+    tambah = request.form.get('mode') == 'tambah'
     cur.execute(
         """INSERT INTO stok_gudang_fisik (buku_id, jumlah, diupdate_at, diupdate_oleh)
            VALUES (%s, %s, (NOW() AT TIME ZONE 'Asia/Jakarta'), %s)
            ON CONFLICT (buku_id)
-           DO UPDATE SET jumlah = EXCLUDED.jumlah,
+           DO UPDATE SET jumlah = CASE WHEN %s
+                                       THEN LEAST(stok_gudang_fisik.jumlah + EXCLUDED.jumlah, 999999)
+                                       ELSE EXCLUDED.jumlah END,
                          diupdate_at = EXCLUDED.diupdate_at,
-                         diupdate_oleh = EXCLUDED.diupdate_oleh""",
-        (buku_id, jumlah, session.get('nama_lengkap') or session.get('username'))
+                         diupdate_oleh = EXCLUDED.diupdate_oleh
+           RETURNING jumlah""",
+        (buku_id, jumlah, session.get('nama_lengkap') or session.get('username'), tambah)
     )
+    total = cur.fetchone()['jumlah']
     conn.commit()
     cur.close()
     conn.close()
 
-    catat_aktivitas('Catat Stok Gudang Fisik', f'"{buku["judul"]}": {jumlah} eks', buku_id=buku_id)
-    flash(f'Stok "{buku["judul"]}" dicatat: {jumlah} eks.', 'success')
+    if tambah:
+        catat_aktivitas('Tambah Stok Gudang Fisik', f'"{buku["judul"]}": +{jumlah} eks (total {total})', buku_id=buku_id)
+        flash(f'Stok "{buku["judul"]}": +{jumlah} eks, total sekarang {total} eks.', 'success')
+    else:
+        catat_aktivitas('Catat Stok Gudang Fisik', f'"{buku["judul"]}": {total} eks', buku_id=buku_id)
+        flash(f'Stok "{buku["judul"]}" dicatat: {total} eks.', 'success')
     return redirect(_kembali_stok_gudang())
 
 
