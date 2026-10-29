@@ -6741,7 +6741,7 @@ def laporan_kurang_admin():
     item_per_laporan = {}
     if daftar_laporan:
         cur.execute(
-            """SELECT i.laporan_id, i.jenis, i.jumlah, b.judul, b.isbn, s.jumlah AS stok
+            """SELECT i.laporan_id, i.jenis, i.jumlah, b.judul, b.isbn, b.penerbit, s.jumlah AS stok
                FROM laporan_buku_kurang_item i
                JOIN buku b ON b.id = i.buku_id
                LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id

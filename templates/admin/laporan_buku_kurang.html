@@ -126,7 +126,7 @@
                     {% for i in l.kurang %}
                     <div class="d-flex justify-content-between align-items-start gap-3 py-1 {{ 'border-bottom' if not loop.last }}">
                         <span class="small">{{ i.judul }}
-    {% if i.stok %}<span class="badge bg-success" title="Ada di stok gudang: {{ i.stok }} eks">✔ Stok {{ i.stok }}</span>{% endif %}
+    {% if i.stok %}<span class="badge bg-success" title="Ada di stok gudang: {{ i.stok }} eks&#10;Penerbit: {{ i.penerbit or '-' }}">✔ Stok {{ i.stok }}</span>{% endif %}
 </span>
 <span class="badge bg-danger flex-shrink-0">{{ i.jumlah }} eks</span>
                     </div>
