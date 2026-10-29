@@ -54,6 +54,10 @@
                     <th>Judul</th>
                     <th>Penerbit</th>
                     <th class="text-end">Jumlah (eks)</th>
+                    {% if warna == 'danger' %}
+                    <th class="text-end">Stok Gudang</th>
+                    <th class="text-end">Selisih Stok</th>
+                    {% endif %}
                     <th style="min-width: 260px;">Rincian per Perpustakaan</th>
                 </tr>
             </thead>
@@ -69,6 +73,17 @@
                         <span class="badge bg-{{ warna }}">{{ j.total }}</span>
                         <div class="text-muted small">{{ j.jumlah_perpus }} perpus.</div>
                     </td>
+                    {% if warna == 'danger' %}
+                    {% set selisih = j.stok - j.total %}
+                    <td class="text-end">
+                        {% if j.stok %}<span class="badge bg-success">{{ j.stok }}</span>{% else %}<span class="text-muted">0</span>{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if selisih < 0 %}<span class="badge bg-danger" title="Stok gudang masih kurang {{ -selisih }} eks">{{ selisih }}</span>
+                        {% elif selisih == 0 %}<span class="badge bg-secondary" title="Stok pas">0</span>
+                        {% else %}<span class="badge bg-success" title="Stok cukup, sisa {{ selisih }} eks">+{{ selisih }}</span>{% endif %}
+                    </td>
+                    {% endif %}
                     <td>
                         <details>
                             <summary class="small text-primary" style="cursor:pointer;">Lihat {{ j.rincian|length }} laporan</summary>
@@ -88,7 +103,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="text-center text-muted">Belum ada data.</td></tr>
+                <tr><td colspan="{{ 6 if warna == 'danger' else 4 }}" class="text-center text-muted">Belum ada data.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

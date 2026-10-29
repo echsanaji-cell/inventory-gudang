@@ -7008,11 +7008,12 @@ def laporan_kurang_ringkasan():
     conn = get_db_connection()
     cur = conn.cursor()
     query = """SELECT b.id AS buku_id, b.judul, b.isbn, b.penerbit, i.jenis, i.jumlah,
-                      t.nama, t.kabupaten_kota, t.provinsi, t.area
+                      t.nama, t.kabupaten_kota, t.provinsi, t.area, s.jumlah AS stok
                FROM laporan_buku_kurang_item i
                JOIN laporan_buku_kurang l ON l.id = i.laporan_id
                JOIN tujuan t ON t.id = l.tujuan_id
                JOIN buku b ON b.id = i.buku_id
+               LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id
                WHERE 1=1"""
     params = []
     if search:
@@ -7030,6 +7031,7 @@ def laporan_kurang_ringkasan():
             continue
         j = kelompok[r['jenis']].setdefault(r['buku_id'], {
             'judul': r['judul'], 'isbn': r['isbn'], 'penerbit': r['penerbit'],
+            'stok': r['stok'] or 0,
             'total': 0, 'jumlah_perpus': 0, 'rincian': []
         })
         j['total'] += r['jumlah']
