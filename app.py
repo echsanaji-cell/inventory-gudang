@@ -474,9 +474,11 @@ def sync_laporan_kurang_ke_sheets():
     cur = conn.cursor()
     cur.execute(
         """SELECT COALESCE(NULLIF(TRIM(b.penerbit), ''), 'Tanpa Penerbit') AS penerbit,
-                  b.judul, b.isbn, i.jenis, SUM(i.jumlah) AS total
+                  b.judul, b.isbn, i.jenis, SUM(i.jumlah) AS total,
+                  COALESCE(MAX(s.jumlah), 0) AS stok
            FROM laporan_buku_kurang_item i
            JOIN buku b ON b.id = i.buku_id
+           LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id
            GROUP BY 1, b.id, b.judul, b.isbn, i.jenis
            ORDER BY 1, b.judul"""
     )
@@ -488,7 +490,7 @@ def sync_laporan_kurang_ke_sheets():
     for r in data:
         kel = per_penerbit.setdefault(r['penerbit'], {'kurang': [], 'lebih': []})
         if r['jenis'] in kel:
-            kel[r['jenis']].append((r['judul'], r['isbn'], int(r['total'])))
+            kel[r['jenis']].append((r['judul'], r['isbn'], int(r['total']), int(r['stok'])))
 
     # nama sheet: tanpa karakter terlarang, maksimal 90 huruf, unik tanpa peduli huruf besar/kecil
     dipakai = {'ringkasan'}   # nama sheet ini dipesan untuk sheet Ringkasan
@@ -510,14 +512,26 @@ def sync_laporan_kurang_ke_sheets():
             tebal.append(len(rows))
             rows.append([judul_bagian])
             tebal.append(len(rows))
-            rows.append(['No', 'Judul', 'ISBN', 'Jumlah (eks)'])
-            if kel[kunci]:
-                for no, (judul, isbn, total) in enumerate(kel[kunci], start=1):
-                    rows.append([no, judul, isbn or '', total])
+            if kunci == 'kurang':
+                rows.append(['No', 'Judul', 'ISBN', 'Jumlah (eks)', 'Stok Gudang', 'Selisih Stok'])
+                if kel[kunci]:
+                    for no, (judul, isbn, total, stok) in enumerate(kel[kunci], start=1):
+                        rows.append([no, judul, isbn or '', total, stok, stok - total])
+                else:
+                    rows.append(['', 'Tidak ada', '', '', '', ''])
+                tebal.append(len(rows))
+                rows.append(['', 'TOTAL KURANG', '', sum(x[2] for x in kel[kunci]),
+                             sum(x[3] for x in kel[kunci]),
+                             sum(x[3] - x[2] for x in kel[kunci])])
             else:
-                rows.append(['', 'Tidak ada', '', ''])
-            tebal.append(len(rows))
-            rows.append(['', f'TOTAL {kunci.upper()}', '', sum(x[2] for x in kel[kunci])])
+                rows.append(['No', 'Judul', 'ISBN', 'Jumlah (eks)'])
+                if kel[kunci]:
+                    for no, (judul, isbn, total, stok) in enumerate(kel[kunci], start=1):
+                        rows.append([no, judul, isbn or '', total])
+                else:
+                    rows.append(['', 'Tidak ada', '', ''])
+                tebal.append(len(rows))
+                rows.append(['', f'TOTAL {kunci.upper()}', '', sum(x[2] for x in kel[kunci])])
             rows.append([])
         isi_sheet[bersih] = (rows, tebal)
 
