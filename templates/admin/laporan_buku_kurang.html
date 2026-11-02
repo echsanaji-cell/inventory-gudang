@@ -140,6 +140,7 @@
                     <div class="mt-1">
                         <span class="badge bg-danger">Kurang {{ l.kurang|sum(attribute='jumlah') }} eks</span>
                         <span class="badge bg-primary">Lebih {{ l.lebih|sum(attribute='jumlah') }} eks</span>
+                        {% if l.stok_lengkap %}<span class="badge bg-success" title="Semua judul yang kurang di perpustakaan ini sudah cukup stoknya di gudang">✅ Stok lengkap</span>{% endif %}
                     </div>
                 </td>
                 <td>

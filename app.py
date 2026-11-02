@@ -6849,6 +6849,7 @@ def laporan_kurang_admin():
         item = item_per_laporan.get(l['id'], {'kurang': [], 'lebih': []})
         l['kurang'] = item['kurang']
         l['lebih'] = item['lebih']
+        l['stok_lengkap'] = bool(l['kurang']) and all((i['stok'] or 0) >= i['jumlah'] for i in l['kurang'])
         total_kurang += sum(i['jumlah'] for i in l['kurang'])
         total_lebih += sum(i['jumlah'] for i in l['lebih'])
 
