@@ -11,7 +11,7 @@
 <h4 class="mb-1">📦 Kurangi Stok Gudang</h4>
 <p class="mb-1"><strong>{{ laporan.nama }}</strong>
     {% if laporan.no_box is not none %}<span class="text-muted small">(Box {{ laporan.no_box }})</span>{% endif %}</p>
-<p class="text-muted small mb-3">{{ laporan.kabupaten_kota or '-' }}, {{ laporan.provinsi or '-' }}. Isi jumlah buku yang dikirim ke perpustakaan ini, stok gudang akan berkurang sebanyak itu. Isi angka minus (mis. -2) untuk mengembalikan stok kalau salah input.</p>
+<p class="text-muted small mb-3">{{ laporan.kabupaten_kota or '-' }}, {{ laporan.provinsi or '-' }}. Isi kolom <strong>Sudah dikurangi</strong> dengan jumlah buku yang benar-benar dikirim ke perpustakaan ini. Stok gudang menyesuaikan selisihnya, jadi kalau ada salah input, cukup ganti angkanya dengan yang benar.</p>
 
 {% if daftar %}
 <form method="POST">
@@ -33,10 +33,9 @@
                 <tr>
                     <th>Judul</th>
                     <th class="text-end">Diminta</th>
-                    <th class="text-end">Sudah dikurangi</th>
                     <th class="text-end">Sisa diminta</th>
                     <th class="text-end">Stok gudang</th>
-                    <th style="min-width: 130px;">Kurangi sekarang</th>
+                    <th style="min-width: 130px;">Sudah dikurangi</th>
                 </tr>
             </thead>
             <tbody>
@@ -48,7 +47,6 @@
                         <div class="text-muted small">{{ it.penerbit or '-' }}</div>
                     </td>
                     <td class="text-end">{{ it.jumlah }}</td>
-                    <td class="text-end">{% if it.sudah %}<span class="badge bg-secondary">{{ it.sudah }}</span>{% else %}0{% endif %}</td>
                     <td class="text-end">{% if sisa == 0 %}<span class="badge bg-success">Terpenuhi</span>{% else %}{{ sisa }}{% endif %}</td>
                     <td class="text-end">
                         {% if it.stok >= sisa and sisa > 0 %}<span class="badge bg-success">{{ it.stok }}</span>
@@ -56,9 +54,9 @@
                         {% else %}<span class="text-muted">{{ it.stok }}</span>{% endif %}
                     </td>
                     <td>
-                        <input type="number" name="kurangi_{{ it.buku_id }}" class="form-control form-control-sm"
-                               min="{{ -it.sudah }}" max="{{ [sisa, it.stok]|min }}" step="1" inputmode="numeric"
-                               placeholder="0" data-isi="{{ [sisa, it.stok]|min }}">
+                        <input type="number" name="total_{{ it.buku_id }}" class="form-control form-control-sm"
+                               min="0" max="{{ it.sudah + [sisa, it.stok]|min }}" step="1" inputmode="numeric"
+                               value="{{ it.sudah }}" data-isi="{{ it.sudah + [sisa, it.stok]|min }}">
                     </td>
                 </tr>
                 {% endfor %}
@@ -74,7 +72,7 @@
 <script>
 document.getElementById('isi-otomatis').addEventListener('click', function () {
     document.querySelectorAll('input[data-isi]').forEach(function (el) {
-        el.value = parseInt(el.dataset.isi, 10) > 0 ? el.dataset.isi : '';
+        el.value = el.dataset.isi;
     });
 });
 </script>
