@@ -7410,16 +7410,17 @@ def laporan_kurang_kurangi_stok(laporan_id):
             ringkas = []
             try:
                 for it in daftar:
-                    teks = request.form.get(f'total_{it["buku_id"]}', '').strip()
-                    if teks == '':
-                        continue
+                    teks_total = request.form.get(f'total_{it["buku_id"]}', '').strip()
+                    teks_tambah = request.form.get(f'kurangi_{it["buku_id"]}', '').strip()
                     try:
-                        baru = int(teks)
+                        baru = int(teks_total) if teks_total else it['sudah']
+                        tambah = int(teks_tambah) if teks_tambah else 0
                     except ValueError:
                         raise ValueError(f'"{it["judul"]}": jumlah harus angka bulat.')
-                    if baru < 0:
+                    if baru < 0 or tambah < 0:
                         raise ValueError(f'"{it["judul"]}": jumlah tidak boleh minus.')
-                    n = baru - it['sudah']   # selisih dari yang tercatat sebelumnya
+                    # selisih dari yang tercatat: koreksi "Sudah dikurangi" + pengurangan baru
+                    n = (baru - it['sudah']) + tambah
                     if n == 0:
                         continue
                     sisa = it['jumlah'] - it['sudah']
