@@ -157,7 +157,7 @@
                     {% for i in l.kurang %}
                     <div class="d-flex justify-content-between align-items-start gap-3 py-1 {{ 'border-bottom' if not loop.last }}">
                         <span class="small">{{ i.judul }}
-    {% if i.stok %}<span class="badge bg-success" title="Ada di stok gudang: {{ i.stok }} eks&#10;Penerbit: {{ i.penerbit or '-' }}">✔ Stok {{ i.stok }}</span>{% endif %}
+    {% if i.stok %}<span class="badge bg-success" style="cursor:pointer;" data-tip-stok="Stok gudang: {{ i.stok }} eks &middot; Penerbit: {{ i.penerbit or '-' }}">✔ Stok {{ i.stok }}</span>{% endif %}
 </span>
 <span class="badge bg-danger flex-shrink-0">{{ i.jumlah }} eks</span>
                     </div>
@@ -207,4 +207,33 @@
     </table>
 </div>
 <small class="text-muted">Satu perpustakaan hanya punya satu laporan. Kiriman berikutnya untuk perpustakaan yang sama otomatis dijumlahkan ke laporan ini. Angka ringkasan di atas mengikuti hasil pencarian.</small>
+
+<script>
+(function () {
+    // HP/tablet tidak punya hover: ketuk badge untuk membuka, ketuk di luar untuk menutup.
+    const sentuh = window.matchMedia('(hover: none)').matches;
+    const semua = document.querySelectorAll('[data-tip-stok]');
+    const tutupSemua = function (kecuali) {
+        semua.forEach(function (x) {
+            if (x === kecuali) return;
+            const inst = bootstrap.Tooltip.getInstance(x);
+            if (inst) inst.hide();
+        });
+    };
+    semua.forEach(function (el) {
+        const tip = new bootstrap.Tooltip(el, {
+            title: el.dataset.tipStok, placement: 'top',
+            trigger: sentuh ? 'manual' : 'hover focus'
+        });
+        if (sentuh) {
+            el.addEventListener('click', function (e) {
+                e.stopPropagation();
+                tutupSemua(el);
+                tip.toggle();
+            });
+        }
+    });
+    if (sentuh) document.addEventListener('click', function () { tutupSemua(null); });
+})();
+</script>
 {% endblock %}
