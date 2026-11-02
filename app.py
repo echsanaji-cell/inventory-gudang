@@ -26,7 +26,7 @@ import io
 import base64
 import pyotp
 import qrcode
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
@@ -6566,6 +6566,69 @@ def _token_laporan_valid(token):
     return hmac.compare_digest(token.encode('utf-8'), token_benar.encode('utf-8'))
 
 
+# ------------------ JADWAL BUKA/TUTUP FORM PUBLIK LAPORAN ------------------
+WIB = timezone(timedelta(hours=7))
+_tabel_jadwal_siap = False
+
+
+def _sekarang_wib():
+    return datetime.now(WIB).replace(tzinfo=None)
+
+
+def _ambil_jadwal_publik():
+    """Kembalikan (buka_mulai, tutup_pada) dalam WIB. None berarti tidak dibatasi."""
+    global _tabel_jadwal_siap
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        if not _tabel_jadwal_siap:
+            cur.execute("""CREATE TABLE IF NOT EXISTS pengaturan_laporan_publik (
+                               id INTEGER PRIMARY KEY CHECK (id = 1),
+                               buka_mulai TIMESTAMP,
+                               tutup_pada TIMESTAMP,
+                               updated_at TIMESTAMP DEFAULT NOW())""")
+            cur.execute("INSERT INTO pengaturan_laporan_publik (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+            conn.commit()
+            _tabel_jadwal_siap = True
+        cur.execute("SELECT buka_mulai, tutup_pada FROM pengaturan_laporan_publik WHERE id = 1")
+        r = cur.fetchone()
+        cur.close()
+        return (r['buka_mulai'], r['tutup_pada']) if r else (None, None)
+    finally:
+        conn.close()
+
+
+def _status_jadwal_publik():
+    """Kembalikan (dibuka, pesan, buka_mulai, tutup_pada)."""
+    mulai, tutup = _ambil_jadwal_publik()
+    sekarang = _sekarang_wib()
+    if mulai and sekarang < mulai:
+        return False, f"Form belum dibuka. Dibuka mulai {mulai:%d-%m-%Y %H:%M} WIB.", mulai, tutup
+    if tutup and sekarang >= tutup:
+        return False, f"Form sudah ditutup sejak {tutup:%d-%m-%Y %H:%M} WIB.", mulai, tutup
+    return True, '', mulai, tutup
+
+
+@app.before_request
+def batasi_form_publik_terjadwal():
+    """Semua alamat /l/<token>/... mengikuti jadwal. Token salah tetap dijawab 404 oleh rutenya."""
+    if not request.path.startswith('/l/'):
+        return None
+    bagian = request.path.split('/')
+    if len(bagian) < 3 or not _token_laporan_valid(bagian[2]):
+        return None
+    try:
+        dibuka, pesan, _, _ = _status_jadwal_publik()
+    except Exception:
+        app.logger.exception('Gagal membaca jadwal form publik')
+        dibuka, pesan = False, 'Form sementara tidak tersedia. Coba lagi nanti.'
+    if dibuka:
+        return None
+    if request.path.rstrip('/') == f'/l/{bagian[2]}':
+        return render_template('laporan_kurang_ditutup.html', pesan=pesan), 403
+    return jsonify({'success': False, 'message': pesan}), 403
+
+
 def _id_valid(nilai):
     angka = int(nilai)
     if not 1 <= angka <= 2147483647:
@@ -6725,6 +6788,10 @@ def laporan_kurang_admin():
         filter_status = ''
     token_publik = os.environ.get('LAPORAN_PUBLIK_TOKEN', '')
     link_path = url_for('laporan_kurang_publik', token=token_publik) if token_publik else None
+    try:
+        jadwal_dibuka, jadwal_pesan, jadwal_mulai, jadwal_tutup = _status_jadwal_publik()
+    except Exception:
+        jadwal_dibuka, jadwal_pesan, jadwal_mulai, jadwal_tutup = None, 'Jadwal tidak dapat dibaca.', None, None
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -6788,6 +6855,8 @@ def laporan_kurang_admin():
     return render_template(
         'admin/laporan_buku_kurang.html',
         daftar_laporan=daftar_laporan, search=search, link_path=link_path,
+        jadwal_dibuka=jadwal_dibuka, jadwal_pesan=jadwal_pesan,
+        jadwal_mulai=jadwal_mulai, jadwal_tutup=jadwal_tutup,
         total_laporan=len(daftar_laporan),
         total_perpustakaan=len({l['tujuan_id'] for l in daftar_laporan}),
         total_kurang=total_kurang, total_lebih=total_lebih,
@@ -7073,6 +7142,52 @@ def laporan_kurang_ringkasan():
         total_kurang=sum(x['total'] for x in daftar_kurang),
         total_lebih=sum(x['total'] for x in daftar_lebih)
     )
+
+
+@app.route('/admin/laporan-buku-kurang/jadwal', methods=['POST'])
+@login_required
+@admin_required
+def laporan_kurang_jadwal():
+    def baca(nama):
+        nilai = request.form.get(nama, '').strip()
+        return datetime.strptime(nilai, '%Y-%m-%dT%H:%M') if nilai else None
+
+    try:
+        if request.form.get('aksi') == 'hapus':
+            mulai = tutup = None
+        else:
+            mulai, tutup = baca('buka_mulai'), baca('tutup_pada')
+    except ValueError:
+        flash('Format tanggal tidak valid.', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+    if mulai and tutup and tutup <= mulai:
+        flash('Waktu tutup harus setelah waktu buka.', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    try:
+        _ambil_jadwal_publik()  # pastikan tabel sudah ada
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE pengaturan_laporan_publik SET buka_mulai = %s, tutup_pada = %s, updated_at = NOW() WHERE id = 1",
+            (mulai, tutup)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        flash(f'Gagal menyimpan jadwal: {e}', 'danger')
+        return redirect(url_for('laporan_kurang_admin'))
+
+    if mulai or tutup:
+        catat_aktivitas('JADWAL_FORM_PUBLIK',
+                        f"Buka: {mulai.strftime('%d-%m-%Y %H:%M') if mulai else '-'}, "
+                        f"Tutup: {tutup.strftime('%d-%m-%Y %H:%M') if tutup else '-'}")
+        flash('Jadwal form publik disimpan.', 'success')
+    else:
+        catat_aktivitas('JADWAL_FORM_PUBLIK', 'Jadwal dihapus, form publik selalu terbuka')
+        flash('Jadwal dihapus. Form publik terbuka tanpa batas waktu.', 'success')
+    return redirect(url_for('laporan_kurang_admin'))
 
 
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/status', methods=['POST'])

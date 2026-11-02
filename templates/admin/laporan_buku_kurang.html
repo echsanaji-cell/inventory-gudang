@@ -37,6 +37,36 @@
     });
 })();
 </script>
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <strong class="small">⏱️ Jadwal Form Publik</strong>
+            {% if jadwal_dibuka is none %}<span class="badge bg-secondary">Jadwal tidak terbaca</span>
+            {% elif jadwal_dibuka %}<span class="badge bg-success">Sedang DIBUKA</span>
+            {% else %}<span class="badge bg-danger">Sedang DITUTUP</span>{% endif %}
+        </div>
+        {% if jadwal_pesan %}<div class="small text-muted mb-2">{{ jadwal_pesan }}</div>{% endif %}
+        <form method="POST" action="{{ url_for('laporan_kurang_jadwal') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="buka-mulai">Buka mulai (WIB)</label>
+                <input type="datetime-local" id="buka-mulai" name="buka_mulai" class="form-control form-control-sm"
+                       value="{{ jadwal_mulai.strftime('%Y-%m-%dT%H:%M') if jadwal_mulai else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="tutup-pada">Tutup pada (WIB)</label>
+                <input type="datetime-local" id="tutup-pada" name="tutup_pada" class="form-control form-control-sm"
+                       value="{{ jadwal_tutup.strftime('%Y-%m-%dT%H:%M') if jadwal_tutup else '' }}">
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" name="aksi" value="simpan" class="btn btn-sm btn-primary">Simpan Jadwal</button>
+                <button type="submit" name="aksi" value="hapus" class="btn btn-sm btn-outline-secondary"
+                        onclick="return confirm('Hapus jadwal? Form publik akan terbuka tanpa batas waktu.');">Hapus Jadwal</button>
+            </div>
+        </form>
+        <div class="form-text">Kosongkan salah satu kalau tidak perlu batas itu. Di luar jadwal, link yang dibagikan menampilkan pesan "form ditutup".</div>
+    </div>
+</div>
 {% else %}
 <div class="alert alert-warning small">Form publik belum aktif: <code>LAPORAN_PUBLIK_TOKEN</code> belum diisi di server (file <code>.env</code>).</div>
 {% endif %}
