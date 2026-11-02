@@ -7347,6 +7347,133 @@ def laporan_kurang_tambah(laporan_id):
     return redirect(url_for('laporan_kurang_edit', laporan_id=laporan_id))
 
 
+_tabel_stok_keluar_siap = False
+
+
+def _siapkan_tabel_stok_keluar():
+    """Catatan berapa eksemplar yang sudah dikurangkan dari stok gudang untuk tiap perpustakaan."""
+    global _tabel_stok_keluar_siap
+    if _tabel_stok_keluar_siap:
+        return
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS stok_gudang_keluar (
+                           laporan_id INTEGER NOT NULL,
+                           buku_id INTEGER NOT NULL,
+                           jumlah INTEGER NOT NULL DEFAULT 0 CHECK (jumlah >= 0),
+                           diupdate_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'Asia/Jakarta'),
+                           diupdate_oleh TEXT,
+                           PRIMARY KEY (laporan_id, buku_id))""")
+        conn.commit()
+        cur.close()
+        _tabel_stok_keluar_siap = True
+    finally:
+        conn.close()
+
+
+@app.route('/admin/laporan-buku-kurang/<int:laporan_id>/kurangi-stok', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def laporan_kurang_kurangi_stok(laporan_id):
+    _siapkan_tabel_stok_keluar()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT l.id, t.nama, t.provinsi, t.kabupaten_kota, t.no_box
+               FROM laporan_buku_kurang l
+               JOIN tujuan t ON t.id = l.tujuan_id
+               WHERE l.id = %s""",
+            (laporan_id,)
+        )
+        laporan = cur.fetchone()
+        if not laporan:
+            flash('Laporan tidak ditemukan.', 'danger')
+            return redirect(url_for('laporan_kurang_admin'))
+
+        cur.execute(
+            """SELECT i.buku_id, i.jumlah, b.judul, b.isbn, b.penerbit,
+                      COALESCE(s.jumlah, 0) AS stok, COALESCE(k.jumlah, 0) AS sudah
+               FROM laporan_buku_kurang_item i
+               JOIN buku b ON b.id = i.buku_id
+               LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id
+               LEFT JOIN stok_gudang_keluar k ON k.laporan_id = i.laporan_id AND k.buku_id = i.buku_id
+               WHERE i.laporan_id = %s AND i.jenis = 'kurang'
+               ORDER BY b.judul ASC""",
+            (laporan_id,)
+        )
+        daftar = cur.fetchall()
+
+        if request.method == 'POST':
+            nama_user = session.get('nama_lengkap') or session.get('username')
+            ringkas = []
+            try:
+                for it in daftar:
+                    teks = request.form.get(f'kurangi_{it["buku_id"]}', '').strip()
+                    if teks in ('', '0'):
+                        continue
+                    try:
+                        n = int(teks)
+                    except ValueError:
+                        raise ValueError(f'"{it["judul"]}": jumlah harus angka bulat.')
+                    sisa = it['jumlah'] - it['sudah']
+                    if n > 0:
+                        if n > sisa:
+                            raise ValueError(f'"{it["judul"]}": melebihi sisa permintaan ({max(sisa, 0)} eks).')
+                        cur.execute(
+                            """UPDATE stok_gudang_fisik
+                               SET jumlah = jumlah - %s,
+                                   diupdate_at = (NOW() AT TIME ZONE 'Asia/Jakarta'), diupdate_oleh = %s
+                               WHERE buku_id = %s AND jumlah >= %s
+                               RETURNING jumlah""",
+                            (n, nama_user, it['buku_id'], n)
+                        )
+                        if not cur.fetchone():
+                            raise ValueError(f'"{it["judul"]}": stok gudang tidak cukup (tersedia {it["stok"]} eks).')
+                    else:
+                        if -n > it['sudah']:
+                            raise ValueError(f'"{it["judul"]}": yang bisa dikembalikan hanya {it["sudah"]} eks.')
+                        cur.execute(
+                            """INSERT INTO stok_gudang_fisik (buku_id, jumlah, diupdate_at, diupdate_oleh)
+                               VALUES (%s, %s, (NOW() AT TIME ZONE 'Asia/Jakarta'), %s)
+                               ON CONFLICT (buku_id)
+                               DO UPDATE SET jumlah = LEAST(stok_gudang_fisik.jumlah + EXCLUDED.jumlah, 999999),
+                                             diupdate_at = EXCLUDED.diupdate_at,
+                                             diupdate_oleh = EXCLUDED.diupdate_oleh""",
+                            (it['buku_id'], -n, nama_user)
+                        )
+                    cur.execute(
+                        """INSERT INTO stok_gudang_keluar (laporan_id, buku_id, jumlah, diupdate_oleh)
+                           VALUES (%s, %s, GREATEST(%s, 0), %s)
+                           ON CONFLICT (laporan_id, buku_id)
+                           DO UPDATE SET jumlah = stok_gudang_keluar.jumlah + %s,
+                                         diupdate_at = (NOW() AT TIME ZONE 'Asia/Jakarta'),
+                                         diupdate_oleh = EXCLUDED.diupdate_oleh""",
+                        (laporan_id, it['buku_id'], n, nama_user, n)
+                    )
+                    ringkas.append(f'"{it["judul"]}" {"-" if n > 0 else "+"}{abs(n)}')
+                if not ringkas:
+                    flash('Tidak ada angka yang diisi, stok tidak berubah.', 'info')
+                    return redirect(url_for('laporan_kurang_kurangi_stok', laporan_id=laporan_id))
+                conn.commit()
+            except ValueError as e:
+                conn.rollback()
+                flash(f'{e} Tidak ada stok yang diubah.', 'danger')
+                return redirect(url_for('laporan_kurang_kurangi_stok', laporan_id=laporan_id))
+
+            catat_aktivitas('Kurangi Stok Gudang per Perpustakaan',
+                            f'{laporan["nama"]}: ' + '; '.join(ringkas))
+            flash(f'Stok gudang diperbarui untuk {laporan["nama"]}: {len(ringkas)} judul.', 'success')
+            return redirect(url_for('laporan_kurang_kurangi_stok', laporan_id=laporan_id))
+
+        return render_template('admin/laporan_buku_kurang_kurangi_stok.html',
+                               laporan=laporan, daftar=daftar)
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/admin/laporan-buku-kurang/<int:laporan_id>/edit', methods=['GET', 'POST'])
 @login_required
 @admin_required

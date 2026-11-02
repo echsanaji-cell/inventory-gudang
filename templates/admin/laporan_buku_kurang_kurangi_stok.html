@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Kurangi Stok Gudang{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('laporan_kurang_admin') }}">Laporan Buku Kurang</a></li>
+        <li class="breadcrumb-item active">Kurangi Stok Gudang</li>
+    </ol>
+</nav>
+
+<h4 class="mb-1">📦 Kurangi Stok Gudang</h4>
+<p class="mb-1"><strong>{{ laporan.nama }}</strong>
+    {% if laporan.no_box is not none %}<span class="text-muted small">(Box {{ laporan.no_box }})</span>{% endif %}</p>
+<p class="text-muted small mb-3">{{ laporan.kabupaten_kota or '-' }}, {{ laporan.provinsi or '-' }}. Isi jumlah buku yang dikirim ke perpustakaan ini, stok gudang akan berkurang sebanyak itu. Isi angka minus (mis. -2) untuk mengembalikan stok kalau salah input.</p>
+
+{% if daftar %}
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="d-flex justify-content-end mb-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="isi-otomatis">Isi semua yang tersedia</button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Judul</th>
+                    <th class="text-end">Diminta</th>
+                    <th class="text-end">Sudah dikurangi</th>
+                    <th class="text-end">Sisa diminta</th>
+                    <th class="text-end">Stok gudang</th>
+                    <th style="min-width: 130px;">Kurangi sekarang</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in daftar %}
+                {% set sisa = [it.jumlah - it.sudah, 0]|max %}
+                <tr>
+                    <td>
+                        {{ it.judul }}
+                        <div class="text-muted small">{{ it.penerbit or '-' }}</div>
+                    </td>
+                    <td class="text-end">{{ it.jumlah }}</td>
+                    <td class="text-end">{% if it.sudah %}<span class="badge bg-secondary">{{ it.sudah }}</span>{% else %}0{% endif %}</td>
+                    <td class="text-end">{% if sisa == 0 %}<span class="badge bg-success">Terpenuhi</span>{% else %}{{ sisa }}{% endif %}</td>
+                    <td class="text-end">
+                        {% if it.stok >= sisa and sisa > 0 %}<span class="badge bg-success">{{ it.stok }}</span>
+                        {% elif it.stok > 0 %}<span class="badge bg-warning text-dark">{{ it.stok }}</span>
+                        {% else %}<span class="text-muted">{{ it.stok }}</span>{% endif %}
+                    </td>
+                    <td>
+                        <input type="number" name="kurangi_{{ it.buku_id }}" class="form-control form-control-sm"
+                               min="{{ -it.sudah }}" max="{{ [sisa, it.stok]|min }}" step="1" inputmode="numeric"
+                               placeholder="0" data-isi="{{ [sisa, it.stok]|min }}">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"
+                onclick="return confirm('Simpan pengurangan stok gudang untuk perpustakaan ini?');">Simpan</button>
+        <a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary">Kembali</a>
+    </div>
+</form>
+<script>
+document.getElementById('isi-otomatis').addEventListener('click', function () {
+    document.querySelectorAll('input[data-isi]').forEach(function (el) {
+        el.value = parseInt(el.dataset.isi, 10) > 0 ? el.dataset.isi : '';
+    });
+});
+</script>
+{% else %}
+<div class="alert alert-info">Perpustakaan ini tidak punya judul buku kurang.</div>
+<a href="{{ url_for('laporan_kurang_admin') }}" class="btn btn-secondary">Kembali</a>
+{% endif %}
+{% endblock %}

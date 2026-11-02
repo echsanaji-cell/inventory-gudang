@@ -193,6 +193,7 @@
                 <td class="small text-nowrap">{{ l.updated_at.strftime('%d-%m-%Y %H:%M') }}</td>
                 <td class="text-nowrap">
                     <a href="{{ url_for('laporan_kurang_edit', laporan_id=l.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                    {% if l.kurang %}<a href="{{ url_for('laporan_kurang_kurangi_stok', laporan_id=l.id) }}" class="btn btn-sm btn-outline-dark">📦 Kurangi Stok</a>{% endif %}
                     <form method="POST" action="{{ url_for('laporan_kurang_hapus', laporan_id=l.id) }}" class="d-inline"
                           onsubmit="return confirm('Hapus SELURUH laporan untuk perpustakaan ini?');">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
