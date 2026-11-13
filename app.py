@@ -487,12 +487,18 @@ def sync_laporan_kurang_ke_sheets():
     conn.close()
 
     per_penerbit = {}
-    rekap = {}   # angka lengkap untuk sheet Ringkasan: semua laporan, tidak disaring stok
+    rekap = {}   # untuk sheet Ringkasan, dihitung dari semua laporan (termasuk judul tanpa stok)
     for r in data:
         hitung = rekap.setdefault(r['penerbit'], {'kurang': [0, 0], 'lebih': [0, 0]})
-        if r['jenis'] in hitung:
-            hitung[r['jenis']][0] += 1
-            hitung[r['jenis']][1] += int(r['total'])
+        if r['jenis'] == 'kurang':
+            # selisih stok negatif (stok - permintaan < 0) = buku perlu dipesan
+            kekurangan = int(r['total']) - int(r['stok'])
+            if kekurangan > 0:
+                hitung['kurang'][0] += 1
+                hitung['kurang'][1] += kekurangan
+        elif r['jenis'] == 'lebih':
+            hitung['lebih'][0] += 1
+            hitung['lebih'][1] += int(r['total'])
         if r['jenis'] == 'kurang' and not r['stok']:
             continue   # judul buku kurang yang stok gudangnya kosong tidak ikut disinkronkan
         kel = per_penerbit.setdefault(r['penerbit'], {'kurang': [], 'lebih': []})
@@ -550,13 +556,13 @@ def sync_laporan_kurang_ke_sheets():
     judul_l = sum(v['lebih'][0] for v in rekap.values())
     eks_k = sum(v['kurang'][1] for v in rekap.values())
     eks_l = sum(v['lebih'][1] for v in rekap.values())
-    rk.append(['Buku Kurang', judul_k, eks_k])
+    rk.append(['Buku Kurang (perlu dipesan)', judul_k, eks_k])
     rk.append(['Buku Lebih / Di Luar Pesanan', judul_l, eks_l])
     rk.append([])
     rk_tebal.append(len(rk))
     rk.append(['REKAP PER PENERBIT'])
     rk_tebal.append(len(rk))
-    rk.append(['No', 'Penerbit', 'Judul Kurang', 'Eks Kurang', 'Judul Lebih', 'Eks Lebih'])
+    rk.append(['No', 'Penerbit', 'Judul Perlu Dipesan', 'Eks Perlu Dipesan', 'Judul Lebih', 'Eks Lebih'])
     for no, penerbit in enumerate(sorted(rekap, key=lambda x: x.lower()), start=1):
         kel = rekap[penerbit]
         rk.append([no, penerbit, kel['kurang'][0], kel['kurang'][1], kel['lebih'][0], kel['lebih'][1]])
