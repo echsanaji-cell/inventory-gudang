@@ -7028,11 +7028,17 @@ def stok_gudang_simpan():
         (buku_id, jumlah, session.get('nama_lengkap') or session.get('username'), tambah)
     )
     total = cur.fetchone()['jumlah']
+    if total <= 0:
+        # stok 0 = judul dihapus dari stok gudang (kembali ke "belum dihitung")
+        cur.execute("DELETE FROM stok_gudang_fisik WHERE jumlah <= 0")
     conn.commit()
     cur.close()
     conn.close()
 
-    if tambah:
+    if total <= 0:
+        catat_aktivitas('Hapus Stok Gudang Fisik', f'"{buku["judul"]}": stok 0, dihapus dari daftar stok gudang', buku_id=buku_id)
+        flash(f'Stok "{buku["judul"]}" jadi 0, judul dihapus dari stok gudang.', 'success')
+    elif tambah:
         catat_aktivitas('Tambah Stok Gudang Fisik', f'"{buku["judul"]}": +{jumlah} eks (total {total})', buku_id=buku_id)
         flash(f'Stok "{buku["judul"]}": +{jumlah} eks, total sekarang {total} eks.', 'success')
     else:
@@ -7462,6 +7468,8 @@ def laporan_kurang_kurangi_stok(laporan_id):
                 if not ringkas:
                     flash('Tidak ada angka yang diisi, stok tidak berubah.', 'info')
                     return redirect(url_for('laporan_kurang_kurangi_stok', laporan_id=laporan_id))
+                # judul yang stoknya jadi 0 dihapus dari stok gudang
+                cur.execute("DELETE FROM stok_gudang_fisik WHERE jumlah <= 0")
                 conn.commit()
             except ValueError as e:
                 conn.rollback()
