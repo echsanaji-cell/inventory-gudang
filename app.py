@@ -516,7 +516,7 @@ def sync_laporan_kurang_ke_sheets():
                 rows.append(['No', 'Judul', 'ISBN', 'Jumlah (eks)', 'Stok Gudang', 'Selisih Stok'])
                 if kel[kunci]:
                     for no, (judul, isbn, total, stok) in enumerate(kel[kunci], start=1):
-                        rows.append([no, judul, isbn or '', total, stok, stok - total])
+                        rows.append([no, judul, isbn or '', total, stok or '', stok - total])
                 else:
                     rows.append(['', 'Tidak ada', '', '', '', ''])
                 tebal.append(len(rows))
