@@ -488,6 +488,8 @@ def sync_laporan_kurang_ke_sheets():
 
     per_penerbit = {}
     for r in data:
+        if r['jenis'] == 'kurang' and not r['stok']:
+            continue   # judul buku kurang yang stok gudangnya kosong tidak ikut disinkronkan
         kel = per_penerbit.setdefault(r['penerbit'], {'kurang': [], 'lebih': []})
         if r['jenis'] in kel:
             kel[r['jenis']].append((r['judul'], r['isbn'], int(r['total']), int(r['stok'])))
