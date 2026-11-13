@@ -549,25 +549,23 @@ def sync_laporan_kurang_ke_sheets():
         isi_sheet[bersih] = (rows, tebal)
 
     # sheet Ringkasan (paling depan): total keseluruhan dan rekap per penerbit, tanpa nama perpustakaan
-    rk = [['RINGKASAN LAPORAN BUKU KURANG / LEBIH'], ['Diperbarui', waktu], []]
+    rk = [['RINGKASAN BUKU KURANG YANG HARUS DIPESAN'], ['Diperbarui', waktu], []]
     rk_tebal = [0, 3]
     rk.append(['', 'Judul', 'Eksemplar'])
-    judul_k = sum(v['kurang'][0] for v in rekap.values())
-    judul_l = sum(v['lebih'][0] for v in rekap.values())
-    eks_k = sum(v['kurang'][1] for v in rekap.values())
-    eks_l = sum(v['lebih'][1] for v in rekap.values())
-    rk.append(['Buku Kurang (perlu dipesan)', judul_k, eks_k])
-    rk.append(['Buku Lebih / Di Luar Pesanan', judul_l, eks_l])
+    # hanya judul dengan selisih stok negatif (stok gudang - permintaan < 0), termasuk judul tanpa stok
+    perlu = {p: v['kurang'] for p, v in rekap.items() if v['kurang'][0] > 0}
+    judul_k = sum(v[0] for v in perlu.values())
+    eks_k = sum(v[1] for v in perlu.values())
+    rk.append(['Buku Kurang (selisih minus)', judul_k, eks_k])
     rk.append([])
     rk_tebal.append(len(rk))
     rk.append(['REKAP PER PENERBIT'])
     rk_tebal.append(len(rk))
-    rk.append(['No', 'Penerbit', 'Judul Perlu Dipesan', 'Eks Perlu Dipesan', 'Judul Lebih', 'Eks Lebih'])
-    for no, penerbit in enumerate(sorted(rekap, key=lambda x: x.lower()), start=1):
-        kel = rekap[penerbit]
-        rk.append([no, penerbit, kel['kurang'][0], kel['kurang'][1], kel['lebih'][0], kel['lebih'][1]])
+    rk.append(['No', 'Penerbit', 'Judul Selisih Minus', 'Eks Harus Dipesan'])
+    for no, penerbit in enumerate(sorted(perlu, key=lambda x: x.lower()), start=1):
+        rk.append([no, penerbit, perlu[penerbit][0], perlu[penerbit][1]])
     rk_tebal.append(len(rk))
-    rk.append(['', 'TOTAL', judul_k, eks_k, judul_l, eks_l])
+    rk.append(['', 'TOTAL', judul_k, eks_k])
     isi_sheet = {'Ringkasan': (rk, rk_tebal), **isi_sheet}
 
     def rentang(judul):
