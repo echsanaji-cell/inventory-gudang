@@ -487,7 +487,12 @@ def sync_laporan_kurang_ke_sheets():
     conn.close()
 
     per_penerbit = {}
+    rekap = {}   # angka lengkap untuk sheet Ringkasan: semua laporan, tidak disaring stok
     for r in data:
+        hitung = rekap.setdefault(r['penerbit'], {'kurang': [0, 0], 'lebih': [0, 0]})
+        if r['jenis'] in hitung:
+            hitung[r['jenis']][0] += 1
+            hitung[r['jenis']][1] += int(r['total'])
         if r['jenis'] == 'kurang' and not r['stok']:
             continue   # judul buku kurang yang stok gudangnya kosong tidak ikut disinkronkan
         kel = per_penerbit.setdefault(r['penerbit'], {'kurang': [], 'lebih': []})
@@ -541,10 +546,10 @@ def sync_laporan_kurang_ke_sheets():
     rk = [['RINGKASAN LAPORAN BUKU KURANG / LEBIH'], ['Diperbarui', waktu], []]
     rk_tebal = [0, 3]
     rk.append(['', 'Judul', 'Eksemplar'])
-    judul_k = sum(len(k['kurang']) for k in per_penerbit.values())
-    judul_l = sum(len(k['lebih']) for k in per_penerbit.values())
-    eks_k = sum(x[2] for k in per_penerbit.values() for x in k['kurang'])
-    eks_l = sum(x[2] for k in per_penerbit.values() for x in k['lebih'])
+    judul_k = sum(v['kurang'][0] for v in rekap.values())
+    judul_l = sum(v['lebih'][0] for v in rekap.values())
+    eks_k = sum(v['kurang'][1] for v in rekap.values())
+    eks_l = sum(v['lebih'][1] for v in rekap.values())
     rk.append(['Buku Kurang', judul_k, eks_k])
     rk.append(['Buku Lebih / Di Luar Pesanan', judul_l, eks_l])
     rk.append([])
@@ -552,10 +557,9 @@ def sync_laporan_kurang_ke_sheets():
     rk.append(['REKAP PER PENERBIT'])
     rk_tebal.append(len(rk))
     rk.append(['No', 'Penerbit', 'Judul Kurang', 'Eks Kurang', 'Judul Lebih', 'Eks Lebih'])
-    for no, penerbit in enumerate(sorted(per_penerbit, key=lambda x: x.lower()), start=1):
-        kel = per_penerbit[penerbit]
-        rk.append([no, penerbit, len(kel['kurang']), sum(x[2] for x in kel['kurang']),
-                   len(kel['lebih']), sum(x[2] for x in kel['lebih'])])
+    for no, penerbit in enumerate(sorted(rekap, key=lambda x: x.lower()), start=1):
+        kel = rekap[penerbit]
+        rk.append([no, penerbit, kel['kurang'][0], kel['kurang'][1], kel['lebih'][0], kel['lebih'][1]])
     rk_tebal.append(len(rk))
     rk.append(['', 'TOTAL', judul_k, eks_k, judul_l, eks_l])
     isi_sheet = {'Ringkasan': (rk, rk_tebal), **isi_sheet}
