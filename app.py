@@ -477,8 +477,10 @@ def sync_laporan_kurang_ke_sheets():
                   b.judul, b.isbn, i.jenis, SUM(i.jumlah) AS total,
                   COALESCE(MAX(s.jumlah), 0) AS stok
            FROM laporan_buku_kurang_item i
+           JOIN laporan_buku_kurang l ON l.id = i.laporan_id
            JOIN buku b ON b.id = i.buku_id
            LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id
+           WHERE (i.jenis <> 'kurang' OR COALESCE(l.status, 'baru') <> 'selesai')
            GROUP BY 1, b.id, b.judul, b.isbn, i.jenis
            ORDER BY 1, b.judul"""
     )
