@@ -470,18 +470,25 @@ def sync_laporan_kurang_ke_sheets():
     except Exception as e:
         return False, f"Gagal autentikasi Google Sheets: {str(e)}"
 
+    _siapkan_tabel_stok_keluar()   # pastikan tabel catatan pengurangan stok ada
     conn = get_db_connection()
     cur = conn.cursor()
+    # Jumlah buku kurang = sisa permintaan: permintaan laporan dikurangi buku yang sudah
+    # dikurangkan dari stok gudang (sudah dipacking) lewat halaman Kurangi Stok.
     cur.execute(
         """SELECT COALESCE(NULLIF(TRIM(b.penerbit), ''), 'Tanpa Penerbit') AS penerbit,
-                  b.judul, b.isbn, i.jenis, SUM(i.jumlah) AS total,
+                  b.judul, b.isbn, i.jenis,
+                  SUM(GREATEST(i.jumlah - COALESCE(k.jumlah, 0), 0)) AS total,
                   COALESCE(MAX(s.jumlah), 0) AS stok
            FROM laporan_buku_kurang_item i
            JOIN laporan_buku_kurang l ON l.id = i.laporan_id
            JOIN buku b ON b.id = i.buku_id
            LEFT JOIN stok_gudang_fisik s ON s.buku_id = i.buku_id
+           LEFT JOIN stok_gudang_keluar k ON k.laporan_id = i.laporan_id
+                                         AND k.buku_id = i.buku_id AND i.jenis = 'kurang'
            WHERE (i.jenis <> 'kurang' OR COALESCE(l.status, 'baru') <> 'selesai')
            GROUP BY 1, b.id, b.judul, b.isbn, i.jenis
+           HAVING i.jenis <> 'kurang' OR SUM(GREATEST(i.jumlah - COALESCE(k.jumlah, 0), 0)) > 0
            ORDER BY 1, b.judul"""
     )
     data = cur.fetchall()
